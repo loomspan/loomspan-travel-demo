@@ -41,12 +41,38 @@ For frontend development run `npm ci` and `npm run dev` in `frontend`, alongside
 
 ## Presenter walkthrough
 
+The **Explore the demo** panel offers three selectable walkthroughs: **Plan a
+weekend**, **Change your plans**, and **Handle a cancellation**. The selected
+guide survives browser refresh and adapts its next-action link to the current
+trip. Selecting a guide only displays instructions; all assessment, booking,
+change, and cancellation actions still use the normal explicit controls.
+
+After an assessment, **How the skills contributed** explains each specialist's
+configured role, shows completion evidence from actual events, and displays
+validated combination counts. **Execution evidence** retains the session ID
+and event list. These are recorded results, not a live animation or individual
+model transcripts. Failed assessments also expose available evidence.
+
+For a repeatable presentation with fresh inventory, run against a new database
+path on a separate port. Use a different filename for each fresh session; reusing
+the same filename resumes its trips and cancellations. This leaves the default
+workspace intact:
+
+```powershell
+$env:WAYFARER_PORT = '8083'
+$env:WAYFARER_DATABASE_URL = 'jdbc:h2:file:./data/presentation-01;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000'
+.\scripts\run.ps1
+```
+
+After stopping that presentation instance, remove these two environment variables
+before running the default app again. No scenario resets inventory automatically.
+
 1. Keep the default dates and two-person request. Confirm and compare with
    Loomspan. No inventory is reserved during planning.
 2. Review Garden Court with rail both ways at $980 and the Central House
    alternative at $840. Both meet the Friday hotel deadline. Exact wording can
    vary; amounts and times are checked against the database.
-3. Expand **Why these trips?** and **How the trip was assessed**. The latter
+3. Read **How the skills contributed**, then expand **Why these trips?** and **Execution evidence**. The latter
    contains the real session ID and observed skill start/finish events.
 4. Before booking, edit the budget to $900 and reassess: the quiet-room upgrade
    no longer fits. At $800 there is no feasible trip; the minimum timing-valid

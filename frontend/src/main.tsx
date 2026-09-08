@@ -3,6 +3,8 @@ import {createRoot} from 'react-dom/client';
 import type {Assessment,Quote,Trip,TripRequest,TripSummary} from './types';
 import './style.css';
 import {Conversation} from './Conversation';
+import {DemoGuide} from './DemoGuide';
+import {Coordination} from './Coordination';
 
 async function api<T>(path:string,method='GET',body?:unknown):Promise<T>{
   const response=await fetch('/api'+path,{method,headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
@@ -76,6 +78,10 @@ function App(){
       await api('/trips/'+saved.id+'/assessments','POST',{revision:saved.revision});setTrip(await api<Trip>('/trips/'+saved.id));setTick(Date.now());
     }finally{setBusy(false);}
   }
+  function navigateGuide(target:'request'|'conversation'|'booked'|'compare'){
+    if(target==='request')edit();else if(target!=='conversation')setScreen(target);
+    requestAnimationFrame(()=>{const element=document.getElementById(target==='conversation'?'trip-conversation':'trip-workflow');if(element instanceof HTMLDetailsElement)element.open=true;element?.scrollIntoView({block:'start'});});
+  }
   function choose(q:Quote){bookingKey.current=crypto.randomUUID();setReview(q);setError('');}
   const setField=<K extends keyof TripRequest>(key:K,value:TripRequest[K])=>{if(draft)setDraft({...draft,[key]:value});};
   const edit=()=>{setReview(null);setDraft(trip?.request??example);setScreen('request');setError('');};
@@ -87,7 +93,8 @@ function App(){
     </aside><main>
       <div className="eyebrow">TWO TRAVELERS · TWO NIGHTS</div><h1>Boston → New York</h1><p className="muted">October 16–18, 2026 · All times Eastern</p>
       <div className="mobile-trips"><label>Saved trips<select value={trip?.id??''} disabled={busy} onChange={e=>e.target.value?void load(e.target.value):newTrip()}><option value="">New weekend</option>{trips.map((t,i)=><option key={t.id} value={t.id}>Weekend {trips.length-i} · {t.needsAttention?'Needs attention':t.booked?'Booked':'Planning'}</option>)}</select></label></div>
-      <nav aria-label="Trip steps" className="steps"><button aria-current={screen==='request'?'step':undefined} onClick={edit} disabled={busy||running}>1 · Your request</button><button aria-current={screen==='compare'?'step':undefined} onClick={()=>setScreen('compare')} disabled={!assessment||busy||!actionable}>2 · Compare trips</button><button aria-current={screen==='booked'?'step':undefined} onClick={()=>setScreen('booked')} disabled={!trip?.booking}>3 · Booked trip</button></nav>
+      <DemoGuide trip={trip} assessment={assessment} disabled={busy||running} onNew={newTrip} onNavigate={navigateGuide}/>
+      <nav id="trip-workflow" aria-label="Trip steps" className="steps"><button aria-current={screen==='request'?'step':undefined} onClick={edit} disabled={busy||running}>1 · Your request</button><button aria-current={screen==='compare'?'step':undefined} onClick={()=>setScreen('compare')} disabled={!assessment||busy||!actionable}>2 · Compare trips</button><button aria-current={screen==='booked'?'step':undefined} onClick={()=>setScreen('booked')} disabled={!trip?.booking}>3 · Booked trip</button></nav>
       {disrupted&&<section className="notice error" role="alert"><h2>Your return service was canceled</h2><p>{trip!.disruption!.serviceId} is no longer operating. Your outbound journey and hotel remain reserved. The original return times below are no longer a valid itinerary.</p><p>Recovery keeps your outbound service and hotel, and checks your saved budget, modes, and deadlines.</p><button className="primary" disabled={busy||running} onClick={()=>void retry()}>Find a replacement with Loomspan</button></section>}
       {error&&<div className="notice error" role="alert">{error}</div>}
       {trip&&<Conversation key={trip.id} trip={trip} disabled={busy||running} onConfirm={confirmConversation}/>}
@@ -113,6 +120,7 @@ function App(){
         {running&&<div className="panel" role="status"><div className="pulse"/> <h3>{assessment?.status==='QUEUED'?'Waiting for an assessment slot':'Loomspan is assessing your trip'}</h3><p>Transport, stay, and logistics specialists will compare the complete trip. No additional inventory is reserved during planning.</p><span className="muted">Elapsed {Math.max(0,Math.floor((tick-new Date(assessment!.createdAt).getTime())/1000))} seconds · You can refresh safely.</span>{pollError&&<p>{pollError}</p>}</div>}
         {!assessment&&!busy&&<p>Confirm your request to begin planning.</p>}
         {assessment?.status==='FAILED'&&<div className="notice" role="alert"><h3>Assessment could not finish</h3><p>{assessment.error}</p><button onClick={()=>void retry()} disabled={busy}>Retry assessment</button></div>}
+        {assessment&&!running&&<Coordination assessment={assessment}/>}
         {proposal&&<>
           {proposal.status==='NO_FEASIBLE_TRIP'?<div className="notice" role="status">{proposal.blockers.map(v=><p key={v.code}>{v.message}</p>)}<p>No bookable proposal was created.</p>{disrupted&&<><h3>Changes to consider</h3>{assessment!.recoverySuggestions.length?assessment!.recoverySuggestions.map((suggestion,i)=><div key={i}><ul>{suggestion.changes.map(change=><li key={change}>{change}</li>)}</ul><button disabled={busy} onClick={()=>{setDraft(suggestion.request);setScreen('request');setReview(null);}}>Review these request changes</button></div>):<p>No replacement is available even with broader modes, budget, and timing within this demo weekend. A preference change cannot restore a canceled or sold-out service.</p>}<p>These are calculated possibilities, not reservations. Review the changes and reassess before accepting any replacement.</p></>}</div>:<div className="options">
             {proposal.recommended&&<TripCard quote={proposal.recommended} label="Recommended" reason={proposal.recommendedReason} budget={trip!.request.budgetCents} primary onChoose={choose} disabled={busy||!actionable} current={trip?.booking?.quote}/>}
@@ -120,7 +128,6 @@ function App(){
           </div>}
           <p className="small muted">{scope}</p>
           <details><summary>Why these trips?</summary><p>{proposal.explanation}</p><p className="muted">Java validated {proposal.consideredCount} complete combinations; {proposal.feasibleCount} meet your saved requirements. Inventory is checked again when you book.</p></details>
-          <details><summary>How the trip was assessed</summary><p className="small">Loomspan session: <code>{assessment?.sessionId??'Unavailable'}</code></p><p className="small muted">Observed completed-execution events. Expand the same session in Loomspan Console for plans and overlap details.</p><ul className="events">{assessment?.events.map((event,i)=><li key={i}><time>{new Date(event.timestamp).toLocaleTimeString()}</time> {event.type==='SKILL_STARTED'?'Started':'Finished'} · {event.route??event.frameId??'Skill'}</li>)}</ul></details>
           <button className="reassess" onClick={()=>void retry()} disabled={busy||running}>Assess current inventory again</button>
         </>}
         {review&&<section className="panel review" aria-label="Review booking"><h2>{disrupted?'Review your recovery itinerary':changing?'Review your booking change':'Review your booking'}</h2>{changing&&<ChangeComparison before={trip!.booking!.quote} after={review}/>} <p>{review.hotelName} · {review.roomDescription}</p><p>{mode(review.outboundMode)} outbound · {mode(review.returnMode)} return · October 16–18 · Two adults</p><p className="price">{money(review.totalCents)} <span className="small">total</span></p><Itinerary quote={review}/><p className="small muted">{changing?'Accepting replaces your reservation in one transaction. If the new trip is unavailable or its price changed, your current booking stays intact. The price difference is simulated; there are no exchange fees or real charges.':'This confirms a simulated booking against local inventory. Two seats per service and one room on each night will be reserved. Transfers are included as priced line items.'}</p><div className="actions"><button ref={reviewButton} className="primary" onClick={()=>void book()} disabled={busy||!actionable}>{busy?'Confirming…':disrupted?'Accept simulated recovery':changing?'Accept simulated booking change':'Confirm simulated booking'}</button><button onClick={()=>setReview(null)} disabled={busy}>Back to comparison</button></div></section>}

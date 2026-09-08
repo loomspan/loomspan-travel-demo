@@ -168,3 +168,24 @@ the original $980 booking `2d7c991a-76b2-4458-b581-308dbbc56709` remained curren
 and the persisted draft recorded confirmed revision 2. Replacement acceptance
 remained a separate review action. The isolated test instance was stopped after
 verification. Port 8082 runs the packaged V6 app with existing user data preserved.
+
+## Guided demo verification
+
+The frontend-only guide slice passed TypeScript checking, the Vite production
+build, and Maven packaging with tests skipped. No backend or skill behavior
+changed, so the model and reservation suites were not rerun for this slice.
+
+The packaged browser on port 8083 used the existing isolated intake database.
+All three scenario selectors were exercised. The change guide detected an
+existing replacement proposal and navigated to comparison; its selection
+survived refresh. Recovery guidance opened the booked itinerary without
+canceling it. Starting a new weekend displayed initial planning guidance without
+persisting a trip. Desktop screenshots were inspected for the scenario cards,
+walkthrough, and coordination panel.
+
+The panel displayed actual completion events for all three specialists and
+the coordinator, with two of six combinations feasible, matching the saved
+assessment. The API afterward still showed revision 2, the same $980 booking,
+catalog version zero, no disruption, and two assessments. Scenario navigation
+caused no domain writes. The temporary server was stopped; the rebuilt app runs
+on port 8082 with the default database preserved.
