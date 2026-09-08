@@ -22,7 +22,7 @@ class LivePlanningTest {
     @Autowired ObjectMapper json;
     @Autowired org.springframework.jdbc.core.JdbcTemplate db;
     @BeforeEach void resetFixtures() {
-        for(String table:List.of("booking","catalog_receipt","assessment","trip_revision","trip","hotel_night","hotel","travel_service","travel_rules")) db.update("delete from "+table);
+        for(String table:List.of("booking_exchange","booking","catalog_receipt","assessment","trip_revision","trip","hotel_night","hotel","travel_service","travel_rules")) db.update("delete from "+table);
         new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(new org.springframework.core.io.ClassPathResource("db/migration/V2__seed_inventory.sql")).execute(Objects.requireNonNull(db.getDataSource()));
     }
 
@@ -46,6 +46,19 @@ class LivePlanningTest {
         store.complete(a.id(),model,observation.get().sessionId(),List.of());
         var booking=store.book(t.id(),new BookingCommand(a.id(),proposal.recommended().candidateId(),"live-accept-123"));
         assertEquals(98000,booking.quote().totalCents());assertEquals(booking.id(),store.get(t.id()).booking().id());
+        var r=t.request();var revised=new TripRequest(r.origin(),r.destination(),r.outboundDate(),r.returnDate(),2,1,r.budgetCents(),r.hotelReadyBy(),r.leaveHotelNoEarlierThan(),"2026-10-18T21:30:00-04:00",r.allowedModes(),r.priorities());
+        store.revise(t.id(),new RevisionCommand(1,revised));var change=store.begin(t.id(),2);store.markRunning(change.id());
+        var changedResult=skills.invoke("planTrip",new PlanningInput(change.id(),revised),observation::set);
+        store.complete(change.id(),json.readValue(changedResult,ModelResult.class),observation.get().sessionId(),List.of());
+        assertNull(store.assessment(change.id()).result().alternative(),"No other trip improves a saved preference");
+        var replacement=store.assessment(change.id()).result().recommended();
+        assertEquals("GARDEN",replacement.hotelId());assertEquals("AIR-RETURN",replacement.returnServiceId());
+        assertTrue(replacement.returnToOriginAt().contains("21:10"));assertEquals(105000,replacement.totalCents());
+        assertEquals(booking,store.booking(t.id()),"Live planning must preserve the current booking");
+        var accepted=store.exchange(t.id(),new BookingCommand(change.id(),replacement.candidateId(),"live-exchange-123"));
+        assertEquals(105000,accepted.quote().totalCents());assertEquals(1,store.get(t.id()).changes().size());
+        System.out.println("LIVE_EXCHANGE_SESSION="+observation.get().sessionId());
+
     }
     @Test void railOnlyUnderBudgetRequestReportsInfeasibilityWithoutFlightSearch() {
         var r=TripCalculator.example();r=new TripRequest(r.origin(),r.destination(),r.outboundDate(),r.returnDate(),2,1,80000,r.hotelReadyBy(),r.leaveHotelNoEarlierThan(),r.returnToOriginBy(),List.of("rail"),r.priorities());

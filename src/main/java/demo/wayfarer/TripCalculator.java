@@ -61,7 +61,30 @@ public class TripCalculator {
                     default -> "Available return journeys do not meet your latest Boston return time.";
                 })));
         }
+        trips.sort(Comparator.comparing((CheckedTrip t)->!t.violations().isEmpty()).thenComparing(preferenceOrder(s.request())));
         return new Evaluation(List.copyOf(trips),List.copyOf(blockers),trips.size(),true);
+    }
+    private Comparator<CheckedTrip> preferenceOrder(TripRequest request) {
+        Comparator<CheckedTrip> order=(a,b)->0;
+        for(String priority:request.priorities()) order=order.thenComparing(switch(priority) {
+            case "QUIET_ROOM" -> Comparator.comparing(t->!t.quietRoom());
+            case "SHORT_TRANSFERS" -> Comparator.comparingInt(CheckedTrip::totalTransferMinutes);
+            default -> Comparator.comparingLong(CheckedTrip::totalCents);
+        });
+        return order;
+    }
+    public SelectionOptions selectionOptions(TripRequest request,Evaluation evaluation) {
+        var feasible=evaluation.trips().stream().filter(t->t.violations().isEmpty()).toList();
+        if(feasible.isEmpty()) return new SelectionOptions(null,List.of());
+        var best=feasible.getFirst();
+        return new SelectionOptions(best.candidateId(),feasible.stream().filter(t->improvesPreference(request,t,best)).map(CheckedTrip::candidateId).toList());
+    }
+    private boolean improvesPreference(TripRequest request,CheckedTrip other,CheckedTrip recommended) {
+        return request.priorities().stream().anyMatch(p->switch(p) {
+            case "QUIET_ROOM" -> other.quietRoom() && !recommended.quietRoom();
+            case "SHORT_TRANSFERS" -> other.totalTransferMinutes()<recommended.totalTransferMinutes();
+            default -> other.totalCents()<recommended.totalCents();
+        });
     }
     private CheckedTrip calculate(Snapshot s, ServiceOption o, ServiceOption b, HotelOption h) {
         var r=s.request(); var om=s.modes().get(o.mode()); var bm=s.modes().get(b.mode());
@@ -102,8 +125,15 @@ public class TripCalculator {
         }
         if(!"OPTIONS".equals(result.status()) || result.recommended()==null) throw ApiProblem.invalid("Model omitted a feasible recommendation.");
         CheckedTrip recommended=resolveChoice(feasible,result.recommended());
+        if(preferenceOrder(snapshot.request()).compare(recommended,feasible.getFirst())>0) throw ApiProblem.invalid("Recommendation does not honor the saved preference order. Reassess to obtain a matching recommendation.");
         CheckedTrip alternative=result.alternative()==null?null:resolveChoice(feasible,result.alternative());
         if(alternative!=null && recommended.candidateId().equals(alternative.candidateId())) throw ApiProblem.invalid("Alternative must be distinct.");
+        if(alternative!=null) {
+            CheckedTrip other=alternative;
+            if(!improvesPreference(snapshot.request(),other,recommended)) throw ApiProblem.invalid("An alternative must improve at least one saved preference; otherwise omit it.");
+            if(other.totalCents()>=recommended.totalCents() && java.util.regex.Pattern.compile("(?i)less expensive|cheaper|save|saving|lower (?:price|cost)|more affordable").matcher(result.alternative().rationale()).find())
+                throw ApiProblem.invalid("The alternative explanation contradicts its price.");
+        }
         return new Proposal("OPTIONS",recommended,alternative,result.recommended().rationale(),result.alternative()==null?null:result.alternative().rationale(),result.explanation(),List.of(),evaluation.consideredCount(),feasible.size());
     }
     private CheckedTrip resolveChoice(List<CheckedTrip> feasible, Choice choice) {

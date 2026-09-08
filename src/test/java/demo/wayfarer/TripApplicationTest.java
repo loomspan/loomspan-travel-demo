@@ -22,13 +22,15 @@ class TripApplicationTest {
     @MockitoBean SkillTemplate skills;
 
     @BeforeEach void reset() {
-        for(String table:List.of("booking","catalog_receipt","assessment","trip_revision","trip","hotel_night","hotel","travel_service","travel_rules")) db.update("delete from "+table);
+        for(String table:List.of("booking_exchange","booking","catalog_receipt","assessment","trip_revision","trip","hotel_night","hotel","travel_service","travel_rules")) db.update("delete from "+table);
         new ResourceDatabasePopulator(new ClassPathResource("db/migration/V2__seed_inventory.sql")).execute(Objects.requireNonNull(db.getDataSource()));
     }
     TripRequest budget(long cents) {var r=TripCalculator.example();return new TripRequest(r.origin(),r.destination(),r.outboundDate(),r.returnDate(),2,1,cents,r.hotelReadyBy(),r.leaveHotelNoEarlierThan(),r.returnToOriginBy(),r.allowedModes(),r.priorities());}
     AssessmentView begin(TripRequest request) {var t=store.create(request);return store.begin(t.id(),t.revision());}
     AssessmentView proposal(String hotel) {
-        var a=begin(TripCalculator.example());store.markRunning(a.id());
+        var r=TripCalculator.example();
+        if(hotel.equals("CENTRAL")) r=new TripRequest(r.origin(),r.destination(),r.outboundDate(),r.returnDate(),2,1,r.budgetCents(),r.hotelReadyBy(),r.leaveHotelNoEarlierThan(),r.returnToOriginBy(),r.allowedModes(),List.of("LOWEST_TOTAL","QUIET_ROOM","SHORT_TRANSFERS"));
+        var a=begin(r);store.markRunning(a.id());
         leaves.searchRailServices(a.id());leaves.searchFlightServices(a.id());leaves.searchHotels(a.id());leaves.evaluateTripOptions(a.id());
         store.complete(a.id(),new ModelResult(a.id(),"OPTIONS",new Choice("RAIL-OUT~RAIL-RETURN~"+hotel,"Chosen from valid fixture inventory."),null,"A checked trip."),"test-session",List.of());return store.assessment(a.id());
     }
@@ -73,8 +75,9 @@ class TripApplicationTest {
         var a=begin(TripCalculator.example());var snapshot=store.snapshot(a.id());
         assertThrows(ApiProblem.class,()->calculator.validateResult(a.id(),snapshot,new ModelResult("foreign","OPTIONS",new Choice("RAIL-OUT~RAIL-RETURN~GARDEN","reason"),null,"reason")));
         assertThrows(ApiProblem.class,()->calculator.validateResult(a.id(),snapshot,new ModelResult(a.id(),"NO_FEASIBLE_TRIP",null,null,"wrong")));
+        assertThrows(ApiProblem.class,()->calculator.validateResult(a.id(),snapshot,new ModelResult(a.id(),"OPTIONS",new Choice("AIR-OUT~AIR-RETURN~GARDEN","Quiet room."),null,"A trip.")));
         var bad=new Choice("AIR-LATE~AIR-RETURN~CENTRAL","late");assertThrows(ApiProblem.class,()->calculator.validateResult(a.id(),snapshot,new ModelResult(a.id(),"OPTIONS",bad,null,"wrong")));
-        var valid=new Choice("RAIL-OUT~RAIL-RETURN~GARDEN","quiet");assertThrows(ApiProblem.class,()->calculator.validateResult(a.id(),snapshot,new ModelResult(a.id(),"OPTIONS",valid,valid,"duplicate")));
+        var valid=new Choice("RAIL-OUT~RAIL-RETURN~GARDEN","quiet");assertThrows(ApiProblem.class,()->calculator.validateResult(a.id(),snapshot,new ModelResult(a.id(),"OPTIONS",valid,new Choice("AIR-OUT~AIR-RETURN~GARDEN","Different flights."),"A trip.")));assertThrows(ApiProblem.class,()->calculator.validateResult(a.id(),snapshot,new ModelResult(a.id(),"OPTIONS",valid,valid,"duplicate")));
         assertThrows(ApiProblem.class,()->calculator.validateResult(a.id(),snapshot,new ModelResult(a.id(),"OPTIONS",valid,null,"Save $1,400.")));
         assertThrows(ApiProblem.class,()->calculator.validateResult(a.id(),snapshot,new ModelResult(a.id(),"OPTIONS",null,null,"missing")));
     }
@@ -88,7 +91,6 @@ class TripApplicationTest {
         assertEquals(0,db.queryForObject("select sum(seats) from travel_service where id in ('RAIL-OUT','RAIL-RETURN')",Integer.class));
         assertEquals(0,db.queryForObject("select sum(rooms) from hotel_night where hotel_id='GARDEN'",Integer.class));
         assertEquals(18,db.queryForObject("select sum(seats) from travel_service where id like 'AIR-%'",Integer.class));
-        assertThrows(ApiProblem.class,()->store.revise(a.tripId(),new RevisionCommand(1,budget(90000))));
         assertThrows(ApiProblem.class,()->store.begin(a.tripId(),1));
         assertThrows(ApiProblem.class,()->store.book(a.tripId(),new BookingCommand(a.id(),"RAIL-OUT~RAIL-RETURN~CENTRAL","test-key-123")));
     }
@@ -137,4 +139,107 @@ class TripApplicationTest {
         store.complete(a.id(),result,"session",List.of());assertEquals("SUCCEEDED",store.assessment(a.id()).status());
         assertThrows(ApiProblem.class,()->leaves.searchHotels(a.id()));
     }
+    TripRequest earlier() {
+        var r=TripCalculator.example();
+        return new TripRequest(r.origin(),r.destination(),r.outboundDate(),r.returnDate(),2,1,r.budgetCents(),r.hotelReadyBy(),r.leaveHotelNoEarlierThan(),"2026-10-18T21:30:00-04:00",r.allowedModes(),r.priorities());
+    }
+    AssessmentView changeProposal(String tripId) {
+        var t=store.get(tripId);store.revise(tripId,new RevisionCommand(t.revision(),earlier()));
+        var a=store.begin(tripId,t.revision()+1);store.markRunning(a.id());
+        leaves.searchRailServices(a.id());leaves.searchFlightServices(a.id());leaves.searchHotels(a.id());leaves.evaluateTripOptions(a.id());
+        store.complete(a.id(),new ModelResult(a.id(),"OPTIONS",new Choice("RAIL-OUT~AIR-RETURN~GARDEN","Keep the quiet hotel and return earlier."),null,"A feasible replacement."),"change-session",List.of());
+        return store.assessment(a.id());
+    }
+    BookingCommand changeCommand(AssessmentView a,String key) {return new BookingCommand(a.id(),"RAIL-OUT~AIR-RETURN~GARDEN",key);}
+    @Test void changePlanningCreditsOnlyOwnedInventoryAndPreservesHotelWithoutReleasingStock() {
+        var original=proposal("GARDEN");var booking=store.book(original.tripId(),command(original,"GARDEN"));
+        var change=changeProposal(original.tripId());
+        assertEquals(booking.id(),change.baseBookingId());
+        assertEquals(List.of("GARDEN"),leavesForSnapshot(change).stream().map(HotelOption::id).toList());
+        assertEquals(105000,change.result().recommended().totalCents());
+        assertTrue(change.result().recommended().returnToOriginAt().contains("21:10"));
+        assertEquals(booking,store.booking(original.tripId()));
+        assertEquals(0,db.queryForObject("select sum(seats) from travel_service where id like 'RAIL-%'",Integer.class));
+        var outsider=begin(TripCalculator.example());assertTrue(calculator.eligibleHotels(store.snapshot(outsider.id())).stream().noneMatch(h->h.id().equals("GARDEN")));
+        assertTrue(calculator.eligibleServices(store.snapshot(outsider.id()),"outbound").stream().noneMatch(s->s.id().equals("RAIL-OUT")));
+        assertThrows(ApiProblem.class,()->store.book(original.tripId(),changeCommand(change,"wrong-endpoint")));
+    }
+    List<HotelOption> leavesForSnapshot(AssessmentView a) {return calculator.eligibleHotels(store.snapshot(a.id()));}
+    @Test void exchangeAtomicallyReplacesInventoryAndPersistsHistoryWithIdempotentReplay() {
+        var a=proposal("GARDEN");var old=store.book(a.tripId(),command(a,"GARDEN"));var change=changeProposal(a.tripId());var cmd=changeCommand(change,"exchange-key-one");
+        var accepted=store.exchange(a.tripId(),cmd);
+        assertNotEquals(old.id(),accepted.id());assertEquals(accepted,store.exchange(a.tripId(),cmd));
+        assertEquals(0,db.queryForObject("select seats from travel_service where id='RAIL-OUT'",Integer.class));
+        assertEquals(2,db.queryForObject("select seats from travel_service where id='RAIL-RETURN'",Integer.class));
+        assertEquals(4,db.queryForObject("select seats from travel_service where id='AIR-RETURN'",Integer.class));
+        assertEquals(0,db.queryForObject("select sum(rooms) from hotel_night where hotel_id='GARDEN'",Integer.class));
+        assertEquals(List.of(new BookingChange(old,accepted)),store.get(a.tripId()).changes());
+        assertThrows(ApiProblem.class,()->store.exchange(a.tripId(),changeCommand(change,"another-key")));
+        assertThrows(ApiProblem.class,()->store.exchange(a.tripId(),new BookingCommand(a.id(),a.result().recommended().candidateId(),cmd.idempotencyKey())));
+    }
+    @Test void failedExchangeRollsBackReleasedInventoryAndRetainsOriginalBooking() {
+        var a=proposal("GARDEN");var old=store.book(a.tripId(),command(a,"GARDEN"));var change=changeProposal(a.tripId());
+        db.update("update travel_service set seats=0 where id='AIR-RETURN'");
+        assertThrows(ApiProblem.class,()->store.exchange(a.tripId(),changeCommand(change,"sold-out-key")));
+        assertEquals(old,store.booking(a.tripId()));assertTrue(store.get(a.tripId()).changes().isEmpty());
+        assertEquals(0,db.queryForObject("select sum(seats) from travel_service where id like 'RAIL-%'",Integer.class));
+        assertEquals(0,db.queryForObject("select sum(rooms) from hotel_night where hotel_id='GARDEN'",Integer.class));
+        db.update("update travel_service set seats=6 where id='AIR-RETURN'");
+        var payload=db.queryForObject("select payload from hotel where id='GARDEN'",String.class);
+        db.update("update hotel set payload=? where id='GARDEN'",payload.replace("29000","30000"));
+        assertThrows(ApiProblem.class,()->store.exchange(a.tripId(),changeCommand(change,"changed-price-key")));
+        assertEquals(old,store.booking(a.tripId()));assertEquals(6,db.queryForObject("select seats from travel_service where id='AIR-RETURN'",Integer.class));
+        assertEquals(0,db.queryForObject("select sum(rooms) from hotel_night where hotel_id='GARDEN'",Integer.class));
+    }
+    @Test void staleAndForeignExchangeProposalsCannotReplaceBooking() {
+        var a=proposal("GARDEN");var old=store.book(a.tripId(),command(a,"GARDEN"));var change=changeProposal(a.tripId());
+        var other=store.create(TripCalculator.example());
+        assertThrows(ApiProblem.class,()->store.exchange(other.id(),changeCommand(change,"foreign-change-key")));
+        store.revise(a.tripId(),new RevisionCommand(2,budget(90000)));
+        assertThrows(ApiProblem.class,()->store.exchange(a.tripId(),changeCommand(change,"stale-change-key")));
+        assertEquals(old,store.booking(a.tripId()));
+    }
+    @Test void concurrentExchangeAcceptancesHaveOneWinner() throws Exception {
+        var a=proposal("GARDEN");store.book(a.tripId(),command(a,"GARDEN"));var change=changeProposal(a.tripId());var gate=new CountDownLatch(1);
+        try(var workers=Executors.newFixedThreadPool(2)) {
+            var results=new ArrayList<Future<Boolean>>();
+            for(String key:List.of("concurrent-change-one","concurrent-change-two")) results.add(workers.submit(()->{
+                gate.await();try{store.exchange(a.tripId(),changeCommand(change,key));return true;}catch(ApiProblem e){assertEquals(409,e.status);return false;}
+            }));
+            gate.countDown();int wins=0;for(var result:results) if(result.get(10,TimeUnit.SECONDS)) wins++;
+            assertEquals(1,wins);
+        }
+        assertEquals(1,store.get(a.tripId()).changes().size());
+        assertEquals(4,db.queryForObject("select seats from travel_service where id='AIR-RETURN'",Integer.class));
+        assertEquals(2,db.queryForObject("select seats from travel_service where id='RAIL-RETURN'",Integer.class));
+    }
+
+    @Test void exchangeAndNewBookingCompetingForLastSeatsHaveOneWinner() throws Exception {
+        var a=proposal("GARDEN");var original=store.book(a.tripId(),command(a,"GARDEN"));
+        db.update("update travel_service set seats=2 where id='AIR-RETURN'");
+        var change=changeProposal(a.tripId());var outsider=begin(TripCalculator.example());store.markRunning(outsider.id());
+        leaves.searchRailServices(outsider.id());leaves.searchFlightServices(outsider.id());leaves.searchHotels(outsider.id());leaves.evaluateTripOptions(outsider.id());
+        store.complete(outsider.id(),new ModelResult(outsider.id(),"OPTIONS",new Choice("AIR-OUT~AIR-RETURN~CENTRAL","Available flights."),null,"A valid trip."),"outside-session",List.of());
+        var gate=new CountDownLatch(1);
+        try(var workers=Executors.newFixedThreadPool(2)) {
+            var exchange=workers.submit(()->{gate.await();try{store.exchange(a.tripId(),changeCommand(change,"last-seat-exchange"));return true;}catch(ApiProblem e){return false;}});
+            var booking=workers.submit(()->{gate.await();try{store.book(outsider.tripId(),new BookingCommand(outsider.id(),"AIR-OUT~AIR-RETURN~CENTRAL","last-seat-booking"));return true;}catch(ApiProblem e){return false;}});
+            gate.countDown();boolean exchanged=exchange.get(10,TimeUnit.SECONDS);assertNotEquals(exchanged,booking.get(10,TimeUnit.SECONDS));
+            assertEquals(exchanged?2:0,db.queryForObject("select seats from travel_service where id='RAIL-RETURN'",Integer.class));
+            if(!exchanged) assertEquals(original,store.booking(a.tripId()));
+        }
+        assertEquals(0,db.queryForObject("select seats from travel_service where id='AIR-RETURN'",Integer.class));
+        assertEquals(0,db.queryForObject("select sum(rooms) from hotel_night where hotel_id='GARDEN'",Integer.class));
+    }
+    @Test void infeasibleChangeAndMissingHeldNightNeverReleaseCurrentBooking() {
+        var a=proposal("GARDEN");var original=store.book(a.tripId(),command(a,"GARDEN"));
+        store.revise(a.tripId(),new RevisionCommand(1,budget(80000)));var change=store.begin(a.tripId(),2);
+        assertTrue(calculator.evaluate(store.snapshot(change.id())).trips().stream().noneMatch(q->q.violations().isEmpty()));
+        assertEquals(original,store.booking(a.tripId()));
+        db.update("delete from hotel_night where hotel_id='GARDEN' and stay_date='2026-10-17'");
+        store.revise(a.tripId(),new RevisionCommand(2,earlier()));var missing=store.begin(a.tripId(),3);
+        assertTrue(calculator.eligibleHotels(store.snapshot(missing.id())).isEmpty());
+        assertEquals(original,store.booking(a.tripId()));
+    }
+
 }

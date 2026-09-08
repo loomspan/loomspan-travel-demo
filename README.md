@@ -5,7 +5,8 @@ whole-trip tradeoffs, deterministic validation, and persistent simulated booking
 
 Plan a Boston–New York weekend for two. Compare a **$980 quiet-room trip** with
 an **$840 budget alternative**, inspect the specialist execution, and explicitly
-book against finite local inventory. All services, prices and reservations are
+book against finite local inventory. Then revise the booked trip, compare the
+replacement, and explicitly accept an atomic reservation exchange. All services, prices and reservations are
 fictional; model planning uses the configured provider.
 
 ## Build and run
@@ -25,7 +26,7 @@ $env:WAYFARER_MODEL = 'gpt-4.1'
 .\scripts\run.ps1
 ```
 
-Open [Wayfarer at localhost:8082](http://localhost:8082). The Maven build compiles
+Open [Wayfarer at localhost:8082](http://localhost:8082). Stop the running app before rebuilding its JAR on Windows. The Maven build compiles
 React and includes it in the Spring Boot JAR. Running the packaged app needs
 Java and model access, with no frontend server or Docker. On macOS/Linux, use
 `./mvnw package` and `java -jar target/wayfarer-0.1.0-SNAPSHOT.jar`.
@@ -52,7 +53,15 @@ For frontend development run `npm ci` and `npm run dev` in `frontend`, alongside
    trip is $840. Try rail-only to demonstrate selective search.
 5. Restore $1,200, assess, review a trip, and confirm its simulated booking.
    Two seats on each service and one room on each night are reserved atomically.
-6. Refresh or restart the app. The booking remains, and later requests see
+6. From the Garden Court rail booking, choose **Change this trip**, then
+   **Try: back in Boston by 21:30**. Compare booking changes with Loomspan.
+   Garden Court stays reserved and is required in all replacement options.
+7. Review the rail-outbound / flight-return trip at **$1,050**: **$70 additional**,
+   back in Boston at **21:10 instead of 22:15**, leaving the hotel at **16:25
+   instead of 17:25**. Accept the simulated booking change. The outbound seats
+   and room stay allocated; the old return seats become available.
+8. Expand **Booking change history** to see the before/after itinerary.
+   Refresh or restart the app. The booking remains, and later requests see
    depleted inventory. Fresh fixture totals assume no earlier competing bookings.
 
 Meals, show tickets and incidental local travel are excluded from quoted totals.
@@ -96,9 +105,10 @@ Remove-Item Env:WAYFARER_LIVE_TEST
 Ordinary tests use isolated in-memory H2 databases and mock only the supported
 SkillTemplate facade. They cover catalog calculations, coverage, invalid model
 results, HTTP flows, stale proposals, price changes, idempotency, booking races,
-and interrupted assessments. Live tests use your configured provider and verify
+reservation exchanges (including rollback, owned inventory, history, stale
+baselines, and competing last-seat acceptances), and interrupted assessments. Live tests use your configured provider and verify
 actual nested execution, specialist overlap, preference choices, selective
-rail-only search, infeasibility, and booking. Live traces and provider requests
+rail-only search, infeasibility, booking, and a live change-and-exchange flow. Live traces and provider requests
 may contain the fictional trip data. The separate Python design calculator
 (`python scripts/verify-design.py`) requires Python 3.10+ and is not used by the app.
 
@@ -121,6 +131,12 @@ room, one currency. This is not production authentication or a supplier booking
 service; the server binds to loopback. Budgets, deadlines, allowed modes and
 preference order are editable. Unsupported routes, dates, and party sizes are
 rejected explicitly.
+
+Booking changes keep the existing hotel and room, dates, and party size. All
+transport combinations are reconsidered under the revised requirements. The
+replacement is repriced from current inventory; its total difference is a
+simulated charge/refund, with no exchange fees. An unsuccessful assessment or
+acceptance never cancels the current booking.
 
 Free-text intake, loyalty benefits, disruption recovery, payments, supplier
 connections, and booking cancellation remain later slices.

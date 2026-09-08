@@ -46,6 +46,22 @@ class HttpFlowTest {
         assertEquals(booked.body(),request("/api/trips/"+trip.id()+"/bookings","POST",command).body());
         var restored=json.readValue(request("/api/trips/"+trip.id(),"GET",null).body(),TripView.class);assertNotNull(restored.booking());assertEquals(98000,restored.booking().quote().totalCents());
         assertEquals(409,request("/api/trips/"+trip.id()+"/assessments","POST",new AssessmentCommand(1)).statusCode());
+        when(skills.invoke(eq("planTrip"),any(Object.class),any())).thenAnswer(invocation->{
+            PlanningInput input=invocation.getArgument(1);Consumer<SkillExecutionView> observer=invocation.getArgument(2);
+            leaves.searchRailServices(input.assessmentId());leaves.searchFlightServices(input.assessmentId());leaves.searchHotels(input.assessmentId());leaves.evaluateTripOptions(input.assessmentId());
+            observer.accept(new SkillExecutionView("http-change-session",List.of()));
+            return json.writeValueAsString(new ModelResult(input.assessmentId(),"OPTIONS",new Choice("RAIL-OUT~AIR-RETURN~GARDEN","Return earlier."),null,"Keep the quiet hotel."));
+        });
+        var r=trip.request();var revised=new TripRequest(r.origin(),r.destination(),r.outboundDate(),r.returnDate(),2,1,r.budgetCents(),r.hotelReadyBy(),r.leaveHotelNoEarlierThan(),"2026-10-18T21:30:00-04:00",r.allowedModes(),r.priorities());
+        assertEquals(200,request("/api/trips/"+trip.id(),"PUT",new RevisionCommand(1,revised)).statusCode());
+        var changeStart=request("/api/trips/"+trip.id()+"/assessments","POST",new AssessmentCommand(2));assertEquals(202,changeStart.statusCode());
+        var change=await(json.readValue(changeStart.body(),AssessmentView.class).id());assertEquals("SUCCEEDED",change.status());
+        var changeCommand=new BookingCommand(change.id(),change.result().recommended().candidateId(),"http-change-key");
+        var exchanged=request("/api/trips/"+trip.id()+"/exchanges","POST",changeCommand);assertEquals(200,exchanged.statusCode(),exchanged.body());
+        assertEquals(exchanged.body(),request("/api/trips/"+trip.id()+"/exchanges","POST",changeCommand).body());
+        restored=json.readValue(request("/api/trips/"+trip.id(),"GET",null).body(),TripView.class);
+        assertEquals(105000,restored.booking().quote().totalCents());assertEquals(1,restored.changes().size());
+
     }
     @Test void providerFailureIsNotInfeasibility() throws Exception {
         when(skills.invoke(eq("planTrip"),any(Object.class),any())).thenThrow(new SkillException("Provider failed"));

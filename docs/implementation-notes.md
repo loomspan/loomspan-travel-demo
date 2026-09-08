@@ -104,3 +104,53 @@ editable. Unsupported routes/dates/party sizes are rejected explicitly.
 The evaluator caps each catalog dimension at four, rejecting overflow instead
 of truncating. Free-text intake, loyalty, disruption recovery, payments, and
 supplier integrations remain later slices.
+
+
+## Change and rebook
+
+`PUT /api/trips/{id}` now permits revisions of a booked request. Its booking
+remains current until explicit `POST /api/trips/{id}/exchanges` acceptance,
+using the same command shape as booking. Initial booking and exchange are
+separate endpoints; neither can silently perform the other operation.
+
+Each replacement assessment persists its `base_booking_id`. Under the trip
+and catalog locks, its immutable snapshot credits only that booking's two seats
+on each leg and its room on both nights. It restricts hotel candidates to the
+booked hotel and requires both night rows to exist. This is availability for
+replacement planning, not released public inventory. The existing skill tree
+runs again, with fresh receipts, on that snapshot and the revised request.
+
+Acceptance locks the trip and catalog, verifies the current revision and exact
+base booking, provisionally releases the old allocation, recomputes and compares
+the complete quote, reserves the replacement, replaces the booking row, and
+records before/after booking JSON. These writes commit as one transaction;
+any failure rolls all of them back. The catalog guard serializes exchanges with
+new bookings, including last-seat competition. Persisted exchange keys replay
+that acceptance's original response; reuse for another choice is rejected.
+The immutable before/after records remain visible in the trip's change history.
+
+The entire replacement is repriced against the current catalog, including
+retained items. There are no supplier fare locks, penalties, real payments,
+partial exchanges, date/party changes, or hotel changes in this slice.
+
+A live exchange test initially selected an all-flight option even though it
+lost on the saved transfer preference. The evaluator now sorts complete
+candidates with feasible trips first and then the saved preferences in order.
+The logistics prompt uses the first feasible candidate; final Java validation
+rejects a recommendation worse than the best preference score. Tied scores are
+allowed. This is a computed ordering of catalog facts, not a fallback for
+failed model execution. The model still coordinates searches and synthesizes
+its evidence-backed decision and alternative.
+
+
+Alternatives must improve at least one saved preference over the recommendation;
+otherwise the model must return null and Java rejects the unsupported alternative.
+This matters for hotel-preserving changes: a more expensive trip with the same
+quiet room and longer transfers is not a meaningful alternative under the saved
+preferences. A browser run exposed such an option with a misleading price phrase;
+this case is now covered by the prompt and validation tests.
+
+The evaluation tool also returns a compact `selections` header: the computed
+recommended ID and eligible alternative IDs. The logistics specialist uses that
+header with the complete quote evidence. This makes an empty alternative set
+explicit instead of asking the model to infer it from a long catalog.

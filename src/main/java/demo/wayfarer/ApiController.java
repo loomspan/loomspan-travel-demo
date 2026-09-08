@@ -20,6 +20,7 @@ public class ApiController {
     @PostMapping(value="/trips/{id}/assessments",consumes="application/json") public ResponseEntity<AssessmentView> assess(@PathVariable String id,@RequestBody AssessmentCommand command) {return ResponseEntity.accepted().body(assessments.start(id,command.revision()));}
     @GetMapping("/assessments/{id}") public AssessmentView assessment(@PathVariable String id) {return store.assessment(id);}
     @PostMapping(value="/trips/{id}/bookings",consumes="application/json") public BookingView book(@PathVariable String id,@RequestBody BookingCommand command) {return store.book(id,command);}
+    @PostMapping(value="/trips/{id}/exchanges",consumes="application/json") public BookingView exchange(@PathVariable String id,@RequestBody BookingCommand command) {return store.exchange(id,command);}
 }
 
 @RestControllerAdvice

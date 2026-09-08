@@ -42,7 +42,6 @@ public class TripStore {
     public TripView revise(String tripId,RevisionCommand command) {
         if(command==null) throw ApiProblem.invalid("Revision is required.");
         calculator.validate(command.request()); lockTrip(tripId);
-        if(booking(tripId)!=null) throw ApiProblem.conflict("Booked trips cannot be revised in this slice.");
         int revision=Integer.parseInt(scalar("select revision from trip where id=?",tripId));
         if(revision!=command.revision()) throw ApiProblem.conflict("The request changed. Reload before editing.");
         db.update("update trip set revision=? where id=?",revision+1,tripId);
@@ -57,7 +56,9 @@ public class TripStore {
         int revision=Integer.parseInt(scalar("select revision from trip where id=?",tripId));
         TripRequest request=decode(scalar("select request_json from trip_revision where trip_id=? and revision=?",tripId,revision),TripRequest.class);
         var assessments=db.query("select id from assessment where trip_id=? order by created_at desc",(rs,n)->assessment(rs.getString(1)),tripId);
-        return new TripView(tripId,revision,request,assessments,booking(tripId),scalar("select created_at from trip where id=?",tripId));
+        var changes=db.query("select before_json,after_json from booking_exchange where trip_id=?",(rs,n)->new BookingChange(decode(rs.getString(1),BookingView.class),decode(rs.getString(2),BookingView.class)),tripId);
+        changes.sort(Comparator.comparing(c->c.after().createdAt()));
+        return new TripView(tripId,revision,request,assessments,booking(tripId),scalar("select created_at from trip where id=?",tripId),changes);
     }
     public Snapshot snapshot(String assessmentId) { return decode(scalar("select snapshot_json from assessment where id=?",assessmentId),Snapshot.class); }
     @Transactional
@@ -91,20 +92,32 @@ public class TripStore {
     @Transactional
     public AssessmentView begin(String tripId,int revision) {
         lockTrip(tripId);
-        if(booking(tripId)!=null) throw ApiProblem.conflict("This trip is already booked.");
+        var held=booking(tripId);
+        if(held!=null && assessment(held.assessmentId()).revision()==revision) throw ApiProblem.conflict("Save a revised request before assessing a booking change.");
         if(Integer.parseInt(scalar("select revision from trip where id=?",tripId))!=revision) throw ApiProblem.conflict("Reload the current request before assessing.");
         var running=db.query("select id from assessment where trip_id=? and revision=? and status in ('QUEUED','RUNNING')",(rs,n)->rs.getString(1),tripId,revision);
         if(!running.isEmpty()) return assessment(running.getFirst());
         TripRequest request=decode(scalar("select request_json from trip_revision where trip_id=? and revision=?",tripId,revision),TripRequest.class);
-        lockCatalog(); Snapshot snapshot=capture(request); String id=id();
-        db.update("insert into assessment (id,trip_id,revision,status,snapshot_json,events_json,created_at) values (?,?,?,'QUEUED',?,'[]',?)",id,tripId,revision,encode(snapshot),now());
+        lockCatalog(); Snapshot snapshot=exchangeSnapshot(capture(request),held); String id=id();
+        db.update("insert into assessment (id,trip_id,revision,status,snapshot_json,events_json,created_at,base_booking_id) values (?,?,?,'QUEUED',?,'[]',?,?)",id,tripId,revision,encode(snapshot),now(),held==null?null:held.id());
         return assessment(id);
+    }
+    // Only this trip's held inventory is available for its replacement. No stock is
+    // released while planning; the hotel is a hard constraint of this change flow.
+    private Snapshot exchangeSnapshot(Snapshot snapshot,BookingView held) {
+        if(held==null) return snapshot;
+        var q=held.quote();
+        var services=snapshot.services().stream().map(s->new ServiceOption(s.id(),s.mode(),s.direction(),s.departs(),s.arrives(),s.farePerPersonCents(),
+            s.seats()+(s.id().equals(q.outboundServiceId())||s.id().equals(q.returnServiceId())?2:0))).toList();
+        var hotels=snapshot.hotels().stream().filter(h->h.id().equals(q.hotelId()) && db.queryForObject("select count(*) from hotel_night where hotel_id=? and stay_date>=? and stay_date<?",Integer.class,h.id(),snapshot.request().outboundDate(),snapshot.request().returnDate())==2)
+            .map(h->new HotelOption(h.id(),h.name(),h.nightlyRoomCents(),h.roomCapacity(),h.roomsPerNight()+1,h.checkIn(),h.quietRoom(),h.roomDescription(),h.transfers())).toList();
+        return new Snapshot(snapshot.request(),services,hotels,snapshot.modes());
     }
     public AssessmentView assessment(String id) {
         var rows=db.query("select * from assessment where id=?",(rs,n)->{
             List<EventSummary> events=json.readValue(rs.getString("events_json"),json.getTypeFactory().constructCollectionType(List.class,EventSummary.class));
             return new AssessmentView(rs.getString("id"),rs.getString("trip_id"),rs.getInt("revision"),rs.getString("status"),
-                decode(rs.getString("result_json"),Proposal.class),rs.getString("error_message"),rs.getString("session_id"),events,rs.getString("created_at"));
+                decode(rs.getString("result_json"),Proposal.class),rs.getString("error_message"),rs.getString("session_id"),events,rs.getString("created_at"),rs.getString("base_booking_id"));
         },id);
         if(rows.isEmpty()) throw ApiProblem.missing(); return rows.getFirst();
     }
@@ -128,28 +141,55 @@ public class TripStore {
     }
     @Transactional
     public BookingView book(String tripId,BookingCommand command) {
+        return accept(tripId,command,false);
+    }
+    @Transactional
+    public BookingView exchange(String tripId,BookingCommand command) {
+        return accept(tripId,command,true);
+    }
+    private BookingView accept(String tripId,BookingCommand command,boolean exchange) {
         if(command==null || command.assessmentId()==null || command.candidateId()==null || command.idempotencyKey()==null || !command.idempotencyKey().matches("[A-Za-z0-9_-]{8,80}")) throw ApiProblem.invalid("A proposal choice and valid idempotency key are required.");
         lockTrip(tripId);
         BookingView existing=booking(tripId);
-        if(existing!=null) {
+        if(exchange) {
+            var previous=db.query("select after_json from booking_exchange where trip_id=? and idempotency_key=?",(rs,n)->decode(rs.getString(1),BookingView.class),tripId,command.idempotencyKey());
+            if(!previous.isEmpty()) {
+                var accepted=previous.getFirst();
+                if(accepted.assessmentId().equals(command.assessmentId()) && accepted.candidateId().equals(command.candidateId())) return accepted;
+                throw ApiProblem.conflict("This acceptance key was used for a different change.");
+            }
+            if(existing==null) throw ApiProblem.conflict("A current booking is required for an exchange.");
+            if(command.idempotencyKey().equals(scalar("select idempotency_key from booking where trip_id=?",tripId))) throw ApiProblem.conflict("Use a new acceptance key for a booking change.");
+        } else if(existing!=null) {
             String key=scalar("select idempotency_key from booking where trip_id=?",tripId);
             if(key.equals(command.idempotencyKey()) && existing.assessmentId().equals(command.assessmentId()) && existing.candidateId().equals(command.candidateId())) return existing;
             throw ApiProblem.conflict("This trip already has a booking; the key or selected trip differs.");
         }
         var assessment=assessment(command.assessmentId());
+        String baseline=scalar("select base_booking_id from assessment where id=?",assessment.id());
+        if(exchange ? !existing.id().equals(baseline) : baseline!=null) throw ApiProblem.conflict("The booking changed since this assessment. Assess again before accepting.");
         if(!tripId.equals(assessment.tripId()) || assessment.revision()!=Integer.parseInt(scalar("select revision from trip where id=?",tripId)) || !"SUCCEEDED".equals(assessment.status()) || assessment.result()==null)
             throw ApiProblem.conflict("Only a completed proposal for the current request can be booked.");
         var proposal=assessment.result();
         CheckedTrip quoted=java.util.stream.Stream.of(proposal.recommended(),proposal.alternative()).filter(Objects::nonNull)
             .filter(t->t.candidateId().equals(command.candidateId())).findFirst().orElseThrow(()->ApiProblem.invalid("This choice is not in the proposal."));
-        lockCatalog(); var current=calculator.evaluate(capture(snapshot(assessment.id()).request()));
+        lockCatalog();
+        if(exchange && !existing.quote().hotelId().equals(quoted.hotelId())) throw ApiProblem.conflict("A booking change must preserve the current hotel.");
+        if(exchange) adjustInventory(existing.quote(),1);
+        var current=calculator.evaluate(capture(snapshot(assessment.id()).request()));
         CheckedTrip checked=current.trips().stream().filter(t->t.candidateId().equals(quoted.candidateId())).findFirst().orElseThrow(()->ApiProblem.conflict("Inventory sold out. Assess again for current options."));
         if(!checked.equals(quoted)) throw ApiProblem.conflict("The price, itinerary, or availability changed. Assess again before booking.");
-        db.update("update travel_service set seats=seats-2 where id=?",quoted.outboundServiceId());
-        db.update("update travel_service set seats=seats-2 where id=?",quoted.returnServiceId());
-        int nights=db.update("update hotel_night set rooms=rooms-1 where hotel_id=? and stay_date>=? and stay_date<?",quoted.hotelId(),"2026-10-16","2026-10-18");
-        if(nights!=2) throw ApiProblem.conflict("Both hotel nights must be available.");
+        adjustInventory(quoted,-1);
+        if(exchange) db.update("delete from booking where trip_id=?",tripId);
         db.update("insert into booking values (?,?,?,?,?,?,?)",id(),tripId,assessment.id(),quoted.candidateId(),command.idempotencyKey(),encode(quoted),now());
-        return booking(tripId);
+        var accepted=booking(tripId);
+        if(exchange) db.update("insert into booking_exchange values (?,?,?,?)",tripId,command.idempotencyKey(),encode(existing),encode(accepted));
+        return accepted;
+    }
+    private void adjustInventory(CheckedTrip quote,int direction) {
+        int out=db.update("update travel_service set seats=seats+? where id=?",2*direction,quote.outboundServiceId());
+        int back=db.update("update travel_service set seats=seats+? where id=?",2*direction,quote.returnServiceId());
+        int nights=db.update("update hotel_night set rooms=rooms+? where hotel_id=? and stay_date>=? and stay_date<?",direction,quote.hotelId(),"2026-10-16","2026-10-18");
+        if(out!=1 || back!=1 || nights!=2) throw ApiProblem.conflict("Both travel legs and hotel nights must be available.");
     }
 }
