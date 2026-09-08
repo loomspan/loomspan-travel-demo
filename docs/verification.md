@@ -95,3 +95,38 @@ browser and HTTP API returned the same booking
 and accepted-history layouts were visually inspected at the normal viewport.
 The test process was stopped afterward. The user-facing instance on port 8082
 applied Flyway V4 to the existing default database without resetting saved trips.
+
+
+## Disruption recovery verification
+
+The V5 package passed all 32 tests: 29 ordinary tests and three opt-in live
+cases. New coverage includes idempotent service cancellation, all affected
+bookings, canceled-service exclusion, stale catalog fencing, retained outbound
+and hotel allocations, recovery rollback, explicit mode/budget suggestions,
+no-inventory infeasibility, and cancellation racing an exchange. HTTP coverage
+includes cancellation and replay against the exact current booking.
+
+The live recovery case starts with a fixture rail-only booking and cancels its
+return train. Real nested planning reports infeasibility, Java suggests allowing
+flights, the test explicitly saves that request revision, and real nested
+planning produces the $1,050 replacement. Acceptance clears attention without
+restoring seats on the canceled train. Final recovery session:
+`da2a1e02-62e3-402e-8c75-544d733d8a1f`.
+
+
+The packaged browser check used the existing isolated `target/exchange-browser`
+database, migrated from V4. Its $1,050 booking had a return flight and a 21:30
+Boston deadline. The UI cancellation control marked it Needs attention. Live
+recovery reported the deadline blocker and suggested 22:15 Eastern. Reviewing
+that suggestion populated a draft; explicitly confirming it ran a new real
+assessment and produced the $980 rail replacement. Explicit recovery acceptance
+cleared attention, preserved the outbound and hotel, and added a second history
+entry with a $70 simulated refund. The affected-state UI was visually inspected.
+
+After stopping the test server, a separate H2 connection to the file database
+confirmed the AIR-RETURN cancellation persisted, its available seats remained
+zero, both rail service allocations remained consumed, and both Garden Court
+nights remained reserved. Recovery booking reference:
+`b88b8568-f9e2-4b61-ada3-9e54347177d2`.
+
+Restarting the packaged server and reloading the browser/API returned the same recovered booking, two history entries, and retained catalog version. The test process was stopped; the default app remains on port 8082 with the user's existing data migrated to V5.

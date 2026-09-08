@@ -23,7 +23,7 @@ public final class Contracts {
         String leaveHotelAt, String returnDepartsAt, String returnArrivesAt, String returnToOriginAt, List<Violation> violations) {}
     public record Evaluation(List<CheckedTrip> trips, List<Violation> blockers, int consideredCount, boolean complete) {}
     public record SelectionOptions(String recommendedCandidateId, List<String> alternativeCandidateIds) {}
-    public record EvaluatedRequest(SelectionOptions selections, TripRequest request, Evaluation evaluation) {}
+    public record EvaluatedRequest(SelectionOptions selections, TripRequest request, Evaluation evaluation, String recoveryServiceId) {}
     public record SearchResult(List<ServiceOption> outbound, List<ServiceOption> returnOptions, boolean complete) {}
     public record HotelSearch(List<HotelOption> hotels, boolean complete) {}
     public record Choice(String candidateId, String rationale) {}
@@ -32,11 +32,14 @@ public final class Contracts {
         String alternativeReason, String explanation, List<Violation> blockers, int consideredCount, int feasibleCount) {}
     public record EventSummary(String timestamp, String type, String frameId, String route) {}
     public record AssessmentView(String id, String tripId, int revision, String status, Proposal result, String error,
-        String sessionId, List<EventSummary> events, String createdAt, String baseBookingId) {}
+        String sessionId, List<EventSummary> events, String createdAt, String baseBookingId, int catalogVersion, String recoveryServiceId, List<RecoverySuggestion> recoverySuggestions) {}
     public record BookingView(String id, String tripId, String assessmentId, String candidateId, CheckedTrip quote, String createdAt) {}
     public record BookingChange(BookingView before, BookingView after) {}
-    public record TripView(String id, int revision, TripRequest request, List<AssessmentView> assessments, BookingView booking, String createdAt, List<BookingChange> changes) {}
-    public record TripSummary(String id, int revision, boolean booked, String createdAt) {}
+    public record Cancellation(String serviceId, String createdAt) {}
+    public record RecoverySuggestion(TripRequest request, List<String> changes) {}
+    public record CancellationCommand(String bookingId, String serviceId) {}
+    public record TripView(String id, int revision, TripRequest request, List<AssessmentView> assessments, BookingView booking, String createdAt, List<BookingChange> changes, Cancellation disruption, int catalogVersion) {}
+    public record TripSummary(String id, int revision, boolean booked, String createdAt, boolean needsAttention) {}
     public record BookingCommand(String assessmentId, String candidateId, String idempotencyKey) {}
     public record RevisionCommand(int revision, TripRequest request) {}
     public record AssessmentCommand(int revision) {}

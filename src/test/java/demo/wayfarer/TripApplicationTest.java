@@ -22,7 +22,8 @@ class TripApplicationTest {
     @MockitoBean SkillTemplate skills;
 
     @BeforeEach void reset() {
-        for(String table:List.of("booking_exchange","booking","catalog_receipt","assessment","trip_revision","trip","hotel_night","hotel","travel_service","travel_rules")) db.update("delete from "+table);
+        for(String table:List.of("service_cancellation","booking_exchange","booking","catalog_receipt","assessment","trip_revision","trip","hotel_night","hotel","travel_service","travel_rules")) db.update("delete from "+table);
+        db.update("update catalog_guard set version=0 where id=1");
         new ResourceDatabasePopulator(new ClassPathResource("db/migration/V2__seed_inventory.sql")).execute(Objects.requireNonNull(db.getDataSource()));
     }
     TripRequest budget(long cents) {var r=TripCalculator.example();return new TripRequest(r.origin(),r.destination(),r.outboundDate(),r.returnDate(),2,1,cents,r.hotelReadyBy(),r.leaveHotelNoEarlierThan(),r.returnToOriginBy(),r.allowedModes(),r.priorities());}
@@ -240,6 +241,75 @@ class TripApplicationTest {
         store.revise(a.tripId(),new RevisionCommand(2,earlier()));var missing=store.begin(a.tripId(),3);
         assertTrue(calculator.eligibleHotels(store.snapshot(missing.id())).isEmpty());
         assertEquals(original,store.booking(a.tripId()));
+    }
+
+    CancellationCommand cancelCommand(BookingView b) {return new CancellationCommand(b.id(),b.quote().returnServiceId());}
+    AssessmentView recovery(String tripId) {
+        var t=store.get(tripId);var a=store.begin(tripId,t.revision());store.markRunning(a.id());
+        for(String mode:t.request().allowedModes()) {if(mode.equals("rail")) leaves.searchRailServices(a.id());else leaves.searchFlightServices(a.id());}
+        leaves.searchHotels(a.id());var e=leaves.evaluateTripOptions(a.id());
+        var choice=e.selections().recommendedCandidateId();
+        store.complete(a.id(),new ModelResult(a.id(),choice==null?"NO_FEASIBLE_TRIP":"OPTIONS",choice==null?null:new Choice(choice,"Retain the hotel and outbound journey."),null,"Remaining inventory was evaluated."),"recovery-session",List.of());
+        return store.assessment(a.id());
+    }
+    @Test void cancellationIsIdempotentAndRecoveryRetainsUnaffectedReservations() {
+        var a=proposal("GARDEN");var original=store.book(a.tripId(),command(a,"GARDEN"));
+        var canceled=store.cancelReturn(a.tripId(),cancelCommand(original));
+        assertEquals("RAIL-RETURN",canceled.disruption().serviceId());assertTrue(store.list().getFirst().needsAttention());
+        assertEquals(1,canceled.catalogVersion());assertEquals(1,store.cancelReturn(a.tripId(),cancelCommand(original)).catalogVersion());
+        assertEquals(original,store.booking(a.tripId()));
+        var recovered=recovery(a.tripId());assertEquals("RAIL-RETURN",recovered.recoveryServiceId());
+        assertEquals(1,calculator.eligibleServices(store.snapshot(recovered.id()),"outbound").size());
+        assertTrue(store.snapshot(recovered.id()).services().stream().noneMatch(service->service.id().equals("RAIL-RETURN")));
+        assertEquals(105000,recovered.result().recommended().totalCents());
+        var accepted=store.exchange(a.tripId(),new BookingCommand(recovered.id(),recovered.result().recommended().candidateId(),"recovery-accept-key"));
+        assertNull(store.get(a.tripId()).disruption());assertFalse(store.list().getFirst().needsAttention());
+        assertEquals("RAIL-OUT",accepted.quote().outboundServiceId());assertEquals("GARDEN",accepted.quote().hotelId());
+        assertEquals(0,db.queryForObject("select seats from travel_service where id='RAIL-RETURN'",Integer.class));
+        assertEquals(0,db.queryForObject("select seats from travel_service where id='RAIL-OUT'",Integer.class));
+        assertEquals(0,db.queryForObject("select sum(rooms) from hotel_night where hotel_id='GARDEN'",Integer.class));
+        assertThrows(ApiProblem.class,()->store.cancelReturn(a.tripId(),cancelCommand(original)));
+    }
+    @Test void cancellationAffectsAllBookingsAndFencesEarlierProposals() {
+        db.update("update travel_service set seats=4 where id like 'RAIL-%'");
+        var a=proposal("GARDEN");var b=proposal("CENTRAL");var old=store.book(a.tripId(),command(a,"GARDEN"));
+        var second=store.book(b.tripId(),command(b,"CENTRAL"));
+        var pending=changeProposal(a.tripId());
+        store.cancelReturn(b.tripId(),cancelCommand(second));
+        assertNotNull(store.get(a.tripId()).disruption());assertNotNull(store.get(b.tripId()).disruption());
+        assertEquals(2,store.list().stream().filter(TripSummary::needsAttention).count());
+        assertThrows(ApiProblem.class,()->store.exchange(a.tripId(),changeCommand(pending,"old-catalog-key")));
+        assertEquals(old,store.booking(a.tripId()));
+        assertEquals(0,db.queryForObject("select seats from travel_service where id='RAIL-RETURN'",Integer.class));
+    }
+    @Test void railOnlyRecoverySuggestsExplicitModeAndBudgetChangesWithoutApplyingThem() {
+        var a=proposal("GARDEN");var old=store.book(a.tripId(),command(a,"GARDEN"));var r=budget(98000);
+        r=new TripRequest(r.origin(),r.destination(),r.outboundDate(),r.returnDate(),2,1,r.budgetCents(),r.hotelReadyBy(),r.leaveHotelNoEarlierThan(),r.returnToOriginBy(),List.of("rail"),r.priorities());
+        store.revise(a.tripId(),new RevisionCommand(1,r));store.cancelReturn(a.tripId(),cancelCommand(old));
+        var result=recovery(a.tripId());assertEquals("NO_FEASIBLE_TRIP",result.result().status());
+        var suggestion=result.recoverySuggestions().getFirst();
+        assertEquals(List.of("rail","flight"),suggestion.request().allowedModes());assertEquals(105000,suggestion.request().budgetCents());
+        assertEquals(2,suggestion.changes().size());assertEquals(r,store.get(a.tripId()).request());assertEquals(old,store.booking(a.tripId()));
+        store.revise(a.tripId(),new RevisionCommand(2,suggestion.request()));var next=recovery(a.tripId());
+        assertEquals(105000,next.result().recommended().totalCents());
+    }
+    @Test void failedRecoveryDoesNotReleaseHotelOrOutboundAndNoInventoryCannotBeFixedByPreferences() {
+        var a=proposal("GARDEN");var old=store.book(a.tripId(),command(a,"GARDEN"));store.cancelReturn(a.tripId(),cancelCommand(old));var assessed=recovery(a.tripId());
+        db.update("update travel_service set seats=0 where id='AIR-RETURN'");
+        assertThrows(ApiProblem.class,()->store.exchange(a.tripId(),new BookingCommand(assessed.id(),assessed.result().recommended().candidateId(),"failed-recovery-key")));
+        assertEquals(old,store.booking(a.tripId()));assertNotNull(store.get(a.tripId()).disruption());
+        assertEquals(0,db.queryForObject("select seats from travel_service where id='RAIL-OUT'",Integer.class));
+        assertEquals(0,db.queryForObject("select sum(rooms) from hotel_night where hotel_id='GARDEN'",Integer.class));
+        var unavailable=recovery(a.tripId());assertEquals("NO_FEASIBLE_TRIP",unavailable.result().status());assertTrue(unavailable.recoverySuggestions().isEmpty());
+    }
+    @Test void cancellationDuringExchangeCannotLeaveAHealthyBookingOnCanceledService() throws Exception {
+        var a=proposal("GARDEN");var old=store.book(a.tripId(),command(a,"GARDEN"));var change=changeProposal(a.tripId());var gate=new CountDownLatch(1);
+        try(var workers=Executors.newFixedThreadPool(2)) {
+            var cancel=workers.submit(()->{gate.await();try{store.cancelReturn(a.tripId(),cancelCommand(old));return true;}catch(ApiProblem e){return false;}});
+            var exchange=workers.submit(()->{gate.await();try{store.exchange(a.tripId(),changeCommand(change,"racing-recovery-key"));return true;}catch(ApiProblem e){return false;}});
+            gate.countDown();boolean canceled=cancel.get(10,TimeUnit.SECONDS);assertNotEquals(canceled,exchange.get(10,TimeUnit.SECONDS));
+            assertEquals(canceled,store.get(a.tripId()).disruption()!=null);
+        }
     }
 
 }

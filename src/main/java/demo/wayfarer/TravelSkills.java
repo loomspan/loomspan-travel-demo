@@ -44,6 +44,6 @@ public class TravelSkills {
         calculator.requireCoverage(hotelIds,calculator.eligibleHotels(s).stream().map(HotelOption::id).toList());
         var result=calculator.evaluate(s);
         store.recordReceipt(assessmentId,"EVALUATION",result);
-        return new EvaluatedRequest(calculator.selectionOptions(s.request(),result),s.request(),result);
+        return new EvaluatedRequest(calculator.selectionOptions(s.request(),result),s.request(),result,store.recoveryService(assessmentId));
     }
 }

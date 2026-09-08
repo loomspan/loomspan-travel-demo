@@ -61,6 +61,12 @@ class HttpFlowTest {
         assertEquals(exchanged.body(),request("/api/trips/"+trip.id()+"/exchanges","POST",changeCommand).body());
         restored=json.readValue(request("/api/trips/"+trip.id(),"GET",null).body(),TripView.class);
         assertEquals(105000,restored.booking().quote().totalCents());assertEquals(1,restored.changes().size());
+        var cancellation=new CancellationCommand(restored.booking().id(),restored.booking().quote().returnServiceId());
+        var canceled=request("/api/trips/"+trip.id()+"/return-cancellation","POST",cancellation);assertEquals(200,canceled.statusCode());
+        var affected=json.readValue(canceled.body(),TripView.class);assertEquals("AIR-RETURN",affected.disruption().serviceId());
+        assertEquals(canceled.body(),request("/api/trips/"+trip.id()+"/return-cancellation","POST",cancellation).body());
+        assertEquals(affected.booking(),restored.booking());
+
 
     }
     @Test void providerFailureIsNotInfeasibility() throws Exception {

@@ -18,6 +18,7 @@ public class ApiController {
     @PostMapping(value="/trips",consumes="application/json") public ResponseEntity<TripView> create(@RequestBody TripRequest request) {return ResponseEntity.status(201).body(store.create(request));}
     @PutMapping(value="/trips/{id}",consumes="application/json") public TripView revise(@PathVariable String id,@RequestBody RevisionCommand command) {return store.revise(id,command);}
     @PostMapping(value="/trips/{id}/assessments",consumes="application/json") public ResponseEntity<AssessmentView> assess(@PathVariable String id,@RequestBody AssessmentCommand command) {return ResponseEntity.accepted().body(assessments.start(id,command.revision()));}
+    @PostMapping(value="/trips/{id}/return-cancellation",consumes="application/json") public TripView cancelReturn(@PathVariable String id,@RequestBody CancellationCommand command) {return store.cancelReturn(id,command);}
     @GetMapping("/assessments/{id}") public AssessmentView assessment(@PathVariable String id) {return store.assessment(id);}
     @PostMapping(value="/trips/{id}/bookings",consumes="application/json") public BookingView book(@PathVariable String id,@RequestBody BookingCommand command) {return store.book(id,command);}
     @PostMapping(value="/trips/{id}/exchanges",consumes="application/json") public BookingView exchange(@PathVariable String id,@RequestBody BookingCommand command) {return store.exchange(id,command);}

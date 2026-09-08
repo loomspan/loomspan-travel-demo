@@ -73,6 +73,31 @@ public class TripCalculator {
         });
         return order;
     }
+    public List<RecoverySuggestion> recoverySuggestions(Snapshot snapshot) {
+        var r=snapshot.request();
+        var broad=new TripRequest(r.origin(),r.destination(),r.outboundDate(),r.returnDate(),r.partySize(),r.rooms(),10000000,
+            r.outboundDate()+"T23:59:00-04:00",r.returnDate()+"T11:00:00-04:00",r.returnDate()+"T23:59:00-04:00",List.of("rail","flight"),r.priorities());
+        var candidates=evaluate(new Snapshot(broad,snapshot.services(),snapshot.hotels(),snapshot.modes())).trips().stream()
+            .filter(q->q.violations().isEmpty()).sorted(Comparator.comparingLong(CheckedTrip::totalCents)).toList();
+        List<RecoverySuggestion> suggestions=new ArrayList<>();
+        for(var q:candidates) {
+            List<String> changes=new ArrayList<>();
+            var modes=r.allowedModes();
+            if(!modes.contains(q.outboundMode()) || !modes.contains(q.returnMode())) {modes=List.of("rail","flight");changes.add("Allow rail and flights.");}
+            long budget=Math.max(r.budgetCents(),q.totalCents());
+            if(budget!=r.budgetCents()) changes.add("Raise the total budget to $%.2f.".formatted(budget/100.0));
+            String ready=r.hotelReadyBy(),leave=r.leaveHotelNoEarlierThan(),back=r.returnToOriginBy();
+            if(time(q.hotelReadyAt()).isAfter(time(ready))) {ready=q.hotelReadyAt();changes.add("Allow Friday hotel-ready time of "+time(ready).toLocalTime()+" Eastern.");}
+            if(time(q.leaveHotelAt()).isBefore(time(leave))) {leave=q.leaveHotelAt();changes.add("Allow leaving the hotel Sunday at "+time(leave).toLocalTime()+" Eastern.");}
+            if(time(q.returnToOriginAt()).isAfter(time(back))) {back=q.returnToOriginAt();changes.add("Allow Boston return Sunday at "+time(back).toLocalTime()+" Eastern.");}
+            if(changes.isEmpty()) continue;
+            var request=new TripRequest(r.origin(),r.destination(),r.outboundDate(),r.returnDate(),r.partySize(),r.rooms(),budget,ready,leave,back,modes,r.priorities());
+            var suggestion=new RecoverySuggestion(request,List.copyOf(changes));
+            if(!suggestions.contains(suggestion)) suggestions.add(suggestion);
+            if(suggestions.size()==3) break;
+        }
+        return List.copyOf(suggestions);
+    }
     public SelectionOptions selectionOptions(TripRequest request,Evaluation evaluation) {
         var feasible=evaluation.trips().stream().filter(t->t.violations().isEmpty()).toList();
         if(feasible.isEmpty()) return new SelectionOptions(null,List.of());

@@ -154,3 +154,49 @@ The evaluation tool also returns a compact `selections` header: the computed
 recommended ID and eligible alternative IDs. The logistics specialist uses that
 header with the complete quote evidence. This makes an empty alternative set
 explicit instead of asking the model to infer it from a long catalog.
+
+
+## Return-service disruption recovery
+
+Flyway V5 adds persistent service cancellations and a catalog version counter.
+`POST /api/trips/{id}/return-cancellation` requires the exact current booking ID
+and its return service ID. It locks the trip and catalog, records the supplier
+cancellation once, zeros that service's inventory, and increments the catalog
+version. Repeated requests against the same current booking are idempotent;
+a request aimed at a superseded booking is rejected. No model can cancel a
+service. The UI exposes this action under explicit simulated demo controls.
+
+Attention is derived from the current booking's return service and the global
+cancellation record, so all bookings on the service are affected. Booked-trip
+views poll for these changes. Canceled services are absent from every new
+snapshot, including owned-inventory credits. A recovery snapshot restricts
+outbound candidates to the booked service and hotels to the booked hotel.
+The existing transport, stay, and logistics tree executes with fresh receipts;
+the evaluation result includes the canceled recovery service ID as context.
+
+Every assessment records the catalog version and its recovery service ID.
+Cancellation invalidates earlier proposals globally; acceptance checks the
+version under the catalog lock. A successful assessment of an old immutable
+snapshot can remain historical evidence, but it cannot be accepted after a
+cancellation. Interrupted sessions use the existing retry behavior.
+
+Recovery uses the same atomic exchange transaction. It verifies retained
+outbound/hotel IDs, preserves their allocation, and reserves a new return.
+Releasing a canceled return never restores its seats. Failure retains the
+affected booking, attention state, outbound seats, and hotel nights; it does
+not claim that the canceled return is usable. Success records normal immutable
+before/after history and clears attention through the new booking's service.
+
+For a completed infeasible recovery, Java evaluates the same snapshot with both
+modes and broad same-weekend budget/timing bounds. It derives up to three sets
+of necessary changes from otherwise feasible candidates: allowed modes, total
+budget, hotel-ready deadline, hotel departure limit, and Boston return deadline.
+These are draft request suggestions, never bookable quotes or automatic consent.
+The traveler reviews them and starts a new real skill assessment. Missing or
+canceled inventory cannot be repaired by relaxing preferences, so no suggestion
+is offered when the broader finite catalog is also infeasible.
+
+This slice simulates pre-travel supplier cancellation of a return service only.
+It does not model outbound disruptions, in-progress journeys, fee/refund policies,
+service reinstatement, or live supplier notifications. Entire replacement totals
+retain the demo's current-catalog repricing policy; no real payment occurs.

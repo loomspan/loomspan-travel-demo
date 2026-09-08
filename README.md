@@ -68,6 +68,31 @@ Meals, show tickets and incidental local travel are excluded from quoted totals.
 Timing begins/ends at the Boston downtown meeting point, not a home address.
 Transfers are included quote line items, not finite taxi reservations.
 
+## Disruption walkthrough
+
+Start with a booked Garden Court rail trip, then open **Demo controls** and
+choose **Simulate return cancellation**. This cancels the service for every
+booking in the shared demo, marks affected bookings **Needs attention**, and
+excludes the service from all new searches. Outbound seats and hotel nights
+remain reserved. The control identifies the affected service before you click.
+
+Choose **Find a replacement with Loomspan**. With the default requirements,
+recovery offers the $1,050 rail-outbound / flight-return itinerary. Review it
+and choose **Accept simulated recovery**. The replacement and history commit
+atomically, and the attention state clears.
+
+For a constraint demonstration, book with **Rail only** before canceling the
+return train. Recovery cannot satisfy that request. It suggests **Allow rail
+and flights**. Review the proposed request changes, confirm and reassess, then
+accept a replacement. Tight budgets or deadlines produce concrete additional
+changes where the remaining inventory supports them. Suggestions do not apply
+changes or reserve inventory. If both return services are canceled or sold out,
+no preference change can produce a replacement in this finite demo catalog.
+
+Cancellation is persistent; use the documented database reset to restore fresh
+fixtures for another presentation. The cancellation control simulates a supplier
+event; it is not a traveler-initiated cancellation or a real supplier action.
+
 ## Skill coordination
 
 ```text
@@ -108,7 +133,8 @@ results, HTTP flows, stale proposals, price changes, idempotency, booking races,
 reservation exchanges (including rollback, owned inventory, history, stale
 baselines, and competing last-seat acceptances), and interrupted assessments. Live tests use your configured provider and verify
 actual nested execution, specialist overlap, preference choices, selective
-rail-only search, infeasibility, booking, and a live change-and-exchange flow. Live traces and provider requests
+rail-only search, infeasibility, booking, live exchanges, and cancellation recovery
+after explicit consent to broaden a rail-only request. Live traces and provider requests
 may contain the fictional trip data. The separate Python design calculator
 (`python scripts/verify-design.py`) requires Python 3.10+ and is not used by the app.
 
@@ -138,7 +164,11 @@ replacement is repriced from current inventory; its total difference is a
 simulated charge/refund, with no exchange fees. An unsuccessful assessment or
 acceptance never cancels the current booking.
 
-Free-text intake, loyalty benefits, disruption recovery, payments, supplier
+Return-service disruption recovery is included. It retains the booked outbound
+journey and hotel, and requires explicit acceptance of a replacement. Canceled
+services stay canceled across restarts and cannot be restored through planning.
+
+Free-text intake, loyalty benefits, payments, supplier
 connections, and booking cancellation remain later slices.
 
 Design references: [brief](docs/design-brief.md),

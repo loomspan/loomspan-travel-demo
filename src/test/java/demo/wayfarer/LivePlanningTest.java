@@ -18,11 +18,13 @@ import static org.junit.jupiter.api.Assertions.*;
 class LivePlanningTest {
     @Autowired SkillTemplate skills;
     @Autowired TripStore store;
+    @Autowired TravelSkills leaves;
     @Autowired TripCalculator calculator;
     @Autowired ObjectMapper json;
     @Autowired org.springframework.jdbc.core.JdbcTemplate db;
     @BeforeEach void resetFixtures() {
-        for(String table:List.of("booking_exchange","booking","catalog_receipt","assessment","trip_revision","trip","hotel_night","hotel","travel_service","travel_rules")) db.update("delete from "+table);
+        for(String table:List.of("service_cancellation","booking_exchange","booking","catalog_receipt","assessment","trip_revision","trip","hotel_night","hotel","travel_service","travel_rules")) db.update("delete from "+table);
+        db.update("update catalog_guard set version=0 where id=1");
         new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(new org.springframework.core.io.ClassPathResource("db/migration/V2__seed_inventory.sql")).execute(Objects.requireNonNull(db.getDataSource()));
     }
 
@@ -73,4 +75,26 @@ class LivePlanningTest {
         assertTrue(observation.get().events().stream().noneMatch(e->"searchFlightServices".equals(e.route())));
         System.out.println("LIVE_RAIL_ONLY_SESSION="+observation.get().sessionId());
     }
+    @Test void canceledRailReturnNeedsModeConsentBeforeLiveRecovery() {
+        var r=TripCalculator.example();r=new TripRequest(r.origin(),r.destination(),r.outboundDate(),r.returnDate(),2,1,r.budgetCents(),r.hotelReadyBy(),r.leaveHotelNoEarlierThan(),r.returnToOriginBy(),List.of("rail"),r.priorities());
+        var t=store.create(r);var a=store.begin(t.id(),1);store.markRunning(a.id());
+        leaves.searchRailServices(a.id());leaves.searchHotels(a.id());leaves.evaluateTripOptions(a.id());
+        store.complete(a.id(),new ModelResult(a.id(),"OPTIONS",new Choice("RAIL-OUT~RAIL-RETURN~GARDEN","Quiet room."),null,"Fixture booking for a live recovery."),"fixture",List.of());
+        var old=store.book(t.id(),new BookingCommand(a.id(),"RAIL-OUT~RAIL-RETURN~GARDEN","recovery-fixture-key"));
+        store.cancelReturn(t.id(),new CancellationCommand(old.id(),old.quote().returnServiceId()));
+        var blocked=store.begin(t.id(),1);store.markRunning(blocked.id());AtomicReference<SkillExecutionView> observed=new AtomicReference<>();
+        var result=skills.invoke("planTrip",new PlanningInput(blocked.id(),r),observed::set);
+        store.complete(blocked.id(),json.readValue(result,ModelResult.class),observed.get().sessionId(),List.of());
+        assertEquals("NO_FEASIBLE_TRIP",store.assessment(blocked.id()).result().status());
+        var consent=store.assessment(blocked.id()).recoverySuggestions().getFirst();assertEquals(List.of("rail","flight"),consent.request().allowedModes());
+        assertEquals(old,store.booking(t.id()));store.revise(t.id(),new RevisionCommand(1,consent.request()));
+        var recovery=store.begin(t.id(),2);store.markRunning(recovery.id());
+        var recovered=skills.invoke("planTrip",new PlanningInput(recovery.id(),consent.request()),observed::set);
+        store.complete(recovery.id(),json.readValue(recovered,ModelResult.class),observed.get().sessionId(),List.of());
+        var quote=store.assessment(recovery.id()).result().recommended();assertEquals(105000,quote.totalCents());assertEquals("RAIL-OUT",quote.outboundServiceId());
+        store.exchange(t.id(),new BookingCommand(recovery.id(),quote.candidateId(),"live-recovery-accept"));
+        assertNull(store.get(t.id()).disruption());assertEquals(0,db.queryForObject("select seats from travel_service where id='RAIL-RETURN'",Integer.class));
+        System.out.println("LIVE_RECOVERY_SESSION="+observed.get().sessionId());
+    }
+
 }
