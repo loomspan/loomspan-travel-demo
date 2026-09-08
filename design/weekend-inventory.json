@@ -1,0 +1,20 @@
+{
+  "description": "Fictional design fixtures, not real schedules or fares. All money is integer USD cents.",
+  "request": {"origin": "Boston downtown meeting point", "destination": "New York", "outboundDate": "2026-10-16", "returnDate": "2026-10-18", "partySize": 2, "rooms": 1, "nights": 2, "budgetCents": 120000, "hotelReadyBy": "2026-10-16T17:00:00-04:00", "leaveHotelNoEarlierThan": "2026-10-18T16:00:00-04:00", "homeBy": "2026-10-18T23:00:00-04:00", "preference": "Prefer a quiet room, then less transfer time; use price to break otherwise similar choices."},
+  "modes": {
+    "rail": {"departureBufferMinutes": 20, "arrivalBufferMinutes": 15, "bostonTransferMinutes": 0, "bostonTransferPartyCents": 0},
+    "flight": {"departureBufferMinutes": 90, "arrivalBufferMinutes": 30, "bostonTransferMinutes": 30, "bostonTransferPartyCents": 4000}
+  },
+  "services": [
+    {"id": "RAIL-OUT", "mode": "rail", "direction": "outbound", "departs": "2026-10-16T10:00:00-04:00", "arrives": "2026-10-16T14:00:00-04:00", "farePerPersonCents": 9500, "seats": 2},
+    {"id": "AIR-OUT", "mode": "flight", "direction": "outbound", "departs": "2026-10-16T13:00:00-04:00", "arrives": "2026-10-16T14:10:00-04:00", "farePerPersonCents": 6500, "seats": 6},
+    {"id": "AIR-LATE", "mode": "flight", "direction": "outbound", "departs": "2026-10-16T15:00:00-04:00", "arrives": "2026-10-16T16:10:00-04:00", "farePerPersonCents": 4500, "seats": 6},
+    {"id": "RAIL-RETURN", "mode": "rail", "direction": "return", "departs": "2026-10-18T18:00:00-04:00", "arrives": "2026-10-18T22:00:00-04:00", "farePerPersonCents": 8500, "seats": 2},
+    {"id": "AIR-RETURN", "mode": "flight", "direction": "return", "departs": "2026-10-18T19:00:00-04:00", "arrives": "2026-10-18T20:10:00-04:00", "farePerPersonCents": 6500, "seats": 6}
+  ],
+  "hotels": [
+    {"id": "CENTRAL", "name": "Central House", "nightlyRoomCents": 22000, "roomCapacity": 2, "roomsPerNight": 3, "checkIn": "15:00", "quietRoom": false, "roomDescription": "Compact double room; no quiet-room guarantee", "transfers": {"rail": {"minutes": 20, "partyCents": 2000}, "flight": {"minutes": 75, "partyCents": 9000}}},
+    {"id": "GARDEN", "name": "Garden Court", "nightlyRoomCents": 29000, "roomCapacity": 2, "roomsPerNight": 1, "checkIn": "15:00", "quietRoom": true, "roomDescription": "Courtyard-facing king room with a guaranteed quiet-room allocation", "transfers": {"rail": {"minutes": 15, "partyCents": 2000}, "flight": {"minutes": 65, "partyCents": 9000}}},
+    {"id": "RIVERSIDE", "name": "Riverside Lodge", "nightlyRoomCents": 18000, "roomCapacity": 2, "roomsPerNight": 4, "checkIn": "15:00", "quietRoom": false, "roomDescription": "Spacious double room; no quiet-room guarantee", "transfers": {"rail": {"minutes": 60, "partyCents": 7000}, "flight": {"minutes": 90, "partyCents": 11000}}}
+  ]
+}

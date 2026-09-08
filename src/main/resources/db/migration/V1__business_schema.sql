@@ -1,0 +1,10 @@
+CREATE TABLE catalog_guard (id INTEGER PRIMARY KEY);
+INSERT INTO catalog_guard VALUES (1);
+CREATE TABLE travel_service (id VARCHAR(40) PRIMARY KEY, payload CLOB NOT NULL, seats INTEGER NOT NULL CHECK(seats >= 0));
+CREATE TABLE hotel (id VARCHAR(40) PRIMARY KEY, payload CLOB NOT NULL);
+CREATE TABLE hotel_night (hotel_id VARCHAR(40) REFERENCES hotel(id), stay_date DATE NOT NULL, rooms INTEGER NOT NULL CHECK(rooms >= 0), PRIMARY KEY(hotel_id, stay_date));
+CREATE TABLE travel_rules (id INTEGER PRIMARY KEY, payload CLOB NOT NULL);
+CREATE TABLE trip (id VARCHAR(40) PRIMARY KEY, revision INTEGER NOT NULL, created_at VARCHAR(40) NOT NULL);
+CREATE TABLE trip_revision (trip_id VARCHAR(40) REFERENCES trip(id), revision INTEGER NOT NULL, request_json CLOB NOT NULL, PRIMARY KEY(trip_id, revision));
+CREATE TABLE assessment (id VARCHAR(40) PRIMARY KEY, trip_id VARCHAR(40) REFERENCES trip(id), revision INTEGER NOT NULL, status VARCHAR(20) NOT NULL, snapshot_json CLOB NOT NULL, result_json CLOB, error_message VARCHAR(500), session_id VARCHAR(80), events_json CLOB NOT NULL, created_at VARCHAR(40) NOT NULL);
+CREATE TABLE booking (id VARCHAR(40) PRIMARY KEY, trip_id VARCHAR(40) NOT NULL UNIQUE REFERENCES trip(id), assessment_id VARCHAR(40) NOT NULL REFERENCES assessment(id), candidate_id VARCHAR(160) NOT NULL, idempotency_key VARCHAR(80) NOT NULL, quote_json CLOB NOT NULL, created_at VARCHAR(40) NOT NULL, UNIQUE(trip_id, idempotency_key));

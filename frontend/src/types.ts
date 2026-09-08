@@ -1,0 +1,9 @@
+export type TripRequest={origin:string;destination:string;outboundDate:string;returnDate:string;partySize:number;rooms:number;budgetCents:number;hotelReadyBy:string;leaveHotelNoEarlierThan:string;returnToOriginBy:string;allowedModes:string[];priorities:string[]};
+export type Violation={code:string;message:string};
+export type Quote={candidateId:string;outboundServiceId:string;returnServiceId:string;hotelId:string;hotelName:string;roomDescription:string;quietRoom:boolean;outboundMode:string;returnMode:string;transportCents:number;lodgingCents:number;transferCents:number;totalCents:number;totalTransferMinutes:number;startAt:string;outboundDepartsAt:string;outboundArrivesAt:string;hotelArrivalAt:string;hotelReadyAt:string;leaveHotelAt:string;returnDepartsAt:string;returnArrivesAt:string;returnToOriginAt:string;violations:Violation[]};
+export type Proposal={status:string;recommended:Quote|null;alternative:Quote|null;recommendedReason:string|null;alternativeReason:string|null;explanation:string;blockers:Violation[];consideredCount:number;feasibleCount:number};
+export type ExecutionEvent={timestamp:string;type:string;frameId:string|null;route:string|null};
+export type Assessment={id:string;tripId:string;revision:number;status:string;result:Proposal|null;error:string|null;sessionId:string|null;events:ExecutionEvent[];createdAt:string};
+export type Booking={id:string;tripId:string;assessmentId:string;candidateId:string;quote:Quote;createdAt:string};
+export type Trip={id:string;revision:number;request:TripRequest;assessments:Assessment[];booking:Booking|null;createdAt:string};
+export type TripSummary={id:string;revision:number;booked:boolean;createdAt:string};

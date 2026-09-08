@@ -1,0 +1,43 @@
+server:
+  address: 127.0.0.1
+  port: ${WAYFARER_PORT:8082}
+spring:
+  application:
+    name: wayfarer
+  datasource:
+    url: ${WAYFARER_DATABASE_URL:jdbc:h2:file:./data/wayfarer;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000}
+    username: sa
+    password: ''
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+loomspan:
+  connections:
+    travel:
+      driver: openai
+      base-url: ${WAYFARER_MODEL_BASE_URL:https://api.openai.com/v1}
+      api-key: ${OPENAI_API_KEY:not-configured}
+      provider-retry:
+        max-attempts: 2
+  models:
+    planner:
+      connection: travel
+      provider-model: ${WAYFARER_MODEL:gpt-4.1}
+  skills:
+    locations:
+      - classpath:/skills/*.yml
+  session:
+    mission-timeout: 240s
+    max-depth: 4
+    quotas:
+      max-skill-invocations: 24
+      max-tool-invocations: 32
+      max-model-calls: 40
+      max-provider-attempts: 60
+      max-usage-units: 160000
+  observability:
+    enabled: ${WAYFARER_OBSERVABILITY_ENABLED:false}
+    auth:
+      api-key: ${WAYFARER_OBSERVABILITY_API_KEY:}
+execution-trace:
+  persistence: ${WAYFARER_TRACE_PERSISTENCE:ONERROR}
