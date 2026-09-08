@@ -2,6 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import type {Assessment,Quote,Trip,TripRequest,TripSummary} from './types';
 import './style.css';
+import {Conversation} from './Conversation';
 
 async function api<T>(path:string,method='GET',body?:unknown):Promise<T>{
   const response=await fetch('/api'+path,{method,headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
@@ -69,6 +70,12 @@ function App(){
     try {const updated=await api<Trip>('/trips/'+trip.id+'/return-cancellation','POST',{bookingId:trip.booking.id,serviceId:trip.booking.quote.returnServiceId});setTrip(updated);setScreen('booked');await refreshList();}
     catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
+  async function confirmConversation(id:string){
+    if(!trip)return;setBusy(true);setError('');setReview(null);
+    try{const saved=await api<Trip>('/trips/'+trip.id+'/intakes/'+id+'/confirmation','POST');setTrip(saved);setDraft(saved.request);setScreen('compare');
+      await api('/trips/'+saved.id+'/assessments','POST',{revision:saved.revision});setTrip(await api<Trip>('/trips/'+saved.id));setTick(Date.now());
+    }finally{setBusy(false);}
+  }
   function choose(q:Quote){bookingKey.current=crypto.randomUUID();setReview(q);setError('');}
   const setField=<K extends keyof TripRequest>(key:K,value:TripRequest[K])=>{if(draft)setDraft({...draft,[key]:value});};
   const edit=()=>{setReview(null);setDraft(trip?.request??example);setScreen('request');setError('');};
@@ -83,6 +90,7 @@ function App(){
       <nav aria-label="Trip steps" className="steps"><button aria-current={screen==='request'?'step':undefined} onClick={edit} disabled={busy||running}>1 · Your request</button><button aria-current={screen==='compare'?'step':undefined} onClick={()=>setScreen('compare')} disabled={!assessment||busy||!actionable}>2 · Compare trips</button><button aria-current={screen==='booked'?'step':undefined} onClick={()=>setScreen('booked')} disabled={!trip?.booking}>3 · Booked trip</button></nav>
       {disrupted&&<section className="notice error" role="alert"><h2>Your return service was canceled</h2><p>{trip!.disruption!.serviceId} is no longer operating. Your outbound journey and hotel remain reserved. The original return times below are no longer a valid itinerary.</p><p>Recovery keeps your outbound service and hotel, and checks your saved budget, modes, and deadlines.</p><button className="primary" disabled={busy||running} onClick={()=>void retry()}>Find a replacement with Loomspan</button></section>}
       {error&&<div className="notice error" role="alert">{error}</div>}
+      {trip&&<Conversation key={trip.id} trip={trip} disabled={busy||running} onConfirm={confirmConversation}/>}
       {!draft&&!error&&<p role="status">Loading the trip workspace…</p>}
       {screen==='request'&&draft&&<form className="panel" onSubmit={saveAndAssess}><div className="row"><h2>{changing?'Change your weekend':'A weekend that fits'}</h2><button type="button" onClick={()=>setDraft(example)} disabled={busy||running}>Load example</button></div>
         <p className="muted">This demo supports the dates below, two adults, and one room. Adjust your budget, timing, and priorities.</p>

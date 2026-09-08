@@ -130,3 +130,41 @@ nights remained reserved. Recovery booking reference:
 `b88b8568-f9e2-4b61-ada3-9e54347177d2`.
 
 Restarting the packaged server and reloading the browser/API returned the same recovered booking, two history entries, and retained catalog version. The test process was stopped; the default app remains on port 8082 with the user's existing data migrated to V5.
+
+## Conversational change verification
+
+The V6 package build passed 40 tests with live tests enabled, including the
+existing initial planning, exchange, and recovery cases. A subsequent HTTP
+test addition passed all four HTTP tests. The current suite therefore has 37
+ordinary tests and four opt-in live cases, verified across these runs.
+Frontend TypeScript checking and the Vite production build passed during packaging.
+
+Intake tests cover clarification history, exact proposed differences, no writes
+to requirements or inventory before confirmation, saved-budget arithmetic,
+invalid patches, stale request/catalog/booking rejection, trip scoping,
+idempotent confirmation, and concurrent confirmation producing one revision.
+HTTP coverage verifies an empty latest-draft response, interpretation, explicit
+confirmation, and replay.
+
+The final live intake test starts with a $980 Garden Court booking and a $1,200
+saved budget. Five real model calls verify clarification for an unspecified
+earlier return, an exact 21:30 deadline, a $100 budget increase to $1,300,
+rejection of a mixed unsupported destination change, and clarification for a
+conditional future disruption policy. This targeted test passed after the full
+package run. Intake session: `5d4d870e-92bb-4bd8-8031-c734b20a81e5`.
+
+The packaged browser check used a separate `target/intake-browser` database.
+After booking the $980 Garden Court rail trip, asking to get home earlier
+produced a clarification. Stopping and restarting the server restored that
+question and conversation. Answering 21:30 Eastern produced a visually inspected
+review table containing only the return deadline change from 23:00 to 21:30.
+The API still showed request revision 1 and the original booking before
+confirmation. Intake session: `4b9c0f0d-fa3f-4f0a-ad3c-ccac56155dc8`.
+
+Explicit confirmation saved revision 2 and invoked the existing nested planning
+flow. The resulting $1,050 proposal retained Garden Court and the outbound rail
+service, returning by flight with a 21:10 Boston arrival. The API confirmed that
+the original $980 booking `2d7c991a-76b2-4458-b581-308dbbc56709` remained current
+and the persisted draft recorded confirmed revision 2. Replacement acceptance
+remained a separate review action. The isolated test instance was stopped after
+verification. Port 8082 runs the packaged V6 app with existing user data preserved.

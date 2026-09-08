@@ -79,6 +79,17 @@ class HttpFlowTest {
         assertEquals(404,request("/api/trips/not-found","GET",null).statusCode());
         assertEquals(400,request("/api/trips","POST",java.util.Map.of("budgetCents","not-a-number")).statusCode());
     }
+    @Test void conversationalDraftRequiresExplicitHttpConfirmation() throws Exception {
+        var trip=json.readValue(request("/api/trips","POST",TripCalculator.example()).body(),TripView.class);
+        var empty=request("/api/trips/"+trip.id()+"/intakes/latest","GET",null);assertEquals(200,empty.statusCode());assertNull(json.readValue(empty.body(),IntakeContracts.Latest.class).draft());
+        when(skills.invoke(eq("interpretTripChange"),any(Object.class),any())).thenReturn(json.writeValueAsString(new IntakeContracts.Result("READY","Proposed budget change.",new IntakeContracts.Patch(null,10000L,null,null,null,null,null))));
+        var interpreted=request("/api/trips/"+trip.id()+"/intakes","POST",new IntakeContracts.Command("Another $100",null));assertEquals(200,interpreted.statusCode(),interpreted.body());
+        var draft=json.readValue(interpreted.body(),IntakeContracts.View.class);assertEquals(130000,draft.proposedRequest().budgetCents());
+        assertEquals(1,json.readValue(request("/api/trips/"+trip.id(),"GET",null).body(),TripView.class).revision());
+        var confirmed=request("/api/trips/"+trip.id()+"/intakes/"+draft.id()+"/confirmation","POST",null);assertEquals(200,confirmed.statusCode(),confirmed.body());
+        assertEquals(2,json.readValue(confirmed.body(),TripView.class).revision());
+        assertEquals(confirmed.body(),request("/api/trips/"+trip.id()+"/intakes/"+draft.id()+"/confirmation","POST",null).body());
+    }
     AssessmentView await(String id) throws Exception {
         for(int i=0;i<100;i++) {var a=json.readValue(request("/api/assessments/"+id,"GET",null).body(),AssessmentView.class);if(!List.of("QUEUED","RUNNING").contains(a.status()))return a;Thread.sleep(100);}
         throw new AssertionError("Assessment did not complete");

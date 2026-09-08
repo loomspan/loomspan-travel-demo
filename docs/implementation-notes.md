@@ -200,3 +200,39 @@ This slice simulates pre-travel supplier cancellation of a return service only.
 It does not model outbound disruptions, in-progress journeys, fee/refund policies,
 service reinstatement, or live supplier notifications. Entire replacement totals
 retain the demo's current-catalog repricing policy; no real payment occurs.
+
+
+## Conversational requirement changes
+
+V6 adds persisted `intake_draft` records. `interpretTripChange` is a direct YAML
+skill with no child tools, invoked through the supported SkillTemplate Object
+overload. It emits READY with a narrow nullable patch, CLARIFY with one question,
+or UNSUPPORTED. Java validates field values, applies only supplied fields to the
+saved request, computes exact review differences, and rejects empty proposals.
+The patch cannot represent a route, date, party, room, hotel, or booking change.
+Relative budget deltas are applied to the saved budget using checked arithmetic.
+The model input uses empty strings/zero for absent booking metadata because this
+version's YAML input contracts do not accept the output contract's `nullable`
+keyword. Persisted application baseline fields still use actual null values.
+
+POST `/api/trips/{id}/intakes` takes a message and optional clarification parent
+ID. Parents must belong to the same trip, need clarification, and match the
+current request/booking/catalog baseline. Messages are capped at two thousand
+characters, conversations at five traveler turns, and model calls at two
+concurrent interpretations with no queue. Calls are synchronous and run outside
+database transactions. Failed calls do not change requirements or create a
+successful interpretation. Completed drafts and their session IDs are persisted;
+GET `/api/trips/{id}/intakes/latest` restores the latest view and confirmation state.
+
+POST `/api/trips/{id}/intakes/{draftId}/confirmation` locks the trip and catalog,
+verifies the immutable baseline, and saves exactly the reviewed request as a new
+revision. Confirmation is idempotent for that revision and cannot apply a stale,
+foreign, unclear, or unsupported draft. The UI then starts an ordinary assessment;
+if that later operation fails, the saved revision remains and can be reassessed.
+Booking/exchange/recovery acceptance retains its existing separate explicit step.
+
+Natural language interpretation is model-driven, not a proof that every intention
+was understood. The original conversation and application-generated differences
+are displayed together for review. Unsupported requests are instructed to decline
+as a whole; broad semantic understanding is not mechanically guaranteed. No
+model action bypasses the required confirmation or existing reservation checks.

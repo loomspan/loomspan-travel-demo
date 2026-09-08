@@ -23,7 +23,7 @@ class LivePlanningTest {
     @Autowired ObjectMapper json;
     @Autowired org.springframework.jdbc.core.JdbcTemplate db;
     @BeforeEach void resetFixtures() {
-        for(String table:List.of("service_cancellation","booking_exchange","booking","catalog_receipt","assessment","trip_revision","trip","hotel_night","hotel","travel_service","travel_rules")) db.update("delete from "+table);
+        for(String table:List.of("intake_draft","service_cancellation","booking_exchange","booking","catalog_receipt","assessment","trip_revision","trip","hotel_night","hotel","travel_service","travel_rules")) db.update("delete from "+table);
         db.update("update catalog_guard set version=0 where id=1");
         new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(new org.springframework.core.io.ClassPathResource("db/migration/V2__seed_inventory.sql")).execute(Objects.requireNonNull(db.getDataSource()));
     }

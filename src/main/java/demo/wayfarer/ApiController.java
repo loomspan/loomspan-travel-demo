@@ -10,8 +10,11 @@ import static demo.wayfarer.Contracts.*;
 @RestController
 @RequestMapping("/api")
 public class ApiController {
-    private final TripStore store; private final AssessmentService assessments;
-    public ApiController(TripStore store,AssessmentService assessments) {this.store=store;this.assessments=assessments;}
+    private final TripStore store; private final AssessmentService assessments; private final IntakeService intake;
+    public ApiController(TripStore store,AssessmentService assessments,IntakeService intake) {this.store=store;this.assessments=assessments;this.intake=intake;}
+    @PostMapping(value="/trips/{id}/intakes",consumes="application/json") public IntakeContracts.View interpret(@PathVariable String id,@RequestBody IntakeContracts.Command command) {return intake.interpret(id,command);}
+    @GetMapping("/trips/{id}/intakes/latest") public IntakeContracts.Latest latestIntake(@PathVariable String id) {return new IntakeContracts.Latest(intake.latest(id));}
+    @PostMapping("/trips/{id}/intakes/{draftId}/confirmation") public TripView confirmIntake(@PathVariable String id,@PathVariable String draftId) {return intake.confirm(id,draftId);}
     @GetMapping("/example") public TripRequest example() {return TripCalculator.example();}
     @GetMapping("/trips") public List<TripSummary> list() {return store.list();}
     @GetMapping("/trips/{id}") public TripView get(@PathVariable String id) {return store.get(id);}

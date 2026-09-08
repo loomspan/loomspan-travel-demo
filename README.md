@@ -93,9 +93,30 @@ Cancellation is persistent; use the documented database reset to restore fresh
 fixtures for another presentation. The cancellation control simulates a supplier
 event; it is not a traveler-initiated cancellation or a real supplier action.
 
+## Conversational changes
+
+Open an existing trip and expand **Describe a trip change**. Try **Keep the quiet
+hotel, but get us home earlier**. Wayfarer asks for an exact deadline; answer
+**9:30 pm Eastern**. Review the saved-versus-proposed requirements, then choose
+**Confirm requirements and compare trips**. This saves the request revision and
+runs the existing planning tree. It does not accept a booking or exchange.
+
+**I can spend another $100** increases the saved total budget by $100, not the
+current booking price. Conditional permission such as **Flights are okay if the
+train is canceled** asks for clarification unless that cancellation is already
+present. Changes outside the fixed demo route/dates/party/hotel scope are declined.
+
+Interpretations and clarification history persist locally across refresh and
+restart. A changed request, booking, or cancellation state makes an unconfirmed
+draft stale. Start a new change in that case. The panel interprets the saved
+request, not unsaved edits in the structured form. The exact differences are
+application-generated; review them because language interpretation can vary.
+
 ## Skill coordination
 
 ```text
+interpretTripChange              YAML direct; no child tools
+  ↓ traveler reviews and confirms requirements
 planTrip                         YAML planner
 ├─ planTransport                 YAML planner
 │  ├─ searchRailServices         Java
@@ -123,7 +144,7 @@ by `scripts/generate-skill-manifests.py` and checked in.
 .\mvnw.cmd test -DskipFrontend=true
 npm run build --prefix frontend
 $env:WAYFARER_LIVE_TEST = 'true'
-.\mvnw.cmd '-Dtest=LivePlanningTest' -DskipFrontend=true test
+.\mvnw.cmd '-Dtest=LivePlanningTest,LiveIntakeTest' -DskipFrontend=true test
 Remove-Item Env:WAYFARER_LIVE_TEST
 ```
 
@@ -168,7 +189,7 @@ Return-service disruption recovery is included. It retains the booked outbound
 journey and hotel, and requires explicit acceptance of a replacement. Canceled
 services stay canceled across restarts and cannot be restored through planning.
 
-Free-text intake, loyalty benefits, payments, supplier
+Conversational creation of new trips, loyalty benefits, payments, supplier
 connections, and booking cancellation remain later slices.
 
 Design references: [brief](docs/design-brief.md),

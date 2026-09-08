@@ -3,3 +3,5 @@
 .change-comparison {margin:1rem 0;font-size:.86rem} .change-comparison table {width:100%;border-collapse:collapse;table-layout:fixed} .change-comparison th,.change-comparison td {padding:.5rem .25rem;text-align:left;border-bottom:1px solid #dcded5;overflow-wrap:anywhere} .change-comparison caption {text-align:left;color:#59645a;margin-bottom:.5rem}
 
 .options > .choice:only-child {grid-column:1 / -1}
+
+.conversation {margin:1.4rem 0} .conversation textarea {display:block;width:100%;box-sizing:border-box;padding:.8rem;border:1px solid #cbd0c6;border-radius:8px;font:inherit;resize:vertical} .conversation form {margin-top:1rem} .conversation-history {border-left:3px solid #cbd6c7;padding-left:1rem;margin:1rem 0;white-space:pre-wrap;overflow-wrap:anywhere} .conversation button {margin:.4rem .5rem .4rem 0}
