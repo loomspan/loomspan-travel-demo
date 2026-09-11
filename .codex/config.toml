@@ -1,0 +1,3 @@
+[mcp_servers.loomspan]
+url = "http://127.0.0.1:7943/mcp"
+bearer_token_env_var = "LOOMSPAN_MCP_TOKEN"

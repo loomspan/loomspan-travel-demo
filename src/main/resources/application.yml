@@ -11,18 +11,21 @@ spring:
   jackson:
     deserialization:
       fail-on-unknown-properties: true
+  h2:
+    console:
+      enabled: true
 loomspan:
   connections:
     travel:
       driver: openai
       base-url: ${WAYFARER_MODEL_BASE_URL:https://api.openai.com/v1}
-      api-key: ${OPENAI_API_KEY:not-configured}
+      api-key: ${OPENROUTER_API_KEY:not-configured}
       provider-retry:
         max-attempts: 2
   models:
     planner:
       connection: travel
-      provider-model: ${WAYFARER_MODEL:gpt-4.1}
+      provider-model: ${WAYFARER_MODEL:gpt-5.6-luna}
   skills:
     locations:
       - classpath:/skills/*.yml
@@ -36,8 +39,8 @@ loomspan:
       max-provider-attempts: 60
       max-usage-units: 160000
   observability:
-    enabled: ${WAYFARER_OBSERVABILITY_ENABLED:false}
+    enabled: ${LOOMSPAN_OBSERVABILITY_ENABLED:false}
     auth:
-      api-key: ${WAYFARER_OBSERVABILITY_API_KEY:}
+      api-key: ${LOOMSPAN_OBSERVABILITY_API_KEY:}
 execution-trace:
-  persistence: ${WAYFARER_TRACE_PERSISTENCE:ONERROR}
+  persistence: ${LOOMSPAN_TRACE_PERSISTENCE:ALWAYS}
