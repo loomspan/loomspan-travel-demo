@@ -1,0 +1,177 @@
+# DeTour Planning Continuation Guide
+
+## Purpose
+
+This handoff makes the DeTour planning work resumable without access to the conversation that produced it. It describes the current repository, the authority of the roadmap, settled boundaries that are easy to misread from the old code, and the next work to perform.
+
+Last updated: 2026-09-17.
+
+## Read order
+
+1. Read [README.md](README.md) completely. It is the authoritative product roadmap and consolidated decision record.
+2. Read this continuation guide completely before creating tickets.
+3. Read the phase document relevant to the next ticket. Phase files contain work packages, exit criteria, and local annotations.
+4. Consult the [Version 2 Events roadmap](../future/version-2-events.md) only to enforce the Version 1 exclusion or when explicitly working on Version 2; do not pull its behavior into current-release tickets.
+5. Before implementation, inspect the current worktree and preserve all pre-existing user changes.
+6. Do not infer desired DeTour behavior from Wayfarer tests, YAML skills, demo documents, or current UI copy when they conflict with the roadmap.
+
+If documents appear to conflict, treat [README.md](README.md) as authoritative, reconcile the relevant phase file in the same change, and do not ask the user to re-decide behavior already recorded here.
+
+## Current planning status
+
+- Product discovery is substantially complete.
+- The dependency-ordered roadmap and eight delivery phases are written.
+- Detailed implementation tickets have **not** yet been written.
+- No DeTour application implementation has started as part of this planning work.
+- Event functionality has been deferred from the initial release to the [Version 2 Events roadmap](../future/version-2-events.md).
+- The next expected activity is to create cohesive implementation tickets from the phases, starting with Phase 0.
+- The remaining visual/copy questions block only the affected Phase 7 tickets; they do not block ticket writing for Phases 0–6.
+- The user wants solutions to remain as simple as possible while fully satisfying the recorded requirements.
+
+## Current repository baseline
+
+The existing application is Wayfarer, a compact Spring Boot/React/H2 application:
+
+- Java 21 and Spring Boot 4.1.0.
+- React 19.2.6, TypeScript 5.9.3, and Vite 8.2.2.
+- H2 persistence with Flyway.
+- Maven builds the frontend and packages it into the Spring Boot JAR.
+- Current Java package: `demo.wayfarer`; target DeTour package: `app.detour`.
+- Current product is a fixed Boston–New York October 2026 weekend for two adults.
+- Current behavior includes model-coordinated trip assessment, natural-language changes, simulated booking/exchange, supplier cancellation, and recovery.
+- Loomspan is used through its Spring Boot starter, `SkillTemplate`, Java skill annotations, YAML skill manifests, model configuration, and execution evidence.
+- DeTour intentionally replaces model planning with deterministic application logic and removes exchange/disruption/recovery behavior from the initial release.
+
+As rechecked on 2026-09-17, the worktree contained user-owned modifications to:
+
+- `src/main/java/demo/wayfarer/IntakeService.java`
+- `src/main/java/demo/wayfarer/TripStore.java`
+
+The `ai/` directory, including this roadmap, appeared as untracked. A future context must run `git status` again and must not overwrite or revert those existing changes. The roadmap work itself added files under `ai/thoughts/phases/` and `ai/thoughts/future/`.
+
+## Settled clarifications from final roadmap review
+
+The following decisions were explicitly reviewed with the user. Treat them as requirements, not questions to reopen during ticket writing:
+
+- **Version boundary:** Version 1 contains airfare, accommodations, and rental cars. Events are entirely Version 2. Current-release documents may link to the future roadmap but must not introduce Event schema, fixtures, APIs, UI, warnings, allowances, inventory, or booking behavior.
+- **Trip creation:** destination, start/end dates, and traveler count are required before creating a Trip and its first component-empty Draft. Traveler ages and budget may be completed later but are required before promotion to Planned.
+- **Planning readiness:** at least one reservable airfare, accommodation, or rental-car component is required before a Draft may become Planned or Booked.
+- **Draft shared-detail changes:** before any Planned snapshot exists, traveler changes reprice and revalidate retained selections; invalid selections are removed. Destination/date changes remove incompatible selections. Every resulting price, capacity, eligibility, room-count, or removal change is summarized to the user.
+- **Trip duplication:** after a Planned snapshot exists, shared-detail changes create a new Trip. The user selects which Planned snapshots to use as sources; each becomes a Draft. Draft, Booked, and Canceled alternatives are not copied by this Trip-level operation. Incompatible components are removed with reasons. A canceled Trip follows the same rule; if it has no selected/available Planned snapshot, duplicate only its shared details into one component-empty Draft and explain that no alternative was copied.
+- **Booking history:** a Canceled Booking is an immutable historical booking snapshot, not an itinerary lifecycle state. The source Planned snapshot remains a separate alternative.
+- **Time boundary:** a Trip and its unbooked alternatives expire at the start of the departure date in the departure location's timezone. With fixed origin PDX, use `America/Los_Angeles`.
+- **Flight coverage:** all final arrivals must occur by March 31, 2027. The two-direct/two-one-stop fixture guarantee applies to direction/date combinations usable by a valid 1–14-night Trip, not literally every calendar date in both directions.
+- **Cancellation cutoff:** Cancel Booking and Cancel Trip are available only before expiration. Expired and Past Bookings remain immutable history and never restore past inventory.
+- **Rental behavior:** pickup and return occur at the destination airport, use local date/times within the Trip interval, and require return after pickup. Charge consecutive 24-hour cycles, rounding a partial final cycle up. Check unit availability over the complete interval. Default order is economy, standard, SUV; then lowest complete total; then immutable identifier.
+- **Budget:** zero is valid, negative is invalid, and implementation must choose and document a safe upper bound for the integer-cent type. An absent Draft budget suppresses budget-fit ordering and remaining/overage presentation. A component's available budget excludes the component being searched or replaced.
+- **Determinism:** every catalog ordering ends with an immutable identifier tie-breaker.
+- **Release search scope:** remove obsolete Wayfarer/Loomspan references from executable code, configuration, tests, generated artifacts, and product-facing copy. Intentional historical planning and migration/cleanup references are allowed.
+
+## Non-negotiable product boundaries
+
+- Product name is **DeTour**; technical identifiers use `detour` and Java uses `app.detour`.
+- There is no Loomspan, other AI framework, model endpoint, prompt, conversational interpreter, or API key in DeTour.
+- Planning and ranking are deterministic and server-validated.
+- Login is required. Accounts are ordinary self-service users; there is no administrator or role system.
+- Every query and mutation is scoped to the authenticated owner in backend code.
+- Every new account starts empty; no seeded user credentials or trips.
+- Origin is fixed to PDX. Destinations are San Francisco, Munich, and Mexico City.
+- All airfare, accommodation, and rental fixtures are limited to March 1–31, 2027.
+- Suppliers and inventory are fictional; airport codes and geography are real.
+- All money is USD integer cents. Displayed totals include applicable taxes and fees.
+- Old Wayfarer database files are not migrated and must not be automatically deleted.
+- Ordinary UI must not call the product a demo. The global collapsed About this demo side tab is the sole disclosure exception.
+
+## Domain model in one view
+
+```text
+User
+└── Trip (shared destination, dates, travelers, budget)
+    ├── Draft itinerary (mutable, autosaved, may be incomplete)
+    ├── Planned itinerary (immutable snapshot)
+    ├── Planned itinerary (another alternative)
+    └── Booked itinerary / Booking (at most one active per Trip)
+```
+
+- Destination, dates, and traveler count are required before creating a Trip and component-empty Draft.
+- A user may start a component-empty Draft or duplicate an individual alternative into a Draft.
+- Shared destination/date/traveler changes create a new Trip once any Planned snapshot exists. The user selects which Planned snapshots become source Drafts; incompatible components are omitted with an explanatory summary. The same rule applies when duplicating a canceled Trip.
+- Users may keep making alternatives after booking, but cannot create a second active Booking.
+- Upcoming/Past/Expired are derived from dates. They are not scheduled lifecycle transitions.
+- A Planned snapshot can be compared but not edited; edit-by-duplication protects comparisons.
+- At least one reservable airfare, accommodation, or rental-car component is required before a Draft may be Planned or Booked.
+- Booking and cancellation are inventory-safe, atomic, idempotent operations.
+
+## Cancellation terminology
+
+Do not implement a generic ambiguous Cancel action:
+
+- **Delete Draft:** remove one unfinished alternative; no inventory effect.
+- **Delete Planned itinerary:** remove one snapshot after confirmation; no inventory effect.
+- **Cancel Booking:** before the Trip expires, release inventory, retain history, and leave the Trip active. Then offer a saved alternative (duplicated/revalidated), a new Draft, or no immediate follow-up. Expired and Past Bookings are immutable history.
+- **Delete Trip:** allowed only if no Booking has ever existed; permanently remove its Draft/Planned alternatives after showing their counts.
+- **Cancel Trip:** before the Trip expires, use this when booking history exists. Cancel any active Booking and close the Trip atomically, retain all history, make alternatives read-only, and offer Duplicate into a new Trip.
+
+## Fixture scale already approved
+
+- Two direct and two one-stop choices per destination for every direction/date combination usable by a valid 1–14-night Trip that completes arrival by March 31.
+- Connections: SFO through SEA or SLC; MUC through SEA or ORD; MEX through LAX or DFW.
+- Same airfare for every traveler; every traveler reserves a seat.
+- Two properties of each type (hotel, B&B, vacation rental) per destination.
+- Economy, standard, and SUV rental inventory at each destination airport.
+- Fixtures are compact Flyway SQL generated from recurring definitions/sequences rather than thousands of hand-authored inserts.
+
+## Remaining decisions
+
+Only two items are still labeled **[OPEN QUESTION]** in the roadmap beyond the annotation legend:
+
+1. DeTour visual identity: colors, typography, and wordmark/logo treatment.
+2. Final public authentication-page and About this demo copy.
+
+Several **[UNDECIDED]** implementation-design items intentionally remain with their owning phase:
+
+- exact fictional catalog names, prices, schedules, capacities, ratings, locations, and city-center distances;
+- profile card hierarchy/status presentation;
+- fictional confirmation-reference format;
+- modal versus inline destructive confirmations;
+- exact cleanup instructions for obsolete Wayfarer database files.
+
+These are not permission to change product behavior. Resolve them in the relevant design/ticket, annotate the roadmap, and keep scope within the corresponding phase.
+
+## Recommended next steps
+
+1. Convert Phase 0 into small, independently verifiable implementation tickets.
+2. Continue phase by phase in dependency order. A later-phase ticket may be drafted early, but its dependencies must be explicit and it must not silently pull work forward.
+3. Resolve the two visual/copy open questions when drafting their affected Phase 7 tickets, unless the user chooses to settle them earlier.
+4. Do not begin implementation merely because tickets are being written; implementation should start only when requested.
+5. Keep [README.md](README.md), this guide, and the relevant phase file synchronized whenever a ticket resolves an annotation or changes scope.
+
+## Ticket-authoring contract
+
+Each implementation ticket should be independently understandable without the prior conversation and should contain:
+
+1. **Identity and outcome:** phase/work-package identifier, concise title, and a user- or system-observable outcome.
+2. **Dependencies:** prerequisite tickets, schemas, APIs, fixtures, or decisions; distinguish hard dependencies from work that can run in parallel.
+3. **Settled requirements:** quote or paraphrase the relevant roadmap behavior precisely, including edge cases and terminology. Link the authoritative roadmap and phase sections.
+4. **Scope:** enumerate data/migration, backend/domain, API/security, frontend/interaction, documentation, and cleanup work that actually belongs in the ticket. Mark unaffected layers explicitly when useful.
+5. **Acceptance criteria:** concrete, testable behavior including success, validation, empty/error, authorization, concurrency, restart/persistence, responsive, and accessibility cases as applicable.
+6. **Verification:** name the unit, integration, frontend, migration, concurrency, packaged-application, or manual checks needed. Avoid a generic “add tests” requirement.
+7. **Migration and rollback:** state clean-database and existing-development-database expectations, data compatibility, rollback/recovery considerations, and whether old Wayfarer files remain untouched.
+8. **Exclusions:** call out adjacent later-phase work and deferred enhancements, especially Version 2 Events, so ticket scope cannot expand by implication.
+9. **Open implementation choices:** list only decisions genuinely owned by the ticket. Propose a simple default where the roadmap permits it; do not relabel settled product behavior as an implementation choice.
+10. **Completion evidence:** specify what a reviewer should be able to inspect or run to confirm completion.
+
+Ticket sizing should favor a cohesive behavior that can be verified end to end. Avoid tickets that merely create disconnected layers, and avoid combining unrelated work solely because it belongs to the same phase. Security, ownership scoping, server-side validation, accessibility, deterministic behavior, and relevant tests belong in the ticket that introduces the behavior rather than in a later cleanup ticket.
+
+## Verification expectations for future tickets
+
+- Backend unit and HTTP integration tests.
+- Authorization/isolation tests using at least two users.
+- Flyway clean-database migration and fixture-integrity tests.
+- Deterministic ranking/filtering/tally tests.
+- Concurrency and idempotency tests for booking and cancellation.
+- Controllable-clock tests for Upcoming, Past, and Expired views.
+- Frontend build and focused interaction tests.
+- Responsive and keyboard-accessibility verification.
+- Packaged-JAR startup, restart, persistence, and no-model-credential verification.
+- Scoped repository searches confirming that obsolete Loomspan, Wayfarer, route, and misplaced demo references are gone from executable/product-facing surfaces while intentional historical and migration references remain allowed.
