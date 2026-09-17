@@ -27,6 +27,7 @@ Define the persistence and migration policy that lets DeTour start with a fresh 
 
 - **Phase:** 0 — Baseline and Boundaries.
 - **Authoritative sources:** [`../phases/README.md`](../phases/README.md), [`../phases/CONTINUATION.md`](../phases/CONTINUATION.md), and [`../phases/phase-0-baseline-and-boundaries.md`](../phases/phase-0-baseline-and-boundaries.md).
+- **Required predecessor output:** [`../architecture/2026-09-17-p00-t02-detour-replacement-architecture.md`](../architecture/2026-09-17-p00-t02-detour-replacement-architecture.md). Use its naming and persistence boundaries; do not infer them from the P00-T02 ticket alone.
 - **Hard dependency:** P00-T02 must be complete so database and configuration naming follow the selected DeTour conventions.
 - **Downstream dependency:** Phase 1 platform-reset work implements this policy when configuring H2 and the new Flyway baseline.
 - **Scope exclusions:** importing old data; deleting local files; datasource configuration changes; migration scripts; DeTour schema design; catalog fixture design; deployment migration automation; Version 2 Events.
@@ -34,7 +35,7 @@ Define the persistence and migration policy that lets DeTour start with a fresh 
 
 ## Verification
 
-- Compare the selected names with P00-T02 and resolve any inconsistency in the policy before completion.
+- Compare the selected names with [`../architecture/2026-09-17-p00-t02-detour-replacement-architecture.md`](../architecture/2026-09-17-p00-t02-detour-replacement-architecture.md) and resolve any inconsistency in the policy before completion.
 - Validate the documented cleanup preview against repository evidence without executing deletion.
 - Inspect the final diff and filesystem status to confirm that no configuration, migration, application, test, or database file was modified or removed.
 
