@@ -2,7 +2,7 @@
 
 ## Outcome
 
-DeTour starts as a Spring Boot and React application with no Loomspan/model dependency, uses a new database, and provides secure self-service accounts with strict per-user isolation.
+The Wayfarer application is destructively replaced by a clean DeTour Spring Boot and React application with no Loomspan/model dependency or legacy compatibility path. DeTour starts from a fresh database lineage and provides secure self-service accounts with strict per-user isolation.
 
 ## Work packages
 
@@ -12,14 +12,16 @@ DeTour starts as a Spring Boot and React application with no Loomspan/model depe
 - Remove `SkillTemplate`, skill annotations, execution views, and related exception handling.
 - Remove Loomspan configuration, model credentials, observability settings, YAML skills, manifest generation, and live model tests.
 - Remove conversational change interpretation and skill-coordination evidence from backend and frontend.
-- Replace any retained planning entry points with deterministic application-owned service interfaces.
+- Delete obsolete Wayfarer planning, booking, exchange, disruption, recovery, trace, route, and frontend paths rather than retaining adapters or placeholder compatibility interfaces.
+- Remove obsolete tests, scripts, generated artifacts, and technical documentation with the paths they describe. Preserve only behavioral requirements explicitly carried into the DeTour roadmap, implemented through new DeTour contracts.
 - Ensure DeTour requires no external model endpoint or API key.
 
 ### 1.2 Rebrand and reset configuration
 
-- Rename visible Wayfarer branding to DeTour.
+- Rename all visible and technical Wayfarer identifiers to DeTour; do not retain aliases, old storage keys, environment-variable fallbacks, or dual naming.
 - Change Spring application name, artifact naming, frontend metadata, storage keys, and environment-variable prefix.
-- Configure the new DeTour H2 path and new Flyway baseline.
+- Delete the Wayfarer Flyway migrations and create a fresh DeTour `V1` lineage in the standard `classpath:db/migration` location.
+- Configure the DeTour H2 path with no legacy datasource fallback. Document and verify the explicit local database reset required for the destructive schema replacement; startup itself must not delete files.
 - Retain Java 21, Spring Boot, React, H2, Flyway, and the packaged single-application deployment shape unless implementation research finds an incompatibility.
 
 ### 1.3 Add user accounts and session security
@@ -38,14 +40,16 @@ DeTour starts as a Spring Boot and React application with no Loomspan/model depe
 
 ### 1.4 Enforce tenant isolation
 
-- Associate every trip and downstream record with its owning user through an enforceable relational path.
-- Scope every read and mutation to the authenticated user.
+- Scope every user-owned record introduced in this phase to the authenticated user and establish the repository/service pattern later phases must follow.
 - Return a non-disclosing not-found response for another user's identifiers.
-- Add integration tests proving that guessed IDs cannot cross account boundaries.
+- Add integration tests proving that guessed IDs cannot cross account boundaries for the resources available in this phase.
+- Require each later ticket that introduces Trip or downstream persistence to add ownership through the enforceable `User -> Trip -> downstream data` relational path and its own cross-account tests; do not add speculative compatibility tables in Phase 1.
 
 ## Exit criteria
 
 - The application builds and starts with no Loomspan/model dependency or configuration.
+- No executable Wayfarer route, schema, migration, compatibility alias, fallback, or transitional application path remains.
+- A clean database applies the new DeTour migration lineage, and documented development reset verification succeeds against an obsolete local database.
 - A user can register, log in, refresh, log out, and log back in.
 - Two users cannot read or mutate one another's data.
 - A newly registered user has an empty profile.

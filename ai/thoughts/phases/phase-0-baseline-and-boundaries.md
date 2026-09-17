@@ -1,5 +1,9 @@
 # Phase 0 — Baseline and Boundaries
 
+## Status
+
+Complete. The original persistence-preservation decision from work package 0.3 was superseded before Phase 1 ticket authoring by the roadmap's development-stage clean-break policy. Phase 0 evidence remains historical context, not a compatibility constraint.
+
 ## Outcome
 
 Establish a safe, testable replacement boundary before removing Wayfarer behavior. Preserve unrelated user work and make the DeTour requirements authoritative for later tickets.
@@ -10,7 +14,7 @@ Establish a safe, testable replacement boundary before removing Wayfarer behavio
 
 - Use `app.detour` as the Java package namespace and define consistent module/artifact naming around `detour`.
 - Map former Wayfarer capabilities to keep, replace, or remove.
-- Record that deterministic Java services replace model orchestration and natural-language interpretation.
+- Record that Loomspan/model orchestration and natural-language interpretation are removed; deterministic Java services own explicit planning, ranking, explanation, and validation workflows.
 - Define the Trip, Itinerary, Booking, User, and catalog ownership boundaries.
 
 ### 0.2 Protect the starting repository
@@ -21,10 +25,10 @@ Establish a safe, testable replacement boundary before removing Wayfarer behavio
 
 ### 0.3 Establish migration policy
 
-- Use a new DeTour H2 database name and a fresh Flyway history.
-- Do not read, mutate, or automatically delete old Wayfarer database files.
-- Document manual cleanup of obsolete local database files separately.
-- Treat Boston–New York records as non-migratable fixtures.
+- This work package originally selected a separate DeTour database and protected old Wayfarer database files from automated cleanup.
+- That preservation policy is superseded. Phase 1 instead replaces the old Flyway chain with a fresh DeTour `V1` lineage and treats pre-production Wayfarer databases as disposable development state.
+- No compatibility migration, import, fallback, parallel schema, or legacy cleanup architecture is required.
+- Database removal remains an explicit developer reset rather than a hidden application-startup side effect.
 
 ## Exit criteria
 
@@ -35,5 +39,4 @@ Establish a safe, testable replacement boundary before removing Wayfarer behavio
 
 ## Annotations
 
-- **[UNDECIDED]** The old database filename cleanup procedure should be chosen during implementation without deleting data automatically.
-- **[FUTURE]** Importing Wayfarer trips into DeTour is explicitly excluded.
+- The completed baseline and architecture records are retained as planning provenance. Where they conflict with the clean-break policy, the current roadmap governs.

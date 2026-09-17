@@ -37,10 +37,10 @@ DeTour presents a cohesive, accessible, responsive experience; explains its limi
 ### 7.5 Documentation and release verification
 
 - Replace README setup, configuration, architecture, fixture, and verification guidance.
-- Document database reset and the fact that old Wayfarer files are not migrated.
-- Remove obsolete Wayfarer skills, scripts, tests, scenario documents, and generated artifacts once replacements exist.
+- Document the explicit development database reset and clean-break policy.
+- Verify that owning implementation tickets already removed obsolete Wayfarer skills, scripts, tests, scenario documents, generated artifacts, routes, schemas, and compatibility paths; Phase 7 must not defer their removal until release cleanup.
 - Run backend, frontend, integration, concurrency, accessibility, packaged-application, restart, and clean-database verification.
-- Search executable code, configuration, tests, generated artifacts, and product-facing copy for forbidden Loomspan, Wayfarer, obsolete route, and misplaced demo references. Allow historical planning records and migration/cleanup documentation that intentionally name the former system.
+- Search executable code, configuration, tests, generated artifacts, and product-facing copy for forbidden Loomspan, Wayfarer, obsolete route, compatibility, and misplaced demo references. Historical planning records may identify the former system but are not implementation authority.
 
 ## Exit criteria
 

@@ -8,6 +8,12 @@ For continuation in a new working context, read this file completely and then re
 
 Last updated: 2026-09-17.
 
+## Development-stage clean-break policy
+
+Until the first production release, DeTour uses clean-break development changes. Delete superseded Wayfarer code, routes, schemas, migrations, configuration, tests, scripts, documentation, and assets in the ticket that replaces them. Do not add compatibility endpoints, aliases, fallbacks, dual schemas, data migrations, deprecated wrappers, or transitional code paths.
+
+Existing development databases are disposable. A schema change may require an explicit developer reset, and no Wayfarer data or Flyway history is carried forward. Application startup must not silently delete local files. This clean-break policy does not authorize overwriting unrelated work or removing DeTour history that the product requirements say to retain.
+
 ## Annotation legend
 
 - **[OPEN QUESTION]** A product or technical decision still needs an answer before the affected ticket is implementation-ready.
@@ -29,7 +35,7 @@ The interface must reveal additional scope only when the user asks for it. Optio
 - Remove Loomspan completely: Maven dependencies, imports, annotations, configuration, YAML skills, tests, scripts, UI explanations, observability, and documentation.
 - Do not replace Loomspan with another AI or model integration. Planning, ranking, explanations, and validation are deterministic application logic.
 - Remove ordinary references to the product being a demo. A single collapsed **About this demo** side tab is the explicit exception.
-- Existing Wayfarer database files and Boston–New York data are not compatible and will not be migrated. DeTour uses a new H2 database and fresh Flyway history.
+- Existing Wayfarer database files, Flyway history, and Boston–New York data are disposable development state and will not be migrated. DeTour replaces the old migration chain with a fresh `V1` lineage in the standard Flyway location; developers reset their local database when adopting it.
 
 ### Users and profiles
 
@@ -135,8 +141,8 @@ No other routine product copy should describe DeTour as a demo.
 
 | Phase | Outcome | Depends on |
 | --- | --- | --- |
-| [0. Baseline and boundaries](phase-0-baseline-and-boundaries.md) | Agreed replacement boundary and protected starting point | None |
-| [1. Platform reset and identity](phase-1-platform-reset-and-identity.md) | DeTour runs without Loomspan and supports isolated user accounts | Phase 0 |
+| [0. Baseline and boundaries](phase-0-baseline-and-boundaries.md) | **Complete:** replacement boundary and starting evidence recorded | None |
+| [1. Platform reset and identity](phase-1-platform-reset-and-identity.md) | A clean DeTour application replaces Wayfarer and supports isolated user accounts | Phase 0 |
 | [2. Catalog and fixture data](phase-2-catalog-and-fixtures.md) | March 2027 inventory exists for every supported component | Phase 1 |
 | [3. Trips, itineraries, and profile](phase-3-trips-itineraries-and-profile.md) | Users can manage autosaved alternatives under upcoming and past trips | Phases 1–2 |
 | [4. Component selection](phase-4-component-selection.md) | Users can select airfare, stays, and cars progressively | Phases 2–3 |

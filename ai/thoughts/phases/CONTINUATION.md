@@ -23,8 +23,9 @@ If documents appear to conflict, treat [README.md](README.md) as authoritative, 
 - The dependency-ordered roadmap and eight delivery phases are written.
 - Detailed implementation tickets have **not** yet been written.
 - No DeTour application implementation has started as part of this planning work.
+- Phase 0 is complete. Its conservative persistence-preservation decision was superseded before implementation by the roadmap's development-stage clean-break policy.
 - Event functionality has been deferred from the initial release to the [Version 2 Events roadmap](../future/version-2-events.md).
-- The next expected activity is to create cohesive implementation tickets from the phases, starting with Phase 0.
+- The next expected activity is to create cohesive implementation tickets for Phase 1.
 - The remaining visual/copy questions block only the affected Phase 7 tickets; they do not block ticket writing for Phases 0–6.
 - The user wants solutions to remain as simple as possible while fully satisfying the recorded requirements.
 
@@ -42,12 +43,7 @@ The existing application is Wayfarer, a compact Spring Boot/React/H2 application
 - Loomspan is used through its Spring Boot starter, `SkillTemplate`, Java skill annotations, YAML skill manifests, model configuration, and execution evidence.
 - DeTour intentionally replaces model planning with deterministic application logic and removes exchange/disruption/recovery behavior from the initial release.
 
-As rechecked on 2026-09-17, the worktree contained user-owned modifications to:
-
-- `src/main/java/demo/wayfarer/IntakeService.java`
-- `src/main/java/demo/wayfarer/TripStore.java`
-
-The `ai/` directory, including this roadmap, appeared as untracked. A future context must run `git status` again and must not overwrite or revert those existing changes. The roadmap work itself added files under `ai/thoughts/phases/` and `ai/thoughts/future/`.
+The completed Phase 0 baseline later confirmed that the previously noted `IntakeService.java` and `TripStore.java` changes were not present in its execution checkout. A future context must still run `git status` before implementation and must not overwrite or revert unrelated work. The clean-break policy authorizes removal of obsolete application paths through scoped tickets; it does not authorize broad worktree cleanup.
 
 ## Settled clarifications from final roadmap review
 
@@ -65,7 +61,8 @@ The following decisions were explicitly reviewed with the user. Treat them as re
 - **Rental behavior:** pickup and return occur at the destination airport, use local date/times within the Trip interval, and require return after pickup. Charge consecutive 24-hour cycles, rounding a partial final cycle up. Check unit availability over the complete interval. Default order is economy, standard, SUV; then lowest complete total; then immutable identifier.
 - **Budget:** zero is valid, negative is invalid, and implementation must choose and document a safe upper bound for the integer-cent type. An absent Draft budget suppresses budget-fit ordering and remaining/overage presentation. A component's available budget excludes the component being searched or replaced.
 - **Determinism:** every catalog ordering ends with an immutable identifier tie-breaker.
-- **Release search scope:** remove obsolete Wayfarer/Loomspan references from executable code, configuration, tests, generated artifacts, and product-facing copy. Intentional historical planning and migration/cleanup references are allowed.
+- **Clean break:** delete superseded Wayfarer code, routes, schemas, migrations, configuration, tests, scripts, documentation, and assets in the ticket that replaces them. Do not create compatibility endpoints, aliases, fallbacks, dual schemas, data migrations, deprecated wrappers, or transitional paths.
+- **Release search scope:** remove obsolete Wayfarer/Loomspan references from executable code, configuration, tests, generated artifacts, and product-facing copy. Historical planning records may name the former system but do not govern implementation.
 
 ## Non-negotiable product boundaries
 
@@ -79,7 +76,7 @@ The following decisions were explicitly reviewed with the user. Treat them as re
 - All airfare, accommodation, and rental fixtures are limited to March 1–31, 2027.
 - Suppliers and inventory are fictional; airport codes and geography are real.
 - All money is USD integer cents. Displayed totals include applicable taxes and fees.
-- Old Wayfarer database files are not migrated and must not be automatically deleted.
+- Old Wayfarer database files, schema, fixtures, and Flyway history are disposable development state. Phase 1 replaces the migration chain with a fresh DeTour `V1`; developers perform an explicit local reset, while application startup never silently deletes files.
 - Ordinary UI must not call the product a demo. The global collapsed About this demo side tab is the sole disclosure exception.
 
 ## Domain model in one view
@@ -134,13 +131,13 @@ Several **[UNDECIDED]** implementation-design items intentionally remain with th
 - profile card hierarchy/status presentation;
 - fictional confirmation-reference format;
 - modal versus inline destructive confirmations;
-- exact cleanup instructions for obsolete Wayfarer database files.
+- the exact confirmation-gated DeTour development-reset command and database target selected in Phase 1.
 
 These are not permission to change product behavior. Resolve them in the relevant design/ticket, annotate the roadmap, and keep scope within the corresponding phase.
 
 ## Recommended next steps
 
-1. Convert Phase 0 into small, independently verifiable implementation tickets.
+1. Convert Phase 1 into small, independently verifiable implementation tickets governed by the clean-break policy.
 2. Continue phase by phase in dependency order. A later-phase ticket may be drafted early, but its dependencies must be explicit and it must not silently pull work forward.
 3. Resolve the two visual/copy open questions when drafting their affected Phase 7 tickets, unless the user chooses to settle them earlier.
 4. Do not begin implementation merely because tickets are being written; implementation should start only when requested.
@@ -156,7 +153,7 @@ Each implementation ticket should be independently understandable without the pr
 4. **Scope:** enumerate data/migration, backend/domain, API/security, frontend/interaction, documentation, and cleanup work that actually belongs in the ticket. Mark unaffected layers explicitly when useful.
 5. **Acceptance criteria:** concrete, testable behavior including success, validation, empty/error, authorization, concurrency, restart/persistence, responsive, and accessibility cases as applicable.
 6. **Verification:** name the unit, integration, frontend, migration, concurrency, packaged-application, or manual checks needed. Avoid a generic “add tests” requirement.
-7. **Migration and rollback:** state clean-database and existing-development-database expectations, data compatibility, rollback/recovery considerations, and whether old Wayfarer files remain untouched.
+7. **Clean-break and reset impact:** identify superseded paths to delete, clean-database expectations, the explicit development reset required by schema changes, and verification that no compatibility alias, fallback, migration, or dual path was introduced. Rollback means reverting the code change and recreating disposable development data, not preserving old application contracts.
 8. **Exclusions:** call out adjacent later-phase work and deferred enhancements, especially Version 2 Events, so ticket scope cannot expand by implication.
 9. **Open implementation choices:** list only decisions genuinely owned by the ticket. Propose a simple default where the roadmap permits it; do not relabel settled product behavior as an implementation choice.
 10. **Completion evidence:** specify what a reviewer should be able to inspect or run to confirm completion.
@@ -174,4 +171,4 @@ Ticket sizing should favor a cohesive behavior that can be verified end to end. 
 - Frontend build and focused interaction tests.
 - Responsive and keyboard-accessibility verification.
 - Packaged-JAR startup, restart, persistence, and no-model-credential verification.
-- Scoped repository searches confirming that obsolete Loomspan, Wayfarer, route, and misplaced demo references are gone from executable/product-facing surfaces while intentional historical and migration references remain allowed.
+- Scoped repository searches confirming that obsolete Loomspan, Wayfarer, route, compatibility, and misplaced demo references are gone from executable/product-facing surfaces. Historical planning records may retain former-system terminology but are not implementation authority.
