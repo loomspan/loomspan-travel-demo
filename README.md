@@ -13,11 +13,14 @@ Requires Java 21+ and Node.js. Maven builds the React shell and packages it into
 
 The application listens on loopback. It defaults to port `8082` and stores its local H2 database at `data/detour.mv.db`. No frontend development server, model service, API key, or external provider is required.
 
+Registered DeTour accounts persist in the configured database. Browser sessions are intentionally servlet-memory state, so an application restart requires users to log in again. HTTPS deployments must retain the default secure session-cookie setting; `DETOUR_SECURE_COOKIES=false` is only for local loopback development or automated HTTP tests.
+
 Optional environment configuration:
 
 ```powershell
 $env:DETOUR_PORT = '8083'
 $env:DETOUR_DATABASE_URL = 'jdbc:h2:file:./data/detour;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000'
+$env:DETOUR_SECURE_COOKIES = 'false' # local loopback only
 ```
 
 ## Reset the disposable development database

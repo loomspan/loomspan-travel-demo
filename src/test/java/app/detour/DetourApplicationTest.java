@@ -32,14 +32,21 @@ class DetourApplicationTest {
     private DataSource dataSource;
 
     @Test
-    void startsWithOnlyFreshDetourMigration() throws Exception {
+    void startsWithFreshDetourIdentityMigrationAndNoSeededPrivilege() throws Exception {
         assertEquals(
-                java.util.List.of("1"),
+                java.util.List.of("1", "2"),
                 Arrays.stream(flyway.info().applied())
                         .map(info -> info.getVersion().getVersion())
                         .toList());
 
         try (Connection connection = dataSource.getConnection()) {
+            try (var tables = connection.getMetaData().getTables(null, null, "DETOUR_USER", null)) {
+                org.junit.jupiter.api.Assertions.assertTrue(tables.next(), "Identity table must exist");
+            }
+            try (var count = connection.createStatement().executeQuery("SELECT COUNT(*) FROM detour_user")) {
+                org.junit.jupiter.api.Assertions.assertTrue(count.next());
+                assertEquals(0, count.getInt(1), "Fresh identity schema must not seed an account");
+            }
             for (String legacyTable : java.util.List.of(
                     "travel_service", "hotel_night", "trip", "assessment", "booking", "intake_draft")) {
                 try (var tables = connection.getMetaData().getTables(null, null, legacyTable.toUpperCase(), null)) {

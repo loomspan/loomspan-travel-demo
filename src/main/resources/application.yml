@@ -1,6 +1,14 @@
 server:
   address: 127.0.0.1
   port: ${DETOUR_PORT:8082}
+  servlet:
+    session:
+      cookie:
+        # Keep this true in HTTPS deployments. Loopback test/development may explicitly set DETOUR_SECURE_COOKIES=false.
+        secure: ${detour.security.secure-cookies}
+        http-only: true
+        same-site: lax
+        path: /
 spring:
   application:
     name: detour
@@ -8,3 +16,10 @@ spring:
     url: ${DETOUR_DATABASE_URL:jdbc:h2:file:./data/detour;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000}
     username: sa
     password: ''
+  mvc:
+    problemdetails:
+      enabled: false
+detour:
+  security:
+    # Keep true in HTTPS deployments. A local loopback test may explicitly set DETOUR_SECURE_COOKIES=false.
+    secure-cookies: ${DETOUR_SECURE_COOKIES:true}
