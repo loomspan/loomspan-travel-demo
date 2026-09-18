@@ -19,14 +19,14 @@ Extend the fresh DeTour Flyway lineage with a normalized, application-owned cata
 
 ## Acceptance criteria
 
-- [ ] A clean database applies the complete DeTour Flyway lineage and creates normalized catalog and finite-inventory structures for airfare, accommodations, and rental cars without any Wayfarer compatibility schema or data.
-- [ ] An existing Phase 1 database migrates forward without rewriting its applied migrations or losing registered DeTour users.
-- [ ] Schema-level verification proves that negative monetary/inventory values, nonpositive bookable capacities, invalid temporal ranges, orphan references, invalid categories, and inventory above capacity are rejected.
-- [ ] The schema can represent recurring and dated direct/one-stop flights with zoned local timing, per-seat pricing and capacity; hotel/B&B rooms and whole vacation rentals with nightly inventory; and individual rental units with non-overlapping time-bounded occupancy.
-- [ ] Stable catalog and inventory identifiers can be retained by later Planned/Booked snapshots and booking revalidation without treating shared catalog data as user-owned.
-- [ ] Money and temporal round-trip tests preserve integer-cent values and unambiguous instants/local times across the supported airports and destination time zones.
-- [ ] Backend tests and clean-database Flyway verification pass, and the packaged application still starts with the Phase 1 identity behavior intact.
-- [ ] No Trip, itinerary, component-search UI/API, booking, cancellation, payment, live-supplier, dynamic-pricing, multi-currency, or expanded-date-range behavior is introduced.
+- [x] A clean database applies the complete DeTour Flyway lineage and creates normalized catalog and finite-inventory structures for airfare, accommodations, and rental cars without any Wayfarer compatibility schema or data.
+- [x] An existing Phase 1 database migrates forward without rewriting its applied migrations or losing registered DeTour users.
+- [x] Schema-level verification proves that negative monetary/inventory values, nonpositive bookable capacities, invalid temporal ranges, orphan references, invalid categories, and inventory above capacity are rejected.
+- [x] The schema can represent recurring and dated direct/one-stop flights with zoned local timing, per-seat pricing and capacity; hotel/B&B rooms and whole vacation rentals with nightly inventory; and individual rental units with non-overlapping time-bounded occupancy.
+- [x] Stable catalog and inventory identifiers can be retained by later Planned/Booked snapshots and booking revalidation without treating shared catalog data as user-owned.
+- [x] Money and temporal round-trip tests preserve integer-cent values and unambiguous instants/local times across the supported airports and destination time zones.
+- [x] Backend tests and clean-database Flyway verification pass, and the packaged application still starts with the Phase 1 identity behavior intact.
+- [x] No Trip, itinerary, component-search UI/API, booking, cancellation, payment, live-supplier, dynamic-pricing, multi-currency, or expanded-date-range behavior is introduced.
 
 ## Context
 

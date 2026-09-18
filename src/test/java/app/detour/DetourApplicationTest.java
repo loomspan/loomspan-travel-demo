@@ -32,9 +32,9 @@ class DetourApplicationTest {
     private DataSource dataSource;
 
     @Test
-    void startsWithFreshDetourIdentityMigrationAndNoSeededPrivilege() throws Exception {
+    void startsWithFreshDetourCatalogLineageAndNoFixtureData() throws Exception {
         assertEquals(
-                java.util.List.of("1", "2"),
+                java.util.List.of("1", "2", "3", "4", "5", "6", "7", "8", "9"),
                 Arrays.stream(flyway.info().applied())
                         .map(info -> info.getVersion().getVersion())
                         .toList());
@@ -46,6 +46,17 @@ class DetourApplicationTest {
             try (var count = connection.createStatement().executeQuery("SELECT COUNT(*) FROM detour_user")) {
                 org.junit.jupiter.api.Assertions.assertTrue(count.next());
                 assertEquals(0, count.getInt(1), "Fresh identity schema must not seed an account");
+            }
+            for (String catalogTable : java.util.List.of(
+                    "catalog_destination", "catalog_airport", "catalog_supplier", "flight_schedule", "flight_instance",
+                    "accommodation_property", "accommodation_unit", "rental_location", "rental_vehicle_class", "rental_unit")) {
+                try (var tables = connection.getMetaData().getTables(null, null, catalogTable.toUpperCase(), null)) {
+                    org.junit.jupiter.api.Assertions.assertTrue(tables.next(), "Catalog table must exist: " + catalogTable);
+                }
+                try (var count = connection.createStatement().executeQuery("SELECT COUNT(*) FROM " + catalogTable)) {
+                    org.junit.jupiter.api.Assertions.assertTrue(count.next());
+                    assertEquals(0, count.getInt(1), "Fresh catalog schema must not seed fixtures: " + catalogTable);
+                }
             }
             for (String legacyTable : java.util.List.of(
                     "travel_service", "hotel_night", "trip", "assessment", "booking", "intake_draft")) {
