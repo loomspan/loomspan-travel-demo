@@ -3,9 +3,9 @@
   "configurations": [
     {
       "type": "java",
-      "name": "Debug Wayfarer Spring Boot",
+      "name": "Debug DeTour Spring Boot",
       "request": "launch",
-      "mainClass": "demo.wayfarer.WayfarerApplication"
+      "mainClass": "app.detour.DetourApplication"
     }
   ]
 }

@@ -17,14 +17,14 @@ Replace the executable Wayfarer application with a buildable DeTour Spring Boot 
 
 ## Acceptance criteria
 
-- [ ] Backend tests, the frontend production build, and the Maven packaged-application build succeed using the retained platform, producing `target/detour-0.1.0-SNAPSHOT.jar` when the existing project version remains unchanged.
-- [ ] The packaged DeTour application starts without a model endpoint, model credential, Loomspan configuration, or external AI service, and its frontend shell loads from the packaged JAR.
-- [ ] Scoped searches find no Loomspan/model integration or executable/product-facing Wayfarer identifier, route, storage key, schema, migration, fixture, compatibility alias, fallback, or transitional path; retained historical planning references are identified as the intentional exception.
-- [ ] A clean database applies only the fresh DeTour Flyway lineage beginning at `V1` and does not create or depend on the former Boston–New York scenario or Flyway history.
-- [ ] The documented reset previews exact DeTour database targets and requires confirmation before removal; startup does not remove files, and the reset cannot remove an unrelated database file placed beside the selected targets.
-- [ ] Maven coordinates, Java packages, Spring name, application configuration, environment variables, frontend metadata/storage keys, and packaged output consistently use the settled DeTour conventions without legacy fallbacks.
-- [ ] Obsolete Wayfarer/Loomspan tests and scripts are removed with the paths they covered, while the Phase 0 test-disposition record remains available to later tickets that recreate retained invariants against DeTour contracts.
-- [ ] The resulting application contains no account, catalog, Trip, itinerary, booking, cancellation, exchange, disruption, recovery, or Event behavior beyond the minimal platform shell.
+- [x] Backend tests, the frontend production build, and the Maven packaged-application build succeed using the retained platform, producing `target/detour-0.1.0-SNAPSHOT.jar` when the existing project version remains unchanged.
+- [x] The packaged DeTour application starts without a model endpoint, model credential, Loomspan configuration, or external AI service, and its frontend shell loads from the packaged JAR.
+- [x] Scoped searches find no Loomspan/model integration or executable/product-facing Wayfarer identifier, route, storage key, schema, migration, fixture, compatibility alias, fallback, or transitional path; retained historical planning references are identified as the intentional exception.
+- [x] A clean database applies only the fresh DeTour Flyway lineage beginning at `V1` and does not create or depend on the former Boston–New York scenario or Flyway history.
+- [x] The documented reset previews exact DeTour database targets and requires confirmation before removal; startup does not remove files, and the reset cannot remove an unrelated database file placed beside the selected targets.
+- [x] Maven coordinates, Java packages, Spring name, application configuration, environment variables, frontend metadata/storage keys, and packaged output consistently use the settled DeTour conventions without legacy fallbacks.
+- [x] Obsolete Wayfarer/Loomspan tests and scripts are removed with the paths they covered, while the Phase 0 test-disposition record remains available to later tickets that recreate retained invariants against DeTour contracts.
+- [x] The resulting application contains no account, catalog, Trip, itinerary, booking, cancellation, exchange, disruption, recovery, or Event behavior beyond the minimal platform shell.
 
 ## Context
 
@@ -42,4 +42,3 @@ Replace the executable Wayfarer application with a buildable DeTour Spring Boot 
 - **Confidence:** high
 - **Rationale:** The change is repository-wide, removes supported application paths, changes persisted and packaged contracts, and requires material discovery to distinguish executable/product-facing remnants from historical records.
 - **Reassessment triggers:** A concrete retained-platform incompatibility or evidence that a user-owned worktree change overlaps a path this clean break must replace requires developer review before proceeding.
-

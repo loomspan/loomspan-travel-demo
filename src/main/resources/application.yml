@@ -1,46 +1,10 @@
 server:
   address: 127.0.0.1
-  port: ${WAYFARER_PORT:8082}
+  port: ${DETOUR_PORT:8082}
 spring:
   application:
-    name: wayfarer
+    name: detour
   datasource:
-    url: ${WAYFARER_DATABASE_URL:jdbc:h2:file:./data/wayfarer;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000}
+    url: ${DETOUR_DATABASE_URL:jdbc:h2:file:./data/detour;DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000}
     username: sa
     password: ''
-  jackson:
-    deserialization:
-      fail-on-unknown-properties: true
-  h2:
-    console:
-      enabled: true
-loomspan:
-  connections:
-    travel:
-      driver: openai
-      base-url: ${WAYFARER_MODEL_BASE_URL:https://api.openai.com/v1}
-      api-key: ${OPENROUTER_API_KEY:not-configured}
-      provider-retry:
-        max-attempts: 2
-  models:
-    planner:
-      connection: travel
-      provider-model: ${WAYFARER_MODEL:gpt-5.6-luna}
-  skills:
-    locations:
-      - classpath:/skills/*.yml
-  session:
-    mission-timeout: 240s
-    max-depth: 4
-    quotas:
-      max-skill-invocations: 24
-      max-tool-invocations: 32
-      max-model-calls: 40
-      max-provider-attempts: 60
-      max-usage-units: 160000
-  observability:
-    enabled: ${LOOMSPAN_OBSERVABILITY_ENABLED:false}
-    auth:
-      api-key: ${LOOMSPAN_OBSERVABILITY_API_KEY:}
-execution-trace:
-  persistence: ${LOOMSPAN_TRACE_PERSISTENCE:ALWAYS}
