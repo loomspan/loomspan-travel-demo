@@ -1,6 +1,6 @@
 # DeTour
 
-DeTour is a clean Spring Boot and React foundation for the travel platform's next development stage. It intentionally contains no catalog, trip, booking, or model-service behavior.
+DeTour is a clean Spring Boot and React foundation for the travel platform's next development stage. It intentionally contains no catalog, trip, or booking behavior.
 
 ## Build and run
 
@@ -11,9 +11,17 @@ Requires Java 21+ and Node.js. Maven builds the React shell and packages it into
 .\scripts\run.ps1
 ```
 
-The application listens on loopback. It defaults to port `8082` and stores its local H2 database at `data/detour.mv.db`. No frontend development server, model service, API key, or external provider is required.
+The application listens on loopback. It defaults to port `8082` and stores its local H2 database at `data/detour.mv.db`. No frontend development server, API key, or external provider is required.
 
 Registered DeTour accounts persist in the configured database. Browser sessions are intentionally servlet-memory state, so an application restart requires users to log in again. HTTPS deployments must retain the default secure session-cookie setting; `DETOUR_SECURE_COOKIES=false` is only for local loopback development or automated HTTP tests.
+
+After packaging, verify the packaged identity shell locally with:
+
+```powershell
+.\scripts\verify-packaged-identity.ps1
+```
+
+The check starts the JAR only on a temporary loopback port with an isolated temporary H2 database and removes both its child process and temporary files afterward.
 
 Optional environment configuration:
 

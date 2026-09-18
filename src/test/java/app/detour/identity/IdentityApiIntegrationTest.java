@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -126,6 +127,21 @@ class IdentityApiIntegrationTest {
         client.unsafe(post("/api/auth/register"), "{not-json")
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"))
                 .andExpect(content().string(not(containsString("not-json"))));
+    }
+
+    @Test
+    void servesOnlyTheProfileDocumentFallbackWhileKeepingProfileDataProtected() throws Exception {
+        mockMvc.perform(get("/profile"))
+                .andExpect(status().isOk())
+                .andExpect(forwardedUrl("/index.html"));
+        mockMvc.perform(get("/api/profile"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+        mockMvc.perform(get("/not-a-client-route"))
+                .andExpect(status().isUnauthorized());
+        anonymous().unsafe(post("/profile"), null)
+                .andExpect(status().isUnauthorized());
     }
 
     private void assertRegistrationStatus(String email, String password, int expectedStatus) throws Exception {

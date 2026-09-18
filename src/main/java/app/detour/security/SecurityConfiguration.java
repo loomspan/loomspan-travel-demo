@@ -44,6 +44,7 @@ class SecurityConfiguration {
                 .sessionManagement(session -> session.sessionFixation(Customizer.withDefaults()))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/", "/index.html", "/assets/**", "/favicon.ico", "/demo-disclosure/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/profile").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions
