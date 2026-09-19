@@ -32,9 +32,9 @@ class DetourApplicationTest {
     private DataSource dataSource;
 
     @Test
-    void startsWithFreshDetourCatalogLineageAndNoFixtureData() throws Exception {
+    void startsWithFreshDetourCatalogLineageAndSeededAirfareData() throws Exception {
         assertEquals(
-                java.util.List.of("1", "2", "3", "4", "5", "6", "7", "8", "9"),
+                java.util.List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"),
                 Arrays.stream(flyway.info().applied())
                         .map(info -> info.getVersion().getVersion())
                         .toList());
@@ -55,7 +55,15 @@ class DetourApplicationTest {
                 }
                 try (var count = connection.createStatement().executeQuery("SELECT COUNT(*) FROM " + catalogTable)) {
                     org.junit.jupiter.api.Assertions.assertTrue(count.next());
-                    assertEquals(0, count.getInt(1), "Fresh catalog schema must not seed fixtures: " + catalogTable);
+                    int expected = switch (catalogTable) {
+                        case "catalog_destination" -> 3;
+                        case "catalog_airport" -> 9;
+                        case "catalog_supplier" -> 2;
+                        case "flight_schedule" -> 24;
+                        case "flight_instance" -> 720;
+                        default -> 0;
+                    };
+                    assertEquals(expected, count.getInt(1), "Unexpected fresh catalog data: " + catalogTable);
                 }
             }
             for (String legacyTable : java.util.List.of(

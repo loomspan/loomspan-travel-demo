@@ -56,6 +56,17 @@ final class CatalogSchemaFixtures {
     static void ensureMinimumCatalog(JdbcTemplate jdbc) {
         if (jdbc.queryForObject("SELECT COUNT(*) FROM catalog_destination", Integer.class) == 0) {
             insertMinimumCatalog(jdbc);
+            return;
+        }
+        if (jdbc.queryForObject("SELECT COUNT(*) FROM rental_unit", Integer.class) == 0) {
+            jdbc.update("INSERT INTO catalog_supplier (catalog_key, name, supplier_category) VALUES ('test-lodging', 'Test Lodging', 'LODGING')");
+            jdbc.update("INSERT INTO accommodation_property (catalog_key, supplier_id, supplier_category, destination_id, property_category, name, latitude, longitude, location_description, guest_rating, distance_to_city_center_meters) VALUES ('test-property-sfo', (SELECT id FROM catalog_supplier WHERE catalog_key = 'test-lodging'), 'LODGING', (SELECT id FROM catalog_destination WHERE catalog_key = 'destination-sfo'), 'HOTEL', 'Test hotel', 37.7, -122.4, 'Test', 4.0, 100)");
+            jdbc.update("INSERT INTO accommodation_unit (catalog_key, accommodation_property_id, property_category, unit_kind, guest_capacity, inventory_capacity, name) VALUES ('test-unit-sfo-room', (SELECT id FROM accommodation_property WHERE catalog_key = 'test-property-sfo'), 'HOTEL', 'ROOM', 2, 5, 'Test room')");
+            jdbc.update("INSERT INTO accommodation_nightly_inventory (accommodation_unit_id, night_date, inventory_capacity, available_inventory, base_price_cents, tax_cents, fee_cents) VALUES ((SELECT id FROM accommodation_unit WHERE catalog_key = 'test-unit-sfo-room'), DATE '2027-03-10', 5, 5, 1, 0, 0)");
+            jdbc.update("INSERT INTO catalog_supplier (catalog_key, name, supplier_category) VALUES ('test-cars', 'Test Cars', 'CAR_RENTAL')");
+            jdbc.update("INSERT INTO rental_location (catalog_key, destination_id, airport_id, name) VALUES ('test-rental-sfo', (SELECT id FROM catalog_destination WHERE catalog_key = 'destination-sfo'), (SELECT id FROM catalog_airport WHERE iata_code = 'SFO'), 'Test terminal')");
+            jdbc.update("INSERT INTO rental_vehicle_class (catalog_key, supplier_id, supplier_category, rental_location_id, vehicle_category, name, daily_base_price_cents, daily_tax_cents, daily_fee_cents) VALUES ('test-car-standard', (SELECT id FROM catalog_supplier WHERE catalog_key = 'test-cars'), 'CAR_RENTAL', (SELECT id FROM rental_location WHERE catalog_key = 'test-rental-sfo'), 'STANDARD', 'Test car', 1, 0, 0)");
+            jdbc.update("INSERT INTO rental_unit (catalog_key, rental_vehicle_class_id, unit_identifier) VALUES ('test-car-unit-1', (SELECT id FROM rental_vehicle_class WHERE catalog_key = 'test-car-standard'), 'ONE'), ('test-car-unit-2', (SELECT id FROM rental_vehicle_class WHERE catalog_key = 'test-car-standard'), 'TWO')");
         }
     }
 }
