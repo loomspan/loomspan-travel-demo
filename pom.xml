@@ -67,9 +67,6 @@
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
         <version>3.5.0</version>
-        <configuration>
-          <skip>${skipFrontend}</skip>
-        </configuration>
         <executions>
           <execution>
             <id>frontend-install</id>
@@ -78,6 +75,7 @@
               <goal>exec</goal>
             </goals>
             <configuration>
+              <skip>${skipFrontend}</skip>
               <workingDirectory>frontend</workingDirectory>
               <executable>npm</executable>
               <arguments>
@@ -92,6 +90,7 @@
               <goal>exec</goal>
             </goals>
             <configuration>
+              <skip>${skipFrontend}</skip>
               <workingDirectory>frontend</workingDirectory>
               <executable>npm</executable>
               <arguments>

@@ -23,6 +23,16 @@ After packaging, verify the packaged identity shell locally with:
 
 The check starts the JAR only on a temporary loopback port with an isolated temporary H2 database and removes both its child process and temporary files afterward.
 
+## Review the deterministic catalog fixtures
+
+Generate a concise Phase 2 fixture report with:
+
+```powershell
+.\scripts\show-catalog-fixture-summary.ps1
+```
+
+The command compiles the project and migrates a new in-memory H2 database; it does not start the web application or access `data/detour`. The report shows overall counts, one direct and one connecting flight, a representative property for each destination/stay type, and each destination/rental-class daily total and fleet count. It is a fixture-review aid, not an API or UI feature.
+
 Optional environment configuration:
 
 ```powershell

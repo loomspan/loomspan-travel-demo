@@ -32,9 +32,9 @@ class DetourApplicationTest {
     private DataSource dataSource;
 
     @Test
-    void startsWithFreshDetourCatalogLineageAndSeededAirfareData() throws Exception {
+    void startsWithFreshDetourCatalogLineageAndSeededPhaseTwoData() throws Exception {
         assertEquals(
-                java.util.List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"),
+                java.util.List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"),
                 Arrays.stream(flyway.info().applied())
                         .map(info -> info.getVersion().getVersion())
                         .toList());
@@ -49,7 +49,7 @@ class DetourApplicationTest {
             }
             for (String catalogTable : java.util.List.of(
                     "catalog_destination", "catalog_airport", "catalog_supplier", "flight_schedule", "flight_instance",
-                    "accommodation_property", "accommodation_unit", "rental_location", "rental_vehicle_class", "rental_unit")) {
+                    "accommodation_property", "accommodation_unit", "accommodation_nightly_inventory", "rental_location", "rental_vehicle_class", "rental_unit", "rental_unit_occupancy")) {
                 try (var tables = connection.getMetaData().getTables(null, null, catalogTable.toUpperCase(), null)) {
                     org.junit.jupiter.api.Assertions.assertTrue(tables.next(), "Catalog table must exist: " + catalogTable);
                 }
@@ -58,10 +58,16 @@ class DetourApplicationTest {
                     int expected = switch (catalogTable) {
                         case "catalog_destination" -> 3;
                         case "catalog_airport" -> 9;
-                        case "catalog_supplier" -> 2;
+                        case "catalog_supplier" -> 8;
                         case "flight_schedule" -> 24;
                         case "flight_instance" -> 720;
-                        default -> 0;
+                        case "accommodation_property", "accommodation_unit" -> 18;
+                        case "accommodation_nightly_inventory" -> 540;
+                        case "rental_location" -> 3;
+                        case "rental_vehicle_class" -> 9;
+                        case "rental_unit" -> 21;
+                        case "rental_unit_occupancy" -> 0;
+                        default -> throw new IllegalArgumentException("Unexpected table " + catalogTable);
                     };
                     assertEquals(expected, count.getInt(1), "Unexpected fresh catalog data: " + catalogTable);
                 }

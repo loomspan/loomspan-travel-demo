@@ -25,7 +25,7 @@ class CatalogTemporalMoneyRoundTripIntegrationTest {
     JdbcTemplate jdbc;
 
     @Test
-    void roundTripsUsdCentsAndAirportZonedFlightInstants() {
+    void roundTripsUsdCentsAndAirportZonedFlightStayAndRentalInstants() {
         var row = jdbc.queryForMap("SELECT base_fare_cents, tax_cents, fee_cents FROM flight_instance WHERE catalog_key = 'airfare-out-muc-d1-20270310'");
         assertEquals(58_800L, ((Number) row.get("BASE_FARE_CENTS")).longValue());
         assertEquals(4_670L, ((Number) row.get("TAX_CENTS")).longValue());
@@ -41,6 +41,17 @@ class CatalogTemporalMoneyRoundTripIntegrationTest {
         assertEquals("2027-03-11", instants[1].atZoneSameInstant(muc).toLocalDate().toString());
         assertEquals("America/Los_Angeles", sfo.getId());
         assertEquals("America/Mexico_City", mex.getId());
+        var nightly = jdbc.queryForMap("SELECT base_price_cents, tax_cents, fee_cents FROM accommodation_nightly_inventory WHERE accommodation_unit_id = (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-muc-hotel-isar') AND night_date = DATE '2027-03-10'");
+        assertEquals(14_814L, ((Number) nightly.get("BASE_PRICE_CENTS")).longValue());
+        assertEquals(1_186L, ((Number) nightly.get("TAX_CENTS")).longValue());
+        assertEquals(500L, ((Number) nightly.get("FEE_CENTS")).longValue());
+        var rental = jdbc.queryForMap("SELECT daily_base_price_cents, daily_tax_cents, daily_fee_cents FROM rental_vehicle_class WHERE catalog_key = 'rental-mex-suv'");
+        assertEquals(7_240L, ((Number) rental.get("DAILY_BASE_PRICE_CENTS")).longValue());
+        assertEquals(580L, ((Number) rental.get("DAILY_TAX_CENTS")).longValue());
+        assertEquals(380L, ((Number) rental.get("DAILY_FEE_CENTS")).longValue());
+        assertEquals("2027-03-10", OffsetDateTime.parse("2027-03-10T10:00:00-08:00").atZoneSameInstant(sfo).toLocalDate().toString());
+        assertEquals("2027-03-10", OffsetDateTime.parse("2027-03-10T10:00:00+01:00").atZoneSameInstant(muc).toLocalDate().toString());
+        assertEquals("2027-03-10", OffsetDateTime.parse("2027-03-10T10:00:00-06:00").atZoneSameInstant(mex).toLocalDate().toString());
     }
 
     private ZoneId airportZone(String iataCode) {

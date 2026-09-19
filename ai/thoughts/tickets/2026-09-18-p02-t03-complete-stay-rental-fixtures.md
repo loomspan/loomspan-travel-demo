@@ -20,16 +20,16 @@ Complete the deterministic March 2027 catalog with varied accommodation and rent
 
 ## Acceptance criteria
 
-- [ ] A clean Flyway migration creates exactly two hotels, two B&Bs, and two vacation rentals in each destination, with stable identifiers, deterministic display/location/rating/distance data, appropriate capacity semantics, and nightly inventory covering every supported stay night.
-- [ ] For parties from 1 through 8, fixture verification demonstrates usable stay inventory and meaningful differences in required room/property fit, complete-stay price, rating, and distance rather than identical ordering across all options.
-- [ ] SFO, MUC, and MEX each have fictional airport rental supply with economy, standard, and SUV physical units, deterministic integer-cent daily pricing inputs, and availability across the supported pickup/return window.
-- [ ] Rental verification proves consecutive 24-hour billing with a rounded-up partial final cycle can be calculated from the fixtures, and that back-to-back intervals do not overlap while intersecting intervals do.
-- [ ] Cross-catalog integrity checks pass for all settled Phase 2 coverage, identifier, pricing, capacity, inventory, temporal, time-zone, connection, distance, and March 31 boundary rules and fail when representative violations are introduced in test scope.
-- [ ] A documented single command produces a deterministic, concise human-readable summary with total counts and representative airfare, stay, and rental options for all destinations; reviewers do not need to inspect raw migration rows.
-- [ ] Rebuilding the database produces the same property, rental, nightly inventory, identifier, value, count, and summary output.
-- [ ] The complete Phase 2 catalog is entirely Flyway-managed and fictional, uses real airport codes/geography, and requires no external supplier or model service.
-- [ ] The existing identity behavior, backend tests, clean-database Flyway verification, and packaged-application startup continue to pass.
-- [ ] No search/selection UI or API, Trip/itinerary behavior, inventory mutation service, booking/cancellation, payment, live-supplier integration, dynamic pricing, multi-currency, or expanded-date-range behavior is introduced.
+- [x] A clean Flyway migration creates exactly two hotels, two B&Bs, and two vacation rentals in each destination, with stable identifiers, deterministic display/location/rating/distance data, appropriate capacity semantics, and nightly inventory covering every supported stay night.
+- [x] For parties from 1 through 8, fixture verification demonstrates usable stay inventory and meaningful differences in required room/property fit, complete-stay price, rating, and distance rather than identical ordering across all options.
+- [x] SFO, MUC, and MEX each have fictional airport rental supply with economy, standard, and SUV physical units, deterministic integer-cent daily pricing inputs, and availability across the supported pickup/return window.
+- [x] Rental verification proves consecutive 24-hour billing with a rounded-up partial final cycle can be calculated from the fixtures, and that back-to-back intervals do not overlap while intersecting intervals do.
+- [x] Cross-catalog integrity checks pass for all settled Phase 2 coverage, identifier, pricing, capacity, inventory, temporal, time-zone, connection, distance, and March 31 boundary rules and fail when representative violations are introduced in test scope.
+- [x] A documented single command produces a deterministic, concise human-readable summary with total counts and representative airfare, stay, and rental options for all destinations; reviewers do not need to inspect raw migration rows.
+- [x] Rebuilding the database produces the same property, rental, nightly inventory, identifier, value, count, and summary output.
+- [x] The complete Phase 2 catalog is entirely Flyway-managed and fictional, uses real airport codes/geography, and requires no external supplier or model service.
+- [x] The existing identity behavior, backend tests, clean-database Flyway verification, and packaged-application startup continue to pass.
+- [x] No search/selection UI or API, Trip/itinerary behavior, inventory mutation service, booking/cancellation, payment, live-supplier integration, dynamic pricing, multi-currency, or expanded-date-range behavior is introduced.
 
 ## Context
 
