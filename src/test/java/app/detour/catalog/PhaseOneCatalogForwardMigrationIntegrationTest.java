@@ -30,7 +30,7 @@ class PhaseOneCatalogForwardMigrationIntegrationTest {
         }
         Flyway fullLineage = Flyway.configure().dataSource(url, "sa", "").locations("classpath:db/migration").load();
         fullLineage.migrate();
-        assertEquals("11", fullLineage.info().current().getVersion().getVersion());
+        assertEquals("12", fullLineage.info().current().getVersion().getVersion());
         try (var connection = DriverManager.getConnection(url, "sa", "");
              var query = connection.prepareStatement("SELECT password_hash, created_at FROM detour_user WHERE canonical_email = ?")) {
             query.setString(1, "phase-one@example.test");
@@ -53,6 +53,10 @@ class PhaseOneCatalogForwardMigrationIntegrationTest {
             try (var units = connection.createStatement().executeQuery("SELECT COUNT(*) FROM rental_unit")) {
                 assertTrue(units.next());
                 assertEquals(21, units.getInt(1));
+            }
+            try (var trips = connection.createStatement().executeQuery("SELECT COUNT(*) FROM detour_trip")) {
+                assertTrue(trips.next());
+                assertEquals(0, trips.getInt(1));
             }
         }
     }

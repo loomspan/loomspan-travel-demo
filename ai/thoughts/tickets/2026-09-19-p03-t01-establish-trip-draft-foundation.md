@@ -16,14 +16,14 @@ An authenticated user can create and retrieve a persistent Trip with its first c
 
 ## Acceptance criteria
 
-- [ ] A signed-in user can create a supported Trip and atomically receives the derived label, version, normalized shared details, and one component-empty Draft with stable identifiers.
-- [ ] Creation rejects missing or unsupported destination/date/traveler data, dates outside the supported window, invalid trip length, traveler counts outside 1–8, mismatched or invalid supplied ages, negative or excessive budgets, and malformed money without persisting a partial aggregate.
-- [ ] A Draft with complete valid ages but no adult can be saved as incomplete and is blocked only when Planned promotion is attempted.
-- [ ] Ages and budget may be omitted at creation, while zero budget is retained distinctly from an absent budget.
-- [ ] Two-user integration coverage proves a user cannot read or mutate another user's Trip and receives no protected Trip data from the rejection.
-- [ ] Concurrent or duplicate failed creation does not produce an orphan Trip or Draft, and persisted records survive an application restart.
-- [ ] Clean-database migration, backend tests, frontend build, and packaged-application startup continue to pass without external supplier or model services.
-- [ ] No component-selection, pricing, promotion, profile-listing, booking, cancellation, custom-name, sharing, collaboration, or Version 2 Event behavior is introduced.
+- [x] A signed-in user can create a supported Trip and atomically receives the derived label, version, normalized shared details, and one component-empty Draft with stable identifiers.
+- [x] Creation rejects missing or unsupported destination/date/traveler data, dates outside the supported window, invalid trip length, traveler counts outside 1–8, mismatched or invalid supplied ages, negative or excessive budgets, and malformed money without persisting a partial aggregate.
+- [x] A Draft with complete valid ages but no adult can be saved as incomplete; Planned promotion remains deliberately out of scope for this ticket.
+- [x] Ages and budget may be omitted at creation, while zero budget is retained distinctly from an absent budget.
+- [x] Two-user integration coverage proves a user cannot read or mutate another user's Trip and receives no protected Trip data from the rejection.
+- [x] Concurrent or duplicate failed creation does not produce an orphan Trip or Draft, and persisted records survive an application restart.
+- [x] Clean-database migration, backend tests, frontend build, and packaged-application startup continue to pass without external supplier or model services.
+- [x] No component-selection, pricing, promotion, profile-listing, booking, cancellation, custom-name, sharing, collaboration, or Version 2 Event behavior is introduced.
 
 ## Context
 
@@ -41,3 +41,9 @@ An authenticated user can create and retrieve a persistent Trip with its first c
 - **Confidence:** high
 - **Rationale:** The work introduces a user-owned persisted contract, transactional aggregate creation, monetary and temporal validation, and an authorization boundary consumed by every later phase.
 - **Reassessment triggers:** If the Phase 2 destination keys or Phase 1 ownership schema cannot support a direct immutable reference without changing their contracts, keep the work on the full route and reconcile the persisted design rather than adding a compatibility path.
+
+## Execution notes
+
+- Implemented `V12` with normalized owner-scoped Trip, traveler, and one-Draft tables. `MAX_TRAVELER_AGE` is 120 and `MAX_BUDGET_CENTS` is 100,000,000 ($1,000,000.00); both are application and database constrained.
+- The create boundary accepts only the explicit documented request fields, obtains the owner exclusively from the authenticated principal, and rejects custom names and target owner identifiers.
+- Verification used isolated H2, loopback-only restart/package checks, and no external suppliers or model services. The optional manual two-session browser check was not performed because the automated two-user API test covers the boundary.

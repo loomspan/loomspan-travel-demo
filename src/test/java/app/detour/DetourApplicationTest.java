@@ -34,7 +34,7 @@ class DetourApplicationTest {
     @Test
     void startsWithFreshDetourCatalogLineageAndSeededPhaseTwoData() throws Exception {
         assertEquals(
-                java.util.List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"),
+                java.util.List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"),
                 Arrays.stream(flyway.info().applied())
                         .map(info -> info.getVersion().getVersion())
                         .toList());
@@ -46,6 +46,15 @@ class DetourApplicationTest {
             try (var count = connection.createStatement().executeQuery("SELECT COUNT(*) FROM detour_user")) {
                 org.junit.jupiter.api.Assertions.assertTrue(count.next());
                 assertEquals(0, count.getInt(1), "Fresh identity schema must not seed an account");
+            }
+            for (String tripTable : java.util.List.of("detour_trip", "detour_trip_traveler", "detour_trip_draft")) {
+                try (var tables = connection.getMetaData().getTables(null, null, tripTable.toUpperCase(), null)) {
+                    org.junit.jupiter.api.Assertions.assertTrue(tables.next(), "Trip table must exist: " + tripTable);
+                }
+                try (var count = connection.createStatement().executeQuery("SELECT COUNT(*) FROM " + tripTable)) {
+                    org.junit.jupiter.api.Assertions.assertTrue(count.next());
+                    assertEquals(0, count.getInt(1), "Fresh Trip schema must not seed records");
+                }
             }
             for (String catalogTable : java.util.List.of(
                     "catalog_destination", "catalog_airport", "catalog_supplier", "flight_schedule", "flight_instance",
