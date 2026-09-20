@@ -17,13 +17,13 @@ A user can maintain multiple mutable Draft alternatives for one Trip, refresh wi
 
 ## Acceptance criteria
 
-- [ ] A user can create multiple independently identified component-empty Drafts and explicitly duplicate a Draft; the source remains unchanged and all alternatives survive refresh and restart.
-- [ ] Supported shared-detail edits succeed while the Trip has no Planned alternative, increment the appropriate version, and retain the aggregate's ownership and derived label rules.
-- [ ] Two clients updating from the same version cannot silently overwrite one another: one succeeds, the stale mutation receives a deterministic conflict, and persisted state matches the successful update.
-- [ ] Validation and persistence failures are distinguishable from successful saves, and retrying after a failure does not create duplicate alternatives.
-- [ ] Draft deletion removes only the selected alternative, rejects cross-user access without disclosure, and leaves a zero-alternative Trip usable for creating a new Draft or explicitly deleting the Trip.
-- [ ] Backend integration tests cover two-user isolation, duplicate/create/delete behavior, stale versions, concurrent requests, rollback on failure, and restart persistence.
-- [ ] No component search/selection, automatic conflict merge, Planned promotion, booking/cancellation, sharing, collaboration, or Version 2 Event behavior is introduced.
+- [x] A user can create multiple independently identified component-empty Drafts and explicitly duplicate a Draft; the source remains unchanged and all alternatives survive refresh and restart.
+- [x] Supported shared-detail edits succeed while the Trip has no Planned alternative, increment the appropriate version, and retain the aggregate's ownership and derived label rules.
+- [x] Two clients updating from the same version cannot silently overwrite one another: one succeeds, the stale mutation receives a deterministic conflict, and persisted state matches the successful update.
+- [x] Validation and persistence failures are distinguishable from successful saves, and retrying after a failure does not create duplicate alternatives.
+- [x] Draft deletion removes only the selected alternative, rejects cross-user access without disclosure, and leaves a zero-alternative Trip usable for creating a new Draft or explicitly deleting the Trip.
+- [x] Backend integration tests cover two-user isolation, duplicate/create/delete behavior, stale versions, concurrent requests, rollback on failure, and restart persistence.
+- [x] No component search/selection, automatic conflict merge, Planned promotion, booking/cancellation, sharing, collaboration, or Version 2 Event behavior is introduced.
 
 ## Context
 
@@ -40,3 +40,9 @@ A user can maintain multiple mutable Draft alternatives for one Trip, refresh wi
 - **Confidence:** high
 - **Rationale:** The work changes persisted lifecycle and concurrency behavior, including stale-write handling, transactional duplication, and owner-scoped mutation contracts.
 - **Reassessment triggers:** Discovery that the P03-T01 version is insufficient to distinguish shared Trip edits from alternative edits should trigger explicit concurrency design in the full plan, not a last-write-wins shortcut.
+
+## Execution notes
+
+- Implemented V13 to remove the one-Draft-per-Trip restriction while retaining the parent FK and a child lookup index.
+- Shared-detail replacement and every alternative collection mutation now use owner-scoped optimistic guards. Named duplicate/delete operations condition the parent advance on the selected Draft version, returning stable `VERSION_CONFLICT` fields for either stale boundary.
+- Verification passed with the focused Trip API, restart/migration, full backend, frontend test/build, package, and packaged-identity checks. The browser autosave-status observation remains optional and deferred to P03-T06.

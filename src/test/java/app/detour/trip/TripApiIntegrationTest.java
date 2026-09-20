@@ -3,6 +3,8 @@ package app.detour.trip;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -10,6 +12,7 @@ import jakarta.servlet.http.Cookie;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.UUID;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -189,6 +192,118 @@ class TripApiIntegrationTest {
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip trip LEFT JOIN detour_trip_draft draft ON draft.trip_id = trip.id WHERE draft.id IS NULL", Integer.class));
     }
 
+    @Test
+    void createsAdditionalComponentEmptyDraftOnlyWhenExplicitlyRequested() throws Exception {
+        Client owner = register("alternatives@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"), validRequest("")).andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(created, "id");
+        String sourceId = tools.jackson.databind.json.JsonMapper.builder().build().readTree(created.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
+        owner.unsafe(post("/api/trips/{tripId}/drafts", tripId), "{\"expectedVersion\":0}")
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.version").value(1))
+                .andExpect(jsonPath("$.drafts.length()").value(2)).andExpect(jsonPath("$.drafts[0].id").value(sourceId))
+                .andExpect(jsonPath("$.drafts[1].version").value(0));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft draft JOIN detour_trip trip ON trip.id = draft.trip_id WHERE trip.public_id = ?", Integer.class, UUID.fromString(tripId)));
+    }
+
+    @Test
+    void updatesDuplicatesDeletesAndConflictsWithoutLostWrites() throws Exception {
+        Client owner = register("versioned@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"), validRequest("\"budgetCents\":0")).andReturn();
+        var initial = tools.jackson.databind.json.JsonMapper.builder().build().readTree(created.getResponse().getContentAsString());
+        String tripId = initial.get("id").asString();
+        String sourceId = initial.get("drafts").get(0).get("id").asString();
+        owner.unsafe(put("/api/trips/{tripId}", tripId), sharedUpdate(0, "destination-muc", 1, "null"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.destinationKey").value("destination-muc"))
+                .andExpect(jsonPath("$.travelerAges").doesNotExist()).andExpect(jsonPath("$.budgetCents").doesNotExist())
+                .andExpect(jsonPath("$.version").value(1));
+        owner.unsafe(put("/api/trips/{tripId}", tripId), sharedUpdate(0, "destination-mex", 1, "0"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("VERSION_CONFLICT"))
+                .andExpect(jsonPath("$.fields.currentVersion").value("1"));
+        MvcResult duplicated = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/duplicate", tripId, sourceId),
+                "{\"expectedVersion\":1,\"expectedDraftVersion\":0}").andExpect(status().isCreated())
+                .andExpect(jsonPath("$.version").value(2)).andExpect(jsonPath("$.drafts.length()").value(2)).andReturn();
+        String duplicateId = tools.jackson.databind.json.JsonMapper.builder().build().readTree(duplicated.getResponse().getContentAsString()).get("drafts").get(1).get("id").asString();
+        owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}", tripId, sourceId), "{\"expectedVersion\":2,\"expectedDraftVersion\":0}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.version").value(3)).andExpect(jsonPath("$.drafts.length()").value(1))
+                .andExpect(jsonPath("$.drafts[0].id").value(duplicateId));
+        owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}", tripId, duplicateId), "{\"expectedVersion\":3,\"expectedDraftVersion\":0}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.drafts.length()").value(0)).andExpect(jsonPath("$.version").value(4));
+        owner.unsafe(post("/api/trips/{tripId}/drafts", tripId), "{\"expectedVersion\":4}")
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.drafts.length()").value(1));
+    }
+
+    @Test
+    void mutationTargetsDoNotDiscloseForeignTrips() throws Exception {
+        Client owner = register("owner-mutation@example.test");
+        Client other = register("other-mutation@example.test");
+        var created = owner.unsafe(post("/api/trips"), validRequest("")).andReturn();
+        var body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(created.getResponse().getContentAsString());
+        String tripId = body.get("id").asString();
+        String draftId = body.get("drafts").get(0).get("id").asString();
+        String foreign = other.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/duplicate", tripId, draftId), "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isNotFound()).andReturn().getResponse().getContentAsString();
+        String unknown = other.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/duplicate", UUID.randomUUID(), UUID.randomUUID()), "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isNotFound()).andReturn().getResponse().getContentAsString();
+        assertEquals(foreign, unknown);
+    }
+
+    @Test
+    void concurrentSameVersionSharedSavesAllowOnlyOneWinner() throws Exception {
+        Client first = register("concurrent-save@example.test");
+        Client second = login("concurrent-save@example.test");
+        String tripId = jsonField(first.unsafe(post("/api/trips"), validRequest("")).andExpect(status().isCreated()).andReturn(), "id");
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        try (ExecutorService workers = Executors.newFixedThreadPool(2)) {
+            Future<Integer> firstResult = workers.submit(() -> {
+                barrier.await();
+                return first.unsafe(put("/api/trips/{tripId}", tripId), sharedUpdate(0, "destination-muc", 1, "null"))
+                        .andReturn().getResponse().getStatus();
+            });
+            Future<Integer> secondResult = workers.submit(() -> {
+                barrier.await();
+                return second.unsafe(put("/api/trips/{tripId}", tripId), sharedUpdate(0, "destination-mex", 1, "0"))
+                        .andReturn().getResponse().getStatus();
+            });
+            int firstStatus = firstResult.get();
+            int secondStatus = secondResult.get();
+            assertEquals(1, java.util.List.of(firstStatus, secondStatus).stream().filter(status -> status == 200).count());
+            assertEquals(1, java.util.List.of(firstStatus, secondStatus).stream().filter(status -> status == 409).count());
+        }
+        mockMvc.perform(get("/api/trips/{tripId}", tripId).session(first.session).cookie(first.csrf))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.version").value(1));
+    }
+
+    @Test
+    void rejectsStaleDraftVersionAndRollsBackFailedAlternativeInsertBeforeRetry() throws Exception {
+        Client owner = register("draft-guard@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"), validRequest("")).andExpect(status().isCreated()).andReturn();
+        var body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(created.getResponse().getContentAsString());
+        String tripId = body.get("id").asString();
+        String sourceId = body.get("drafts").get(0).get("id").asString();
+        jdbc.update("UPDATE detour_trip_draft SET version = 1 WHERE public_id = ?", UUID.fromString(sourceId));
+        owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/duplicate", tripId, sourceId),
+                        "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.fields.currentDraftVersion").value("1"));
+        jdbc.update("UPDATE detour_trip_draft SET version = 0 WHERE public_id = ?", UUID.fromString(sourceId));
+        jdbc.execute("CREATE TRIGGER fail_alternative_draft BEFORE INSERT ON detour_trip_draft FOR EACH ROW CALL 'app.detour.trip.TripApiIntegrationTest$FailingDraftTrigger'");
+        try {
+            owner.unsafe(post("/api/trips/{tripId}/drafts", tripId), "{\"expectedVersion\":0}")
+                    .andExpect(status().isInternalServerError()).andExpect(jsonPath("$.code").value("INTERNAL_ERROR"));
+        } finally {
+            jdbc.execute("DROP TRIGGER fail_alternative_draft");
+        }
+        mockMvc.perform(get("/api/trips/{tripId}", tripId).session(owner.session).cookie(owner.csrf))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.version").value(0)).andExpect(jsonPath("$.drafts.length()").value(1));
+        owner.unsafe(post("/api/trips/{tripId}/drafts", tripId), "{\"expectedVersion\":0}")
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.version").value(1)).andExpect(jsonPath("$.drafts.length()").value(2));
+    }
+
+    private static String sharedUpdate(long expectedVersion, String destinationKey, int travelerCount, String budget) {
+        return "{\"expectedVersion\":" + expectedVersion + ",\"destinationKey\":\"" + destinationKey
+                + "\",\"startDate\":\"2027-03-01\",\"endDate\":\"2027-03-02\",\"travelerCount\":" + travelerCount
+                + ",\"budgetCents\":" + budget + "}";
+    }
+
     private static String validRequest(String additions) {
         String suffix = additions.isBlank() ? "" : "," + additions;
         return "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2" + suffix + "}";
@@ -206,6 +321,14 @@ class TripApiIntegrationTest {
         Client client = anonymous();
         MvcResult result = client.unsafe(post("/api/auth/register"), "{\"email\":\"" + email + "\",\"password\":\"aaaaaaaaaaaa\"}")
                 .andExpect(status().isCreated()).andReturn();
+        client.session = (MockHttpSession) result.getRequest().getSession(false);
+        return client;
+    }
+
+    private Client login(String email) throws Exception {
+        Client client = anonymous();
+        MvcResult result = client.unsafe(post("/api/auth/login"), "{\"email\":\"" + email + "\",\"password\":\"aaaaaaaaaaaa\"}")
+                .andExpect(status().isNoContent()).andReturn();
         client.session = (MockHttpSession) result.getRequest().getSession(false);
         return client;
     }

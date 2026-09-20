@@ -17,15 +17,42 @@ public final class TripRequests {
             List<Integer> travelerAges, JsonNode budgetCents) {
     }
 
+    public record SharedDetailsUpdate(long expectedVersion, String destinationKey, LocalDate startDate, LocalDate endDate,
+            Integer travelerCount, List<Integer> travelerAges, JsonNode budgetCents) { }
+
+    public record DraftCreate(long expectedVersion) { }
+
+    public record DraftMutation(long expectedVersion, long expectedDraftVersion) { }
+
     static Create from(JsonNode body) {
+        requireObject(body, Set.of("destinationKey", "startDate", "endDate", "travelerCount", "travelerAges", "budgetCents"));
+        return new Create(text(body.get("destinationKey"), "destinationKey"),
+                date(body.get("startDate"), "startDate"), date(body.get("endDate"), "endDate"), integer(body.get("travelerCount"), "travelerCount"),
+                ages(body.get("travelerAges")), body.get("budgetCents"));
+    }
+
+    static SharedDetailsUpdate update(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion", "destinationKey", "startDate", "endDate", "travelerCount", "travelerAges", "budgetCents"));
+        return new SharedDetailsUpdate(version(body.get("expectedVersion"), "expectedVersion"), text(body.get("destinationKey"), "destinationKey"),
+                date(body.get("startDate"), "startDate"), date(body.get("endDate"), "endDate"), integer(body.get("travelerCount"), "travelerCount"),
+                ages(body.get("travelerAges")), body.get("budgetCents"));
+    }
+
+    static DraftCreate draftCreate(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion"));
+        return new DraftCreate(version(body.get("expectedVersion"), "expectedVersion"));
+    }
+
+    static DraftMutation draftMutation(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion", "expectedDraftVersion"));
+        return new DraftMutation(version(body.get("expectedVersion"), "expectedVersion"), version(body.get("expectedDraftVersion"), "expectedDraftVersion"));
+    }
+
+    private static void requireObject(JsonNode body, Set<String> allowed) {
         if (body == null || !body.isObject()) throw invalid("request", "A JSON object is required.");
-        Set<String> allowed = Set.of("destinationKey", "startDate", "endDate", "travelerCount", "travelerAges", "budgetCents");
         for (var property : body.properties()) {
             if (!allowed.contains(property.getKey())) throw invalid("request", "The request contains an unsupported field.");
         }
-        return new Create(text(body.get("destinationKey"), "destinationKey"), date(body.get("startDate"), "startDate"),
-                date(body.get("endDate"), "endDate"), integer(body.get("travelerCount"), "travelerCount"),
-                ages(body.get("travelerAges")), body.get("budgetCents"));
     }
 
     private static String text(JsonNode node, String field) {
@@ -48,6 +75,12 @@ public final class TripRequests {
         if (node == null || node.isNull()) return null;
         if (!node.isInt()) throw invalid(field, "This field must be an integer.");
         return node.asInt();
+    }
+
+    private static long version(JsonNode node, String field) {
+        if (node == null || node.isNull()) throw invalid(field, "This field is required.");
+        if (!node.isIntegralNumber() || !node.canConvertToLong() || node.longValue() < 0) throw invalid(field, "This field must be a non-negative integer.");
+        return node.longValue();
     }
 
     private static List<Integer> ages(JsonNode node) {

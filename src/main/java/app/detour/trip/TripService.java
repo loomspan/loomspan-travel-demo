@@ -56,6 +56,87 @@ public class TripService {
         return trips.findByPublicIdAndOwnerUserId(publicId, ownerUserId).map(this::response).orElseThrow(this::notFound);
     }
 
+    @Transactional
+    public TripResponse replaceSharedDetails(long ownerUserId, String tripId, TripRequests.SharedDetailsUpdate request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        String destinationKey = required(request.destinationKey(), "destinationKey");
+        Destination destination = trips.findSupportedDestination(destinationKey).orElseThrow(() -> validation("destinationKey", "Choose a supported destination."));
+        LocalDate startDate = required(request.startDate(), "startDate");
+        LocalDate endDate = required(request.endDate(), "endDate");
+        int travelerCount = required(request.travelerCount(), "travelerCount");
+        validateDates(startDate, endDate);
+        if (travelerCount < 1 || travelerCount > 8) throw validation("travelerCount", "Traveler count must be between 1 and 8.");
+        List<Integer> ages = validateAges(request.travelerAges(), travelerCount);
+        Long budgetCents = validateBudget(request.budgetCents());
+        if (!trips.advanceVersion(trip.id(), ownerUserId, request.expectedVersion())) throw parentConflict(ownerUserId, trip.publicId());
+        trips.replaceSharedDetails(trip.id(), destination, startDate, endDate, travelerCount, ages, budgetCents, label(destination.name(), startDate, endDate));
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+    }
+
+    @Transactional
+    public TripResponse createDraft(long ownerUserId, String tripId, TripRequests.DraftCreate request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        if (!trips.advanceVersion(trip.id(), ownerUserId, request.expectedVersion())) throw parentConflict(ownerUserId, trip.publicId());
+        trips.insertDraft(trip.id(), UUID.randomUUID());
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+    }
+
+    @Transactional
+    public TripResponse duplicateDraft(long ownerUserId, String tripId, String draftId, TripRequests.DraftMutation request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        TripDraft draft = ownedDraft(trip, draftId);
+        if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
+            throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
+        }
+        trips.insertDraft(trip.id(), UUID.randomUUID());
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+    }
+
+    @Transactional
+    public TripResponse deleteDraft(long ownerUserId, String tripId, String draftId, TripRequests.DraftMutation request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        TripDraft draft = ownedDraft(trip, draftId);
+        if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
+            throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
+        }
+        trips.deleteDraft(trip.id(), draft.id());
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+    }
+
+    private Trip ownedTrip(long ownerUserId, String tripId) {
+        try { return trips.findByPublicIdAndOwnerUserId(UUID.fromString(tripId), ownerUserId).orElseThrow(this::notFound); }
+        catch (IllegalArgumentException exception) { throw notFound(); }
+    }
+
+    private TripDraft ownedDraft(Trip trip, String draftId) {
+        try {
+            UUID publicId = UUID.fromString(draftId);
+            return trip.drafts().stream().filter(draft -> draft.publicId().equals(publicId)).findFirst().orElseThrow(this::notFound);
+        } catch (IllegalArgumentException exception) { throw notFound(); }
+    }
+
+    private ApiException parentConflict(long ownerUserId, UUID tripId) {
+        long current = trips.findByPublicIdAndOwnerUserId(tripId, ownerUserId).orElseThrow(this::notFound).version();
+        return new ApiException(409, "VERSION_CONFLICT", "The Trip has changed. Reload before saving.", Map.of("currentVersion", Long.toString(current)));
+    }
+
+    private ApiException mutationConflict(long ownerUserId, UUID tripId, UUID draftId, long expectedDraftVersion) {
+        Trip current = trips.findByPublicIdAndOwnerUserId(tripId, ownerUserId).orElseThrow(this::notFound);
+        TripDraft draft = current.drafts().stream().filter(candidate -> candidate.publicId().equals(draftId))
+                .findFirst().orElseThrow(this::notFound);
+        if (draft.version() != expectedDraftVersion) throw draftConflict(draft.version());
+        throw new ApiException(409, "VERSION_CONFLICT", "The Trip has changed. Reload before saving.",
+                Map.of("currentVersion", Long.toString(current.version())));
+    }
+
+    private static ApiException draftConflict(long current) {
+        return new ApiException(409, "VERSION_CONFLICT", "The Draft has changed. Reload before saving.", Map.of("currentDraftVersion", Long.toString(current)));
+    }
+
     private static List<Integer> validateAges(List<Integer> suppliedAges, int travelerCount) {
         if (suppliedAges == null) return java.util.Collections.nCopies(travelerCount, null);
         if (suppliedAges.size() != travelerCount) throw validation("travelerAges", "Provide exactly one age for each traveler.");

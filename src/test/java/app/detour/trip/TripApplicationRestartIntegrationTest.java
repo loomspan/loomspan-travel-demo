@@ -39,6 +39,12 @@ class TripApplicationRestartIntegrationTest {
             var body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(created.body());
             tripId = body.get("id").asString();
             draftId = body.get("drafts").get(0).get("id").asString();
+            HttpResponse<String> updated = request(base, "PUT", "/api/trips/" + tripId, sessionCookie + "|" + csrf,
+                    "{\"expectedVersion\":0,\"destinationKey\":\"destination-muc\",\"startDate\":\"2027-03-01\",\"endDate\":\"2027-03-02\",\"travelerCount\":1,\"budgetCents\":null}").send();
+            assertEquals(200, updated.statusCode());
+            HttpResponse<String> alternative = request(base, "POST", "/api/trips/" + tripId + "/drafts", sessionCookie + "|" + csrf,
+                    "{\"expectedVersion\":1}").send();
+            assertEquals(201, alternative.statusCode());
         } finally {
             first.close();
         }
@@ -56,7 +62,9 @@ class TripApplicationRestartIntegrationTest {
             var body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(detail.body());
             assertEquals(tripId, body.get("id").asString());
             assertEquals(draftId, body.get("drafts").get(0).get("id").asString());
-            assertEquals(0, body.get("budgetCents").asInt());
+            assertEquals(2, body.get("drafts").size());
+            assertEquals(2, body.get("version").asInt());
+            org.junit.jupiter.api.Assertions.assertTrue(body.get("budgetCents").isNull());
         } finally {
             second.close();
         }
