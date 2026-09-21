@@ -19,15 +19,15 @@ Authenticated users have a useful profile that lets them create Trips, understan
 
 ## Acceptance criteria
 
-- [ ] A new account sees an informative empty profile and can create a supported Trip with one Draft, then refresh and see it in the correct profile section.
-- [ ] A user can create multiple Draft alternatives, explicitly duplicate a supported source, edit allowed shared details, and see durable `Saving`, `Saved`, validation-error, network-error, and version-conflict states.
-- [ ] Upcoming and Past Trips render in backend order with a clear nested Trip/alternative hierarchy and accurate Draft, Planned, and Expired information; Booked information appears only when the backend supplies it.
-- [ ] Planned alternatives are visibly read-only, revision workflows preserve the source Trip, and incompatibility/change summaries name every removed or changed item and its reason.
-- [ ] Delete Draft, Delete Planned itinerary, and Delete Trip confirmations accurately describe scope; stale or rejected deletion leaves the current view consistent and reports the failure.
-- [ ] Profile, creation, conflict, summary, empty, loading, and error states work by keyboard and screen reader semantics and remain usable at narrow and desktop widths without horizontal page scrolling.
-- [ ] Frontend interaction tests cover the major success/error/conflict/destructive paths, while backend isolation and clock behavior remain covered; the production frontend build and packaged application pass.
-- [ ] Existing registration, login, logout, password change, CSRF/session handling, and About this demo behavior remain intact.
-- [ ] No component-search, comparison, booking/cancellation, sharing/collaboration, custom-name, or Version 2 Event experience is introduced.
+- [x] A new account sees an informative empty profile and can create a supported Trip with one Draft, then refresh and see it in the correct profile section.
+- [x] A user can create multiple Draft alternatives, explicitly duplicate a supported source, edit allowed shared details, and see durable `Saving`, `Saved`, validation-error, network-error, and version-conflict states.
+- [x] Upcoming and Past Trips render in backend order with a clear nested Trip/alternative hierarchy and accurate Draft, Planned, and Expired information; Booked information appears only when the backend supplies it.
+- [x] Planned alternatives are visibly read-only, revision workflows preserve the source Trip, and incompatibility/change summaries name every removed or changed item and its reason.
+- [x] Delete Draft, Delete Planned itinerary, and Delete Trip confirmations accurately describe scope; stale or rejected deletion leaves the current view consistent and reports the failure.
+- [x] Profile, creation, conflict, summary, empty, loading, and error states work by keyboard and screen reader semantics and remain usable at narrow and desktop widths without horizontal page scrolling.
+- [x] Frontend interaction tests cover the major success/error/conflict/destructive paths, while backend isolation and clock behavior remain covered; the production frontend build and packaged application pass.
+- [x] Existing registration, login, logout, password change, CSRF/session handling, and About this demo behavior remain intact.
+- [x] No component-search, comparison, booking/cancellation, sharing/collaboration, custom-name, or Version 2 Event experience is introduced.
 
 ## Context
 

@@ -1,4 +1,10 @@
-export type Profile = {email: string};
+import type {TripProfileSummary} from './tripsApi';
+
+export type Profile = {
+  email: string;
+  upcoming: TripProfileSummary[];
+  past: TripProfileSummary[];
+};
 
 type ErrorEnvelope = {code?: unknown; message?: unknown; fields?: unknown};
 
@@ -13,12 +19,12 @@ export class IdentityApiError extends Error {
   }
 }
 
-function csrfToken(): string | undefined {
+export function csrfToken(): string | undefined {
   return document.cookie.split('; ').find((value) => value.startsWith('XSRF-TOKEN='))
     ?.slice('XSRF-TOKEN='.length);
 }
 
-async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+export async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const unsafe = method !== 'GET';
   const token = unsafe ? csrfToken() : undefined;
   if (unsafe && !token) throw new IdentityApiError('csrf-missing');
@@ -51,11 +57,20 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
 export const identityApi = {
   getProfile: async (): Promise<Profile> => {
     const profile = await request<unknown>('/api/profile');
-    const email = typeof profile === 'object' && profile !== null ? (profile as {email?: unknown}).email : undefined;
+    if (typeof profile !== 'object' || profile === null) {
+      throw new IdentityApiError('unexpected');
+    }
+    const email = (profile as {email?: unknown}).email;
     if (typeof email !== 'string' || !email.trim()) {
       throw new IdentityApiError('unexpected');
     }
-    return {email};
+    const upcoming = Array.isArray((profile as {upcoming?: unknown}).upcoming)
+      ? ((profile as {upcoming: TripProfileSummary[]}).upcoming)
+      : [];
+    const past = Array.isArray((profile as {past?: unknown}).past)
+      ? ((profile as {past: TripProfileSummary[]}).past)
+      : [];
+    return {email, upcoming, past};
   },
   register: (email: string, password: string) => request<Profile>('/api/auth/register', 'POST', {email, password}),
   login: (email: string, password: string) => request<void>('/api/auth/login', 'POST', {email, password}),

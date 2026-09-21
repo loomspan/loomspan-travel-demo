@@ -96,7 +96,16 @@ export default function App() {
     {notice?.kind === 'error' && <div className="error-summary" role="alert" tabIndex={-1} ref={errorRef}><strong>We need your attention.</strong><p>{notice.message}</p></div>}
     <StatusRegion message={notice?.kind === 'status' ? notice.message : undefined} />
     {screen.kind === 'loading' ? <p className="loading">Checking your account…</p> : screen.kind === 'profile'
-      ? <ProfileScreen email={screen.profile.email} onLogout={logout} logoutPending={logoutPending} onPasswordChange={changePassword} onFailure={showFailure} />
+      ? <ProfileScreen
+          email={screen.profile.email}
+          upcoming={screen.profile.upcoming}
+          past={screen.profile.past}
+          onLogout={logout}
+          logoutPending={logoutPending}
+          onPasswordChange={changePassword}
+          onFailure={showFailure}
+          onRefreshProfile={loadProfile}
+        />
       : <AuthScreen onRegister={register} onLogin={login} onFailure={showFailure} />}
     <AboutDemoTab />
   </main>;
