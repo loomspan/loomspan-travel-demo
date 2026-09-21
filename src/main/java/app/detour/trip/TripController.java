@@ -40,6 +40,11 @@ public class TripController {
         return trips.replaceSharedDetails(requirePrincipal(principal).userId(), tripId, TripRequests.update(request));
     }
 
+    @PostMapping({ "/{tripId}/duplicate", "/{tripId}/revisions" })
+    ResponseEntity<TripResponse> duplicateTrip(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @RequestBody JsonNode request) {
+        return ResponseEntity.status(201).body(trips.duplicateTrip(requirePrincipal(principal).userId(), tripId, TripRequests.revision(request)));
+    }
+
     @PostMapping("/{tripId}/drafts")
     ResponseEntity<TripResponse> createDraft(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @RequestBody JsonNode request) {
         return ResponseEntity.status(201).body(trips.createDraft(requirePrincipal(principal).userId(), tripId, TripRequests.draftCreate(request)));

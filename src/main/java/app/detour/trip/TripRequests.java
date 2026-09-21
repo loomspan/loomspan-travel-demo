@@ -5,9 +5,10 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
-import tools.jackson.databind.JsonNode;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
+import tools.jackson.databind.JsonNode;
 
 public final class TripRequests {
     private TripRequests() {
@@ -19,6 +20,9 @@ public final class TripRequests {
 
     public record SharedDetailsUpdate(long expectedVersion, String destinationKey, LocalDate startDate, LocalDate endDate,
             Integer travelerCount, List<Integer> travelerAges, JsonNode budgetCents) { }
+
+    public record TripRevision(long expectedVersion, String destinationKey, LocalDate startDate, LocalDate endDate,
+            Integer travelerCount, List<Integer> travelerAges, JsonNode budgetCents, List<UUID> sourcePlannedItineraryIds) { }
 
     public record DraftCreate(long expectedVersion) { }
 
@@ -39,6 +43,13 @@ public final class TripRequests {
         return new SharedDetailsUpdate(version(body.get("expectedVersion"), "expectedVersion"), text(body.get("destinationKey"), "destinationKey"),
                 date(body.get("startDate"), "startDate"), date(body.get("endDate"), "endDate"), integer(body.get("travelerCount"), "travelerCount"),
                 ages(body.get("travelerAges")), body.get("budgetCents"));
+    }
+
+    static TripRevision revision(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion", "destinationKey", "startDate", "endDate", "travelerCount", "travelerAges", "budgetCents", "sourcePlannedItineraryIds"));
+        return new TripRevision(version(body.get("expectedVersion"), "expectedVersion"), text(body.get("destinationKey"), "destinationKey"),
+                date(body.get("startDate"), "startDate"), date(body.get("endDate"), "endDate"), integer(body.get("travelerCount"), "travelerCount"),
+                ages(body.get("travelerAges")), body.get("budgetCents"), sourcePlannedIds(body.get("sourcePlannedItineraryIds")));
     }
 
     static DraftCreate draftCreate(JsonNode body) {
@@ -113,6 +124,29 @@ public final class TripRequests {
         List<Integer> values = new ArrayList<>();
         for (int index = 0; index < node.size(); index++) values.add(integer(node.get(index), "travelerAges"));
         return values;
+    }
+
+    private static List<UUID> sourcePlannedIds(JsonNode node) {
+        if (node == null || node.isNull()) throw invalid("sourcePlannedItineraryIds", "Select at least one Planned alternative to copy.");
+        if (!node.isArray()) throw invalid("sourcePlannedItineraryIds", "This field must be an array of alternative identifiers.");
+        if (node.isEmpty()) throw invalid("sourcePlannedItineraryIds", "Select at least one Planned alternative to copy.");
+        List<UUID> ids = new ArrayList<>();
+        java.util.Set<UUID> seen = new java.util.HashSet<>();
+        for (int index = 0; index < node.size(); index++) {
+            JsonNode element = node.get(index);
+            if (element == null || !element.isTextual()) throw invalid("sourcePlannedItineraryIds", "Enter valid alternative identifiers.");
+            UUID id;
+            try {
+                id = UUID.fromString(element.asString());
+            } catch (IllegalArgumentException ex) {
+                throw invalid("sourcePlannedItineraryIds", "Enter valid alternative identifiers.");
+            }
+            if (!seen.add(id)) {
+                throw invalid("sourcePlannedItineraryIds", "Duplicate source alternatives are not allowed.");
+            }
+            ids.add(id);
+        }
+        return List.copyOf(ids);
     }
 
     private static ApiException invalid(String field, String message) {

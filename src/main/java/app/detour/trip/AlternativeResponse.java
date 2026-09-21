@@ -16,3 +16,16 @@ record StayComponentResponse(long accommodationUnitId, int unitCount, String pro
 record StayNightResponse(LocalDate date, long basePriceCents, long taxCents, long feeCents) { }
 record RentalComponentResponse(long rentalUnitId, OffsetDateTime pickupAt, OffsetDateTime returnAt, String locationName,
         String vehicleClassName, String unitIdentifier, long dailyBasePriceCents, long dailyTaxCents, long dailyFeeCents) { }
+
+record RevisionSummaryResponse(List<ComponentRemovalResponse> removals, List<ComponentAdjustmentResponse> adjustments) {
+    public RevisionSummaryResponse {
+        removals = removals == null ? List.of() : List.copyOf(removals);
+        adjustments = adjustments == null ? List.of() : List.copyOf(adjustments);
+    }
+}
+
+record ComponentRemovalResponse(UUID draftId, String component, String reason) { }
+
+record ComponentAdjustmentResponse(UUID draftId, String component, String changeType,
+        Integer previousUnitCount, Integer newUnitCount, Long previousPriceCents, Long newPriceCents,
+        String reason) { }

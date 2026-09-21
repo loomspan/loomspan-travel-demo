@@ -630,6 +630,376 @@ class TripApiIntegrationTest {
         assertEquals(initialOccupancyCount, count("rental_unit_occupancy"));
     }
 
+    @Test
+    void rejectsInPlaceTravelDetailEditsWhenPlannedAlternativesExist() throws Exception {
+        Client owner = register("immutable-planned-test@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"),
+                validRequest("\"travelerAges\":[25,30],\"budgetCents\":50000"))
+                .andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(created, "id");
+        String draftId = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(created.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
+
+        insertSfoAirfareSelection(draftId);
+
+        owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated());
+
+        owner.unsafe(put("/api/trips/{tripId}", tripId),
+                "{\"expectedVersion\":1,\"destinationKey\":\"destination-muc\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("IMMUTABLE_TRIP"));
+    }
+
+    @Test
+    void budgetOnlyUpdatePreservesPlannedSnapshotsAndEnforcesConcurrency() throws Exception {
+        Client owner = register("budget-concurrency-test@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"),
+                validRequest("\"travelerAges\":[25,30],\"budgetCents\":50000"))
+                .andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(created, "id");
+        String draftId = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(created.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
+
+        insertSfoAirfareSelection(draftId);
+        insertSfoStaySelection(draftId);
+        insertSfoRentalSelection(draftId);
+
+        owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated());
+
+        // Stale expectedVersion returns 409 VERSION_CONFLICT
+        owner.unsafe(put("/api/trips/{tripId}", tripId),
+                "{\"expectedVersion\":0,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":75000}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"))
+                .andExpect(jsonPath("$.fields.currentVersion").value(1));
+
+        // In-place budget update succeeds
+        owner.unsafe(put("/api/trips/{tripId}", tripId),
+                "{\"expectedVersion\":1,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":75000}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.budgetCents").value(75000))
+                .andExpect(jsonPath("$.planned.length()").value(1))
+                .andExpect(jsonPath("$.planned[0].selections.airfare").exists())
+                .andExpect(jsonPath("$.planned[0].selections.stay").exists())
+                .andExpect(jsonPath("$.planned[0].selections.rental").exists());
+
+        // Budget update with 0 cents
+        owner.unsafe(put("/api/trips/{tripId}", tripId),
+                "{\"expectedVersion\":2,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":0}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(3))
+                .andExpect(jsonPath("$.budgetCents").value(0));
+
+        // Budget update with null budget
+        owner.unsafe(put("/api/trips/{tripId}", tripId),
+                "{\"expectedVersion\":3,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":null}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(4))
+                .andExpect(jsonPath("$.budgetCents").doesNotExist());
+    }
+
+    @Test
+    void inPlaceTravelerEditRevalidatesCapacityRoomCountAndEligibility() throws Exception {
+        Client owner = register("traveler-edit-revalidate@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"),
+                validRequest("\"travelerAges\":[25,30],\"budgetCents\":50000"))
+                .andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(created, "id");
+        String draftId = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(created.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
+
+        // Harbor hotel has room capacity = 2, inventory capacity = 6
+        insertSfoHarborStaySelection(draftId);
+        insertSfoRentalSelection(draftId);
+
+        // Update travelerCount to 3, travelerAges to [12, 14, 16] (no adult >= 25)
+        owner.unsafe(put("/api/trips/{tripId}", tripId),
+                "{\"expectedVersion\":0,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":3,\"travelerAges\":[12,14,16],\"budgetCents\":50000}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(1))
+                .andExpect(jsonPath("$.travelerCount").value(3))
+                .andExpect(jsonPath("$.revisionSummary.removals.length()").value(1))
+                .andExpect(jsonPath("$.revisionSummary.removals[0].component").value("rental"))
+                .andExpect(jsonPath("$.revisionSummary.removals[0].reason").value("Rental cars require at least one driver aged 25 or older."))
+                .andExpect(jsonPath("$.revisionSummary.adjustments.length()").value(1))
+                .andExpect(jsonPath("$.revisionSummary.adjustments[0].component").value("stay"))
+                .andExpect(jsonPath("$.revisionSummary.adjustments[0].previousUnitCount").value(1))
+                .andExpect(jsonPath("$.revisionSummary.adjustments[0].newUnitCount").value(2))
+                .andExpect(jsonPath("$.drafts[0].selections.stay.unitCount").value(2))
+                .andExpect(jsonPath("$.drafts[0].selections.rental").doesNotExist());
+    }
+
+    @Test
+    void inPlaceTravelerIncreaseExceedingFlightCapacityRemovesAirfare() throws Exception {
+        Client owner = register("flight-capacity-test@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"),
+                validRequest("\"travelerAges\":[25,30],\"budgetCents\":50000"))
+                .andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(created, "id");
+        String draftId = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(created.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
+
+        insertSfoAirfareSelection(draftId);
+
+        // Reduce available seats on outbound flight to 2
+        jdbc.update("UPDATE flight_instance SET available_seats = 2 WHERE id = (SELECT outbound_flight_instance_id FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?))", UUID.fromString(draftId));
+
+        // Update traveler count to 3
+        owner.unsafe(put("/api/trips/{tripId}", tripId),
+                "{\"expectedVersion\":0,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":3,\"travelerAges\":[25,30,35],\"budgetCents\":50000}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.travelerCount").value(3))
+                .andExpect(jsonPath("$.revisionSummary.removals.length()").value(1))
+                .andExpect(jsonPath("$.revisionSummary.removals[0].component").value("airfare"))
+                .andExpect(jsonPath("$.revisionSummary.removals[0].reason").value("Flight seat capacity is insufficient for 3 travelers."))
+                .andExpect(jsonPath("$.drafts[0].selections.airfare").doesNotExist());
+    }
+
+    @Test
+    void inPlaceDestinationAndDateEditRemovesIncompatibleComponents() throws Exception {
+        Client owner = register("dest-date-edit-revalidate@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"),
+                validRequest("\"travelerAges\":[25,30],\"budgetCents\":50000"))
+                .andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(created, "id");
+        String draftId = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(created.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
+
+        insertSfoAirfareSelection(draftId);
+        insertSfoStaySelection(draftId);
+        insertSfoRentalSelection(draftId);
+
+        // Change destination to Munich (destination-muc)
+        owner.unsafe(put("/api/trips/{tripId}", tripId),
+                "{\"expectedVersion\":0,\"destinationKey\":\"destination-muc\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.destinationKey").value("destination-muc"))
+                .andExpect(jsonPath("$.revisionSummary.removals.length()").value(3))
+                .andExpect(jsonPath("$.drafts[0].selections.airfare").doesNotExist())
+                .andExpect(jsonPath("$.drafts[0].selections.stay").doesNotExist())
+                .andExpect(jsonPath("$.drafts[0].selections.rental").doesNotExist());
+
+        // Verify DB selection tables have no rows for this draft
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)", Integer.class, UUID.fromString(draftId)));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft_stay_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)", Integer.class, UUID.fromString(draftId)));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft_rental_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)", Integer.class, UUID.fromString(draftId)));
+    }
+
+    @Test
+    void selectivelyDuplicatesActiveTripFromPlannedSourcesIntoNewDrafts() throws Exception {
+        Client owner = register("selective-dup-success@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"),
+                validRequest("\"travelerAges\":[25,30],\"budgetCents\":50000"))
+                .andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(created, "id");
+        String draft1Id = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(created.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
+
+        insertSfoAirfareSelection(draft1Id);
+        insertSfoStaySelection(draft1Id);
+
+        // Plan draft 1 -> trip version becomes 1, planned 1 exists
+        owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draft1Id),
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated());
+
+        // Create draft 2 -> trip version becomes 2
+        MvcResult draft2Result = owner.unsafe(post("/api/trips/{tripId}/drafts", tripId),
+                "{\"expectedVersion\":1}").andExpect(status().isCreated()).andReturn();
+        String draft2Id = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(draft2Result.getResponse().getContentAsString()).get("drafts").get(1).get("id").asString();
+
+        insertSfoStaySelection(draft2Id);
+        insertSfoRentalSelection(draft2Id);
+
+        // Plan draft 2 -> trip version becomes 3, planned 2 exists
+        MvcResult plan2Result = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draft2Id),
+                "{\"expectedVersion\":2,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated()).andReturn();
+
+        var plannedList = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(plan2Result.getResponse().getContentAsString()).get("planned");
+        String planned1Id = plannedList.get(0).get("id").asString();
+        String planned2Id = plannedList.get(1).get("id").asString();
+
+        // Duplicate active trip from both planned snapshots
+        MvcResult duplicated = owner.unsafe(post("/api/trips/{tripId}/duplicate", tripId),
+                "{\"expectedVersion\":3,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":80000,\"sourcePlannedItineraryIds\":[\"" + planned1Id + "\",\"" + planned2Id + "\"]}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.version").value(0))
+                .andExpect(jsonPath("$.budgetCents").value(80000))
+                .andExpect(jsonPath("$.drafts.length()").value(2))
+                .andExpect(jsonPath("$.planned.length()").value(0))
+                .andExpect(jsonPath("$.alternatives.length()").value(2))
+                .andReturn();
+
+        String newTripId = jsonField(duplicated, "id");
+        org.junit.jupiter.api.Assertions.assertNotEquals(tripId, newTripId);
+
+        // Verify source Trip is completely unchanged
+        owner.unsafe(get("/api/trips/{tripId}", tripId), null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(3))
+                .andExpect(jsonPath("$.planned.length()").value(2))
+                .andExpect(jsonPath("$.budgetCents").value(50000));
+    }
+
+    @Test
+    void selectiveDuplicationPrunesIncompatibleComponentsWithStructuredSummary() throws Exception {
+        Client owner = register("selective-dup-prune@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"),
+                validRequest("\"travelerAges\":[25,30],\"budgetCents\":50000"))
+                .andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(created, "id");
+        String draftId = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(created.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
+
+        insertSfoAirfareSelection(draftId);
+        insertSfoStaySelection(draftId);
+        insertSfoRentalSelection(draftId);
+
+        MvcResult plannedResult = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated()).andReturn();
+        String plannedId = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(plannedResult.getResponse().getContentAsString()).get("planned").get(0).get("id").asString();
+
+        // Duplicate with destinationKey: "destination-muc" using the revisions alias
+        owner.unsafe(post("/api/trips/{tripId}/revisions", tripId),
+                "{\"expectedVersion\":1,\"destinationKey\":\"destination-muc\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000,\"sourcePlannedItineraryIds\":[\"" + plannedId + "\"]}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.destinationKey").value("destination-muc"))
+                .andExpect(jsonPath("$.drafts.length()").value(1))
+                .andExpect(jsonPath("$.revisionSummary.removals.length()").value(3))
+                .andExpect(jsonPath("$.drafts[0].selections.airfare").doesNotExist())
+                .andExpect(jsonPath("$.drafts[0].selections.stay").doesNotExist())
+                .andExpect(jsonPath("$.drafts[0].selections.rental").doesNotExist());
+    }
+
+    @Test
+    void selectiveDuplicationRejectsInvalidOrUnauthorizedSourcesWithoutDisclosure() throws Exception {
+        Client userA = register("user-a-dup@example.test");
+        Client userB = register("user-b-dup@example.test");
+
+        // User A creates Trip 1 with Planned itinerary
+        MvcResult tripA1 = userA.unsafe(post("/api/trips"),
+                validRequest("\"travelerAges\":[25,30],\"budgetCents\":50000"))
+                .andExpect(status().isCreated()).andReturn();
+        String tripA1Id = jsonField(tripA1, "id");
+        String draftA1Id = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(tripA1.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
+        insertSfoAirfareSelection(draftA1Id);
+        MvcResult planA1Result = userA.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripA1Id, draftA1Id),
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}").andExpect(status().isCreated()).andReturn();
+        String plannedA1Id = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(planA1Result.getResponse().getContentAsString()).get("planned").get(0).get("id").asString();
+
+        // User A creates Trip 2 with Planned itinerary
+        MvcResult tripA2 = userA.unsafe(post("/api/trips"),
+                validRequest("\"travelerAges\":[25,30],\"budgetCents\":50000"))
+                .andExpect(status().isCreated()).andReturn();
+        String tripA2Id = jsonField(tripA2, "id");
+        String draftA2Id = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(tripA2.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
+        insertSfoAirfareSelection(draftA2Id);
+        MvcResult planA2Result = userA.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripA2Id, draftA2Id),
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}").andExpect(status().isCreated()).andReturn();
+        String plannedA2Id = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(planA2Result.getResponse().getContentAsString()).get("planned").get(0).get("id").asString();
+
+        int initialTripCount = count("detour_trip");
+
+        // 1. Empty source list -> 400 VALIDATION_FAILED
+        userA.unsafe(post("/api/trips/{tripId}/duplicate", tripA1Id),
+                "{\"expectedVersion\":1,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"sourcePlannedItineraryIds\":[]}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.fields.sourcePlannedItineraryIds").value("Select at least one Planned alternative to copy."));
+
+        // 2. Duplicate source IDs -> 400 VALIDATION_FAILED
+        userA.unsafe(post("/api/trips/{tripId}/duplicate", tripA1Id),
+                "{\"expectedVersion\":1,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"sourcePlannedItineraryIds\":[\"" + plannedA1Id + "\",\"" + plannedA1Id + "\"]}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.fields.sourcePlannedItineraryIds").value("Duplicate source alternatives are not allowed."));
+
+        // 3. Draft ID passed instead of Planned ID -> 404 RESOURCE_NOT_FOUND
+        MvcResult newDraftResult = userA.unsafe(post("/api/trips/{tripId}/drafts", tripA1Id), "{\"expectedVersion\":1}").andExpect(status().isCreated()).andReturn();
+        String newDraftId = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(newDraftResult.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
+        userA.unsafe(post("/api/trips/{tripId}/duplicate", tripA1Id),
+                "{\"expectedVersion\":2,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"sourcePlannedItineraryIds\":[\"" + newDraftId + "\"]}")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+
+        // 4. Cross-trip Planned ID (from Trip A2 passed to Trip A1) -> 404 RESOURCE_NOT_FOUND
+        userA.unsafe(post("/api/trips/{tripId}/duplicate", tripA1Id),
+                "{\"expectedVersion\":2,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"sourcePlannedItineraryIds\":[\"" + plannedA2Id + "\"]}")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+
+        // 5. Foreign user's Planned ID (User B attempts to duplicate User A's planned ID) -> 404
+        MvcResult tripB = userB.unsafe(post("/api/trips"),
+                validRequest("\"travelerAges\":[25,30],\"budgetCents\":50000"))
+                .andExpect(status().isCreated()).andReturn();
+        String tripBId = jsonField(tripB, "id");
+        userB.unsafe(post("/api/trips/{tripId}/duplicate", tripBId),
+                "{\"expectedVersion\":0,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"sourcePlannedItineraryIds\":[\"" + plannedA1Id + "\"]}")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+
+        // 6. Random non-existent UUID -> identical 404 response structure (nondisclosure)
+        userB.unsafe(post("/api/trips/{tripId}/duplicate", tripBId),
+                "{\"expectedVersion\":0,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"sourcePlannedItineraryIds\":[\"" + UUID.randomUUID() + "\"]}")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+
+        // Assert atomicity: no partial trip created in DB from any failed attempt
+        assertEquals(initialTripCount + 1, count("detour_trip"));
+    }
+
+    @Test
+    void selectiveDuplicationEnforcesOptimisticConcurrency() throws Exception {
+        Client owner = register("concurrency-dup@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"),
+                validRequest("\"travelerAges\":[25,30],\"budgetCents\":50000"))
+                .andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(created, "id");
+        String draftId = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(created.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
+
+        insertSfoAirfareSelection(draftId);
+        MvcResult planResult = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}").andExpect(status().isCreated()).andReturn();
+        String plannedId = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(planResult.getResponse().getContentAsString()).get("planned").get(0).get("id").asString();
+
+        int tripCountBefore = count("detour_trip");
+
+        // Stale expectedVersion: 0 (current version is 1)
+        owner.unsafe(post("/api/trips/{tripId}/duplicate", tripId),
+                "{\"expectedVersion\":0,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"sourcePlannedItineraryIds\":[\"" + plannedId + "\"]}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"))
+                .andExpect(jsonPath("$.fields.currentVersion").value(1));
+
+        // No new trip created
+        assertEquals(tripCountBefore, count("detour_trip"));
+    }
+
+    private void insertSfoHarborStaySelection(String draftId) {
+        jdbc.update("""
+                INSERT INTO detour_trip_draft_stay_selection (draft_id, accommodation_unit_id, unit_count)
+                VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
+                    (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-harbor'), 1)
+                """, UUID.fromString(draftId));
+    }
+
     private void insertSfoAirfareSelection(String draftId) {
         jdbc.update("""
                 INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id)

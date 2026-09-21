@@ -4,6 +4,7 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,6 +28,12 @@ class JdbcTripRepository implements TripRepository {
 
     @Override public void createAggregate(long ownerUserId, UUID tripPublicId, Destination destination, LocalDate startDate,
             LocalDate endDate, int travelerCount, List<Integer> travelerAges, Long budgetCents, String label, UUID draftPublicId) {
+        createAggregateWithDrafts(ownerUserId, tripPublicId, destination, startDate, endDate, travelerCount, travelerAges, budgetCents, label,
+                List.of(new DraftCreationSpec(draftPublicId, new DraftSelections(null, null, null))));
+    }
+
+    @Override public void createAggregateWithDrafts(long ownerUserId, UUID tripPublicId, Destination destination, LocalDate startDate,
+            LocalDate endDate, int travelerCount, List<Integer> travelerAges, Long budgetCents, String label, List<DraftCreationSpec> drafts) {
         KeyHolder keys = new GeneratedKeyHolder();
         jdbc.update(c -> {
             PreparedStatement s = c.prepareStatement("""
@@ -39,7 +46,9 @@ class JdbcTripRepository implements TripRepository {
         if (key == null) throw new IllegalStateException("Trip insert did not return a key");
         long tripId = key.longValue();
         for (int ordinal = 0; ordinal < travelerCount; ordinal++) jdbc.update("INSERT INTO detour_trip_traveler (trip_id, traveler_ordinal, age) VALUES (?, ?, ?)", tripId, ordinal + 1, travelerAges.get(ordinal));
-        insertDraft(tripId, draftPublicId);
+        for (DraftCreationSpec spec : drafts) {
+            insertDraftCopy(tripId, spec.draftPublicId(), spec.selections());
+        }
     }
 
     @Override public Optional<Trip> findByPublicIdAndOwnerUserId(UUID publicId, long ownerUserId) {
@@ -140,4 +149,209 @@ class JdbcTripRepository implements TripRepository {
             FROM rental_unit unit JOIN rental_vehicle_class class ON class.id=unit.rental_vehicle_class_id JOIN rental_location location ON location.id=class.rental_location_id
             WHERE unit.id=? AND location.destination_id=? AND CAST(? AS DATE) >= ? AND CAST(? AS DATE) <= ?""",
             (r,n)->new RentalSelection(r.getLong(1),selected.pickupAt(),selected.returnAt(),r.getString(2),r.getString(3),r.getString(4),r.getLong(5),r.getLong(6),r.getLong(7)),selected.rentalUnitId(),trip.destination().id(),selected.pickupAt(),trip.startDate(),selected.returnAt(),trip.endDate()).stream().findFirst().orElse(null); }
+    @Override public void deleteDraftAirfareSelection(long draftId) {
+        jdbc.update("DELETE FROM detour_trip_draft_airfare_selection WHERE draft_id = ?", draftId);
+    }
+    @Override public void deleteDraftStaySelection(long draftId) {
+        jdbc.update("DELETE FROM detour_trip_draft_stay_selection WHERE draft_id = ?", draftId);
+    }
+    @Override public void deleteDraftRentalSelection(long draftId) {
+        jdbc.update("DELETE FROM detour_trip_draft_rental_selection WHERE draft_id = ?", draftId);
+    }
+    @Override public void updateDraftStayUnitCount(long draftId, int unitCount) {
+        jdbc.update("UPDATE detour_trip_draft_stay_selection SET unit_count = ? WHERE draft_id = ?", unitCount, draftId);
+    }
+
+    @Override
+    public AirfareRevalidation revalidateAirfare(long destinationId, LocalDate startDate, LocalDate endDate,
+            int newTravelerCount, int oldTravelerCount, AirfareSelection selection, UUID draftPublicId) {
+        if (selection == null) return new AirfareRevalidation(false, null, null, null);
+        List<AirfareFlightData> rows = jdbc.query("""
+                SELECT out_i.id, in_i.id,
+                       out_i.service_date AS out_date, out_i.available_seats AS out_seats,
+                       out_i.base_fare_cents + out_i.tax_cents + out_i.fee_cents AS out_total,
+                       in_i.service_date AS in_date, in_i.available_seats AS in_seats,
+                       in_i.base_fare_cents + in_i.tax_cents + in_i.fee_cents AS in_total,
+                       out_orig.iata_code AS out_orig_iata, out_dest.destination_id AS out_dest_dest_id,
+                       in_orig.destination_id AS in_orig_dest_id, in_dest.iata_code AS in_dest_iata
+                FROM flight_instance out_i
+                JOIN flight_schedule out_s ON out_s.id = out_i.flight_schedule_id
+                JOIN catalog_airport out_orig ON out_orig.id = out_s.origin_airport_id
+                JOIN catalog_airport out_dest ON out_dest.id = out_s.destination_airport_id
+                JOIN flight_instance in_i ON in_i.id = ?
+                JOIN flight_schedule in_s ON in_s.id = in_i.flight_schedule_id
+                JOIN catalog_airport in_orig ON in_orig.id = in_s.origin_airport_id
+                JOIN catalog_airport in_dest ON in_dest.id = in_s.destination_airport_id
+                WHERE out_i.id = ?""",
+                (r, n) -> new AirfareFlightData(
+                        r.getObject("out_date", LocalDate.class), r.getInt("out_seats"), r.getLong("out_total"),
+                        r.getObject("in_date", LocalDate.class), r.getInt("in_seats"), r.getLong("in_total"),
+                        r.getString("out_orig_iata"), r.getLong("out_dest_dest_id"),
+                        r.getLong("in_orig_dest_id"), r.getString("in_dest_iata")),
+                selection.returnFlightInstanceId(), selection.outboundFlightInstanceId());
+
+        if (rows.isEmpty()) {
+            return new AirfareRevalidation(false, null,
+                    new ComponentRemovalResponse(draftPublicId, "airfare", "Flights do not match revised destination or dates."), null);
+        }
+        AirfareFlightData data = rows.get(0);
+        boolean routeAndDatesMatch = "PDX".equals(data.outOrigIata()) && data.outDestDestId() == destinationId
+                && startDate.equals(data.outDate())
+                && data.inOrigDestId() == destinationId && "PDX".equals(data.inDestIata())
+                && endDate.equals(data.inDate());
+
+        if (!routeAndDatesMatch) {
+            return new AirfareRevalidation(false, null,
+                    new ComponentRemovalResponse(draftPublicId, "airfare", "Flights do not match revised destination or dates."), null);
+        }
+
+        if (data.outSeats() < newTravelerCount || data.inSeats() < newTravelerCount) {
+            return new AirfareRevalidation(false, null,
+                    new ComponentRemovalResponse(draftPublicId, "airfare", "Flight seat capacity is insufficient for " + newTravelerCount + " travelers."), null);
+        }
+
+        long flightPerSeat = data.outTotal() + data.inTotal();
+        long oldPrice = (long) oldTravelerCount * flightPerSeat;
+        long newPrice = (long) newTravelerCount * flightPerSeat;
+        ComponentAdjustmentResponse adjustment = null;
+        if (oldPrice != newPrice) {
+            adjustment = new ComponentAdjustmentResponse(draftPublicId, "airfare", "PRICE", null, null, oldPrice, newPrice,
+                    "Airfare repriced for " + newTravelerCount + " travelers.");
+        }
+        return new AirfareRevalidation(true, selection, null, adjustment);
+    }
+
+    @Override
+    public StayRevalidation revalidateStay(long destinationId, LocalDate startDate, LocalDate endDate,
+            LocalDate oldStartDate, LocalDate oldEndDate, int newTravelerCount, int oldTravelerCount,
+            StaySelection selection, UUID draftPublicId) {
+        if (selection == null) return new StayRevalidation(false, 0, null, null);
+        List<StayUnitData> unitRows = jdbc.query("""
+                SELECT unit.id, unit.unit_kind, unit.guest_capacity, unit.inventory_capacity, property.destination_id
+                FROM accommodation_unit unit
+                JOIN accommodation_property property ON property.id = unit.accommodation_property_id
+                WHERE unit.id = ?""",
+                (r, n) -> new StayUnitData(r.getLong("id"), r.getString("unit_kind"), r.getInt("guest_capacity"),
+                        r.getInt("inventory_capacity"), r.getLong("destination_id")),
+                selection.accommodationUnitId());
+
+        if (unitRows.isEmpty()) {
+            return new StayRevalidation(false, 0,
+                    new ComponentRemovalResponse(draftPublicId, "stay", "Accommodation does not match revised destination."), null);
+        }
+        StayUnitData unit = unitRows.get(0);
+        if (unit.destinationId() != destinationId) {
+            return new StayRevalidation(false, 0,
+                    new ComponentRemovalResponse(draftPublicId, "stay", "Accommodation does not match revised destination."), null);
+        }
+
+        long requiredNights = ChronoUnit.DAYS.between(startDate, endDate);
+        List<StayNightData> nights = jdbc.query("""
+                SELECT night_date, available_inventory, base_price_cents + tax_cents + fee_cents AS night_total
+                FROM accommodation_nightly_inventory
+                WHERE accommodation_unit_id = ? AND night_date >= ? AND night_date < ?
+                ORDER BY night_date""",
+                (r, n) -> new StayNightData(r.getObject("night_date", LocalDate.class), r.getInt("available_inventory"), r.getLong("night_total")),
+                selection.accommodationUnitId(), startDate, endDate);
+
+        if (nights.size() != requiredNights) {
+            return new StayRevalidation(false, 0,
+                    new ComponentRemovalResponse(draftPublicId, "stay", "Accommodation has no inventory for revised dates."), null);
+        }
+
+        int minAvailable = nights.stream().mapToInt(StayNightData::availableInventory).min().orElse(0);
+        int requiredRooms;
+        if ("WHOLE_PROPERTY".equals(unit.unitKind())) {
+            if (newTravelerCount > unit.guestCapacity()) {
+                return new StayRevalidation(false, 0,
+                        new ComponentRemovalResponse(draftPublicId, "stay", "Traveler count exceeds whole-property capacity (" + unit.guestCapacity() + ")."), null);
+            }
+            if (minAvailable < 1) {
+                return new StayRevalidation(false, 0,
+                        new ComponentRemovalResponse(draftPublicId, "stay", "Accommodation has insufficient inventory for revised dates."), null);
+            }
+            requiredRooms = 1;
+        } else {
+            requiredRooms = (int) Math.ceil((double) newTravelerCount / unit.guestCapacity());
+            if (minAvailable < requiredRooms) {
+                return new StayRevalidation(false, 0,
+                        new ComponentRemovalResponse(draftPublicId, "stay", "Insufficient room inventory (" + minAvailable + " available, " + requiredRooms + " required) for " + newTravelerCount + " travelers."), null);
+            }
+        }
+
+        long newNightlySum = nights.stream().mapToLong(StayNightData::nightTotal).sum();
+        long newPrice = (long) requiredRooms * newNightlySum;
+
+        long oldPrice;
+        if (selection.nights() != null && !selection.nights().isEmpty()) {
+            oldPrice = (long) selection.unitCount() * selection.nights().stream().mapToLong(n -> n.basePriceCents() + n.taxCents() + n.feeCents()).sum();
+        } else if (oldStartDate != null && oldEndDate != null) {
+            Long oldSum = jdbc.queryForObject("""
+                    SELECT COALESCE(SUM(base_price_cents + tax_cents + fee_cents), 0)
+                    FROM accommodation_nightly_inventory
+                    WHERE accommodation_unit_id = ? AND night_date >= ? AND night_date < ?""",
+                    Long.class, selection.accommodationUnitId(), oldStartDate, oldEndDate);
+            oldPrice = (long) selection.unitCount() * (oldSum == null ? 0L : oldSum);
+        } else {
+            oldPrice = newPrice;
+        }
+
+        ComponentAdjustmentResponse adjustment = null;
+        if (requiredRooms != selection.unitCount()) {
+            adjustment = new ComponentAdjustmentResponse(draftPublicId, "stay", "ROOM_COUNT_AND_PRICE",
+                    selection.unitCount(), requiredRooms, oldPrice, newPrice,
+                    "Adjusted to " + requiredRooms + " rooms for " + newTravelerCount + " travelers.");
+        } else if (oldPrice != newPrice) {
+            adjustment = new ComponentAdjustmentResponse(draftPublicId, "stay", "PRICE",
+                    selection.unitCount(), requiredRooms, oldPrice, newPrice, "Stay repriced for revised dates.");
+        }
+
+        return new StayRevalidation(true, requiredRooms, null, adjustment);
+    }
+
+    @Override
+    public RentalRevalidation revalidateRental(long destinationId, LocalDate startDate, LocalDate endDate,
+            List<Integer> ages, RentalSelection selection, UUID draftPublicId) {
+        if (selection == null) return new RentalRevalidation(false, null, null, null);
+        List<RentalUnitData> unitRows = jdbc.query("""
+                SELECT unit.id, location.destination_id, class.catalog_key,
+                       class.daily_base_price_cents + class.daily_tax_cents + class.daily_fee_cents AS daily_total
+                FROM rental_unit unit
+                JOIN rental_vehicle_class class ON class.id = unit.rental_vehicle_class_id
+                JOIN rental_location location ON location.id = class.rental_location_id
+                WHERE unit.id = ?""",
+                (r, n) -> new RentalUnitData(r.getLong("id"), r.getLong("destination_id"), r.getString("catalog_key"),
+                        r.getLong("daily_total")),
+                selection.rentalUnitId());
+
+        if (unitRows.isEmpty()) {
+            return new RentalRevalidation(false, null,
+                    new ComponentRemovalResponse(draftPublicId, "rental", "Rental location does not match revised destination."), null);
+        }
+        RentalUnitData unit = unitRows.get(0);
+        if (unit.destinationId() != destinationId) {
+            return new RentalRevalidation(false, null,
+                    new ComponentRemovalResponse(draftPublicId, "rental", "Rental location does not match revised destination."), null);
+        }
+
+        LocalDate pickupDate = selection.pickupAt().toLocalDate();
+        LocalDate returnDate = selection.returnAt().toLocalDate();
+        if (pickupDate.isBefore(startDate) || returnDate.isAfter(endDate) || !selection.pickupAt().isBefore(selection.returnAt())) {
+            return new RentalRevalidation(false, null,
+                    new ComponentRemovalResponse(draftPublicId, "rental", "Rental dates fall outside revised trip dates."), null);
+        }
+
+        boolean hasDriver = ages != null && ages.stream().anyMatch(age -> age != null && age >= 25);
+        if (!hasDriver) {
+            return new RentalRevalidation(false, null,
+                    new ComponentRemovalResponse(draftPublicId, "rental", "Rental cars require at least one driver aged 25 or older."), null);
+        }
+
+        return new RentalRevalidation(true, selection, null, null);
+    }
+
+    private record AirfareFlightData(LocalDate outDate, int outSeats, long outTotal, LocalDate inDate, int inSeats, long inTotal, String outOrigIata, long outDestDestId, long inOrigDestId, String inDestIata) { }
+    private record StayUnitData(long id, String unitKind, int guestCapacity, int inventoryCapacity, long destinationId) { }
+    private record StayNightData(LocalDate date, int availableInventory, long nightTotal) { }
+    private record RentalUnitData(long id, long destinationId, String catalogKey, long dailyTotal) { }
 }

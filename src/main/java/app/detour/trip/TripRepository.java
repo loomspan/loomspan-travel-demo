@@ -32,6 +32,33 @@ interface TripRepository {
 
     void deletePlanned(long tripId, long plannedId);
 
+    void createAggregateWithDrafts(long ownerUserId, UUID tripPublicId, Destination destination, LocalDate startDate,
+            LocalDate endDate, int travelerCount, List<Integer> travelerAges, Long budgetCents, String label,
+            List<DraftCreationSpec> drafts);
+
+    void deleteDraftAirfareSelection(long draftId);
+
+    void deleteDraftStaySelection(long draftId);
+
+    void deleteDraftRentalSelection(long draftId);
+
+    void updateDraftStayUnitCount(long draftId, int unitCount);
+
+    AirfareRevalidation revalidateAirfare(long destinationId, LocalDate startDate, LocalDate endDate,
+            int newTravelerCount, int oldTravelerCount, AirfareSelection selection, UUID draftPublicId);
+
+    StayRevalidation revalidateStay(long destinationId, LocalDate startDate, LocalDate endDate,
+            LocalDate oldStartDate, LocalDate oldEndDate, int newTravelerCount, int oldTravelerCount,
+            StaySelection selection, UUID draftPublicId);
+
+    RentalRevalidation revalidateRental(long destinationId, LocalDate startDate, LocalDate endDate,
+            List<Integer> ages, RentalSelection selection, UUID draftPublicId);
+
     /** Returns only components structurally consistent with the supplied Trip. */
     DraftSelections resolveSelectionsForPromotion(Trip trip, TripDraft draft);
+
+    record DraftCreationSpec(UUID draftPublicId, DraftSelections selections) { }
+    record AirfareRevalidation(boolean valid, AirfareSelection retained, ComponentRemovalResponse removal, ComponentAdjustmentResponse adjustment) { }
+    record StayRevalidation(boolean valid, int newUnitCount, ComponentRemovalResponse removal, ComponentAdjustmentResponse adjustment) { }
+    record RentalRevalidation(boolean valid, RentalSelection retained, ComponentRemovalResponse removal, ComponentAdjustmentResponse adjustment) { }
 }

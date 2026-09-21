@@ -17,14 +17,14 @@ Changing destination, dates, or travelers never silently corrupts an alternative
 
 ## Acceptance criteria
 
-- [ ] Pre-Planned traveler edits retain still-valid Draft selections, remove invalid ones, and report every resulting price, room-count, eligibility, capacity, and selection change with specific reasons.
-- [ ] Pre-Planned destination/date edits remove incompatible components and report each removal; no incompatible reference or stale displayed total remains.
-- [ ] Once any Planned snapshot exists, an in-place destination/date/traveler edit is rejected and the revision workflow creates a separate owned Trip from exactly the selected Planned sources.
-- [ ] Active-Trip selective duplication requires at least one source and produces one Draft per selected Planned snapshot while preserving all source Trips and snapshots unchanged.
-- [ ] Invalid or unauthorized source lists fail atomically without revealing protected alternatives or leaving a partial new Trip.
-- [ ] Budget-only updates change Draft budget presentation without mutating Planned selections, and optimistic conflicts cannot silently overwrite either source or new aggregate state.
-- [ ] Deterministic tests cover supported destination/date/traveler revisions, partial component compatibility, zero versus absent budget, concurrent requests, restart persistence, and two-user isolation.
-- [ ] Draft, Booked, and Canceled Booking records are not copied by the Trip-level operation, and Phase 6 history/cancellation behavior is not implemented here.
+- [x] Pre-Planned traveler edits retain still-valid Draft selections, remove invalid ones, and report every resulting price, room-count, eligibility, capacity, and selection change with specific reasons.
+- [x] Pre-Planned destination/date edits remove incompatible components and report each removal; no incompatible reference or stale displayed total remains.
+- [x] Once any Planned snapshot exists, an in-place destination/date/traveler edit is rejected and the revision workflow creates a separate owned Trip from exactly the selected Planned sources.
+- [x] Active-Trip selective duplication requires at least one source and produces one Draft per selected Planned snapshot while preserving all source Trips and snapshots unchanged.
+- [x] Invalid or unauthorized source lists fail atomically without revealing protected alternatives or leaving a partial new Trip.
+- [x] Budget-only updates change Draft budget presentation without mutating Planned selections, and optimistic conflicts cannot silently overwrite either source or new aggregate state.
+- [x] Deterministic tests cover supported destination/date/traveler revisions, partial component compatibility, zero versus absent budget, concurrent requests, restart persistence, and two-user isolation.
+- [x] Draft, Booked, and Canceled Booking records are not copied by the Trip-level operation, and Phase 6 history/cancellation behavior is not implemented here.
 
 ## Context
 

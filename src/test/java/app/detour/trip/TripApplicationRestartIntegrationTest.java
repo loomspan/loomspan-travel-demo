@@ -101,6 +101,111 @@ class TripApplicationRestartIntegrationTest {
         }
     }
 
+    @Test
+    void persistsSelectiveDuplicationAcrossRestart() throws Exception {
+        String databaseUrl = "jdbc:h2:file:" + temporaryDirectory.resolve("trip-dup-" + UUID.randomUUID()).toAbsolutePath().toString().replace('\\', '/')
+                + ";DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000";
+        String sessionCookie;
+        String originalTripId;
+        String plannedId;
+        String duplicatedTripId;
+        String newDraftId;
+        long copiedFare;
+
+        ConfigurableApplicationContext first = start(databaseUrl);
+        try {
+            URI base = baseUri(first);
+            String csrf = csrfCookie(base);
+            HttpResponse<String> registration = request(base, "POST", "/api/auth/register", csrf,
+                    "{\"email\":\"restart-dup@example.test\",\"password\":\"aaaaaaaaaaaa\"}").send();
+            assertEquals(201, registration.statusCode());
+            sessionCookie = cookie(registration, "JSESSIONID");
+
+            HttpResponse<String> created = request(base, "POST", "/api/trips", sessionCookie + "|" + csrf,
+                    "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").send();
+            assertEquals(201, created.statusCode());
+            var body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(created.body());
+            originalTripId = body.get("id").asString();
+            String draftId = body.get("drafts").get(0).get("id").asString();
+
+            org.springframework.jdbc.core.JdbcTemplate jdbc = first.getBean(org.springframework.jdbc.core.JdbcTemplate.class);
+            jdbc.update("""
+                    INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id)
+                    VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
+                        (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-out-sfo-d1' AND instance.service_date = DATE '2027-03-10'),
+                        (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-in-sfo-d1' AND instance.service_date = DATE '2027-03-14'))
+                    """, UUID.fromString(draftId));
+            jdbc.update("""
+                    INSERT INTO detour_trip_draft_stay_selection (draft_id, accommodation_unit_id, unit_count)
+                    VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
+                        (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit'), 1)
+                    """, UUID.fromString(draftId));
+
+            HttpResponse<String> promoted = request(base, "POST", "/api/trips/" + originalTripId + "/drafts/" + draftId + "/plan", sessionCookie + "|" + csrf,
+                    "{\"expectedVersion\":0,\"expectedDraftVersion\":0}").send();
+            assertEquals(201, promoted.statusCode());
+            var promotedBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(promoted.body());
+            plannedId = promotedBody.get("planned").get(0).get("id").asString();
+            copiedFare = promotedBody.get("planned").get(0).get("selections").get("airfare").get("outboundBaseFareCents").asLong();
+
+            // Selectively duplicate into a new trip
+            HttpResponse<String> duplicated = request(base, "POST", "/api/trips/" + originalTripId + "/duplicate", sessionCookie + "|" + csrf,
+                    "{\"expectedVersion\":1,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":75000,\"sourcePlannedItineraryIds\":[\"" + plannedId + "\"]}").send();
+            assertEquals(201, duplicated.statusCode());
+            var dupBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(duplicated.body());
+            duplicatedTripId = dupBody.get("id").asString();
+            assertEquals(0, dupBody.get("version").asInt());
+            assertEquals(75000, dupBody.get("budgetCents").asLong());
+            assertEquals(1, dupBody.get("drafts").size());
+            assertEquals(0, dupBody.get("planned").size());
+            newDraftId = dupBody.get("drafts").get(0).get("id").asString();
+
+            // Mutate catalog base fare to ensure restart does not reload live catalog
+            jdbc.update("UPDATE flight_instance SET base_fare_cents = base_fare_cents + 15000");
+        } finally {
+            first.close();
+        }
+
+        ConfigurableApplicationContext second = start(databaseUrl);
+        try {
+            URI base = baseUri(second);
+            String csrf = csrfCookie(base);
+            HttpResponse<String> login = request(base, "POST", "/api/auth/login", csrf,
+                    "{\"email\":\"restart-dup@example.test\",\"password\":\"aaaaaaaaaaaa\"}").send();
+            assertEquals(204, login.statusCode());
+            String newSession = cookie(login, "JSESSIONID");
+
+            // Verify duplicated Trip
+            HttpResponse<String> dupDetail = request(base, "GET", "/api/trips/" + duplicatedTripId, newSession, null).send();
+            assertEquals(200, dupDetail.statusCode());
+            var dupBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(dupDetail.body());
+            assertEquals(duplicatedTripId, dupBody.get("id").asString());
+            assertEquals(0, dupBody.get("version").asInt());
+            assertEquals(75000, dupBody.get("budgetCents").asLong());
+            assertEquals(1, dupBody.get("drafts").size());
+            assertEquals(0, dupBody.get("planned").size());
+            assertEquals(newDraftId, dupBody.get("drafts").get(0).get("id").asString());
+            assertEquals(0, dupBody.get("drafts").get(0).get("version").asInt());
+            var draftSelections = dupBody.get("drafts").get(0).get("selections");
+            org.junit.jupiter.api.Assertions.assertTrue(draftSelections.get("airfare").get("outboundFlightInstanceId").asLong() > 0);
+            org.junit.jupiter.api.Assertions.assertTrue(draftSelections.get("airfare").get("returnFlightInstanceId").asLong() > 0);
+            org.junit.jupiter.api.Assertions.assertTrue(draftSelections.get("stay").get("accommodationUnitId").asLong() > 0);
+            assertEquals(1, draftSelections.get("stay").get("unitCount").asInt());
+
+            // Verify original Trip
+            HttpResponse<String> origDetail = request(base, "GET", "/api/trips/" + originalTripId, newSession, null).send();
+            assertEquals(200, origDetail.statusCode());
+            var origBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(origDetail.body());
+            assertEquals(originalTripId, origBody.get("id").asString());
+            assertEquals(1, origBody.get("version").asInt());
+            assertEquals(50000, origBody.get("budgetCents").asLong());
+            assertEquals(1, origBody.get("planned").size());
+            assertEquals(plannedId, origBody.get("planned").get(0).get("id").asString());
+        } finally {
+            second.close();
+        }
+    }
+
     private ConfigurableApplicationContext start(String databaseUrl) {
         return new SpringApplicationBuilder(DetourApplication.class)
                 .run("--server.address=127.0.0.1", "--server.port=0", "--spring.datasource.url=" + databaseUrl);

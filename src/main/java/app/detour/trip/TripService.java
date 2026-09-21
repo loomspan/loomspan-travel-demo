@@ -69,9 +69,66 @@ public class TripService {
         if (travelerCount < 1 || travelerCount > 8) throw validation("travelerCount", "Traveler count must be between 1 and 8.");
         List<Integer> ages = validateAges(request.travelerAges(), travelerCount);
         Long budgetCents = validateBudget(request.budgetCents());
+
+        boolean destinationChanged = !trip.destination().key().equals(destinationKey);
+        boolean datesChanged = !trip.startDate().equals(startDate) || !trip.endDate().equals(endDate);
+        boolean travelersChanged = trip.travelerCount() != travelerCount || !java.util.Objects.equals(trip.travelerAges(), ages);
+
+        if (!trip.planned().isEmpty()) {
+            if (destinationChanged || datesChanged || travelersChanged) {
+                throw new ApiException(409, "IMMUTABLE_TRIP", "Trips with Planned alternatives cannot change destination, dates, or travelers in place. Create a revised trip instead.");
+            }
+            if (!trips.advanceVersion(trip.id(), ownerUserId, request.expectedVersion())) throw parentConflict(ownerUserId, trip.publicId());
+            trips.replaceSharedDetails(trip.id(), destination, startDate, endDate, travelerCount, ages, budgetCents, trip.label());
+            return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+        }
+
         if (!trips.advanceVersion(trip.id(), ownerUserId, request.expectedVersion())) throw parentConflict(ownerUserId, trip.publicId());
         trips.replaceSharedDetails(trip.id(), destination, startDate, endDate, travelerCount, ages, budgetCents, label(destination.name(), startDate, endDate));
-        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+
+        List<ComponentRemovalResponse> removals = new ArrayList<>();
+        List<ComponentAdjustmentResponse> adjustments = new ArrayList<>();
+
+        for (TripDraft draft : trip.drafts()) {
+            DraftSelections selections = draft.selections();
+            if (selections != null) {
+                if (selections.airfare() != null) {
+                    var result = trips.revalidateAirfare(destination.id(), startDate, endDate, travelerCount, trip.travelerCount(), selections.airfare(), draft.publicId());
+                    if (!result.valid()) {
+                        trips.deleteDraftAirfareSelection(draft.id());
+                        if (result.removal() != null) removals.add(result.removal());
+                    } else if (result.adjustment() != null) {
+                        adjustments.add(result.adjustment());
+                    }
+                }
+                if (selections.stay() != null) {
+                    var result = trips.revalidateStay(destination.id(), startDate, endDate, trip.startDate(), trip.endDate(), travelerCount, trip.travelerCount(), selections.stay(), draft.publicId());
+                    if (!result.valid()) {
+                        trips.deleteDraftStaySelection(draft.id());
+                        if (result.removal() != null) removals.add(result.removal());
+                    } else {
+                        if (result.newUnitCount() != selections.stay().unitCount()) {
+                            trips.updateDraftStayUnitCount(draft.id(), result.newUnitCount());
+                        }
+                        if (result.adjustment() != null) {
+                            adjustments.add(result.adjustment());
+                        }
+                    }
+                }
+                if (selections.rental() != null) {
+                    var result = trips.revalidateRental(destination.id(), startDate, endDate, ages, selections.rental(), draft.publicId());
+                    if (!result.valid()) {
+                        trips.deleteDraftRentalSelection(draft.id());
+                        if (result.removal() != null) removals.add(result.removal());
+                    } else if (result.adjustment() != null) {
+                        adjustments.add(result.adjustment());
+                    }
+                }
+            }
+        }
+
+        RevisionSummaryResponse summary = new RevisionSummaryResponse(removals, adjustments);
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow(), summary);
     }
 
     @Transactional
@@ -159,6 +216,97 @@ public class TripService {
         return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
     }
 
+    @Transactional
+    public TripResponse duplicateTrip(long ownerUserId, String tripId, TripRequests.TripRevision request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip sourceTrip = ownedTrip(ownerUserId, tripId);
+        if (sourceTrip.version() != request.expectedVersion()) {
+            throw parentConflict(ownerUserId, sourceTrip.publicId());
+        }
+
+        String destinationKey = required(request.destinationKey(), "destinationKey");
+        Destination destination = trips.findSupportedDestination(destinationKey)
+                .orElseThrow(() -> validation("destinationKey", "Choose a supported destination."));
+        LocalDate startDate = required(request.startDate(), "startDate");
+        LocalDate endDate = required(request.endDate(), "endDate");
+        validateDates(startDate, endDate);
+        int travelerCount = required(request.travelerCount(), "travelerCount");
+        if (travelerCount < 1 || travelerCount > 8) throw validation("travelerCount", "Traveler count must be between 1 and 8.");
+        List<Integer> ages = validateAges(request.travelerAges(), travelerCount);
+        Long budgetCents = validateBudget(request.budgetCents());
+
+        List<UUID> sourceIds = request.sourcePlannedItineraryIds();
+        List<PlannedItinerary> selectedPlanned = new ArrayList<>();
+        for (UUID sourceId : sourceIds) {
+            PlannedItinerary planned = sourceTrip.planned().stream()
+                    .filter(candidate -> candidate.publicId().equals(sourceId))
+                    .findFirst()
+                    .orElseThrow(this::notFound);
+            selectedPlanned.add(planned);
+        }
+
+        List<ComponentRemovalResponse> removals = new ArrayList<>();
+        List<ComponentAdjustmentResponse> adjustments = new ArrayList<>();
+        List<TripRepository.DraftCreationSpec> draftsToCreate = new ArrayList<>();
+
+        for (PlannedItinerary plannedSource : selectedPlanned) {
+            UUID newDraftPublicId = UUID.randomUUID();
+            DraftSelections sourceSelections = plannedSource.selections();
+            AirfareSelection retainedAirfare = null;
+            StaySelection retainedStay = null;
+            RentalSelection retainedRental = null;
+
+            if (sourceSelections != null) {
+                if (sourceSelections.airfare() != null) {
+                    var result = trips.revalidateAirfare(destination.id(), startDate, endDate, travelerCount,
+                            sourceTrip.travelerCount(), sourceSelections.airfare(), newDraftPublicId);
+                    if (result.valid()) {
+                        retainedAirfare = new AirfareSelection(sourceSelections.airfare().outboundFlightInstanceId(),
+                                sourceSelections.airfare().returnFlightInstanceId(), null, null, 0, 0, 0, 0, 0, 0);
+                        if (result.adjustment() != null) adjustments.add(result.adjustment());
+                    } else if (result.removal() != null) {
+                        removals.add(result.removal());
+                    }
+                }
+                if (sourceSelections.stay() != null) {
+                    var result = trips.revalidateStay(destination.id(), startDate, endDate, sourceTrip.startDate(),
+                            sourceTrip.endDate(), travelerCount, sourceTrip.travelerCount(), sourceSelections.stay(), newDraftPublicId);
+                    if (result.valid()) {
+                        retainedStay = new StaySelection(sourceSelections.stay().accommodationUnitId(), result.newUnitCount(),
+                                null, null, List.of());
+                        if (result.adjustment() != null) adjustments.add(result.adjustment());
+                    } else if (result.removal() != null) {
+                        removals.add(result.removal());
+                    }
+                }
+                if (sourceSelections.rental() != null) {
+                    var result = trips.revalidateRental(destination.id(), startDate, endDate, ages,
+                            sourceSelections.rental(), newDraftPublicId);
+                    if (result.valid()) {
+                        retainedRental = new RentalSelection(sourceSelections.rental().rentalUnitId(),
+                                sourceSelections.rental().pickupAt(), sourceSelections.rental().returnAt(),
+                                null, null, null, 0, 0, 0);
+                        if (result.adjustment() != null) adjustments.add(result.adjustment());
+                    } else if (result.removal() != null) {
+                        removals.add(result.removal());
+                    }
+                }
+            }
+
+            draftsToCreate.add(new TripRepository.DraftCreationSpec(newDraftPublicId,
+                    new DraftSelections(retainedAirfare, retainedStay, retainedRental)));
+        }
+
+        UUID newTripPublicId = UUID.randomUUID();
+        String label = label(destination.name(), startDate, endDate);
+        trips.createAggregateWithDrafts(ownerUserId, newTripPublicId, destination, startDate, endDate, travelerCount,
+                ages, budgetCents, label, draftsToCreate);
+
+        Trip newTrip = trips.findByPublicIdAndOwnerUserId(newTripPublicId, ownerUserId).orElseThrow();
+        RevisionSummaryResponse summary = new RevisionSummaryResponse(removals, adjustments);
+        return response(newTrip, summary);
+    }
+
     private Trip ownedTrip(long ownerUserId, String tripId) {
         try { return trips.findByPublicIdAndOwnerUserId(UUID.fromString(tripId), ownerUserId).orElseThrow(this::notFound); }
         catch (IllegalArgumentException exception) { throw notFound(); }
@@ -239,6 +387,10 @@ public class TripService {
     }
 
     private TripResponse response(Trip trip) {
+        return response(trip, null);
+    }
+
+    private TripResponse response(Trip trip, RevisionSummaryResponse revisionSummary) {
         List<DraftResponse> drafts = trip.drafts().stream().map(draft -> new DraftResponse(draft.publicId(), draft.version(), selectionResponse(draft.selections()))).toList();
         List<PlannedResponse> planned = trip.planned().stream().map(item -> new PlannedResponse(item.publicId(), selectionResponse(item.selections()))).toList();
         List<AlternativeResponse> alternatives = new ArrayList<>();
@@ -246,7 +398,7 @@ public class TripService {
         trip.planned().forEach(item -> alternatives.add(new AlternativeResponse(item.publicId(), item.lifecycle(), null, selectionResponse(item.selections()))));
         return new TripResponse(trip.publicId(), trip.destination().key(), trip.destination().name(), "PDX", trip.startDate(),
                 trip.endDate(), trip.travelerCount(), trip.travelerAges(), trip.budgetCents(), trip.label(), trip.version(),
-                drafts, planned, List.copyOf(alternatives));
+                drafts, planned, List.copyOf(alternatives), revisionSummary);
     }
 
     private static DraftSelectionResponse selectionResponse(DraftSelections selections) {
