@@ -14,6 +14,12 @@ interface TripRepository {
 
     Optional<Trip> findByPublicIdAndOwnerUserId(UUID publicId, long ownerUserId);
 
+    List<Trip> findAllByOwnerUserId(long ownerUserId);
+
+    void deleteTrip(long tripId, long ownerUserId);
+
+    boolean hasBookingHistory(long tripId);
+
     boolean advanceVersion(long tripId, long ownerUserId, long expectedVersion);
 
     boolean advanceVersionForDraft(long tripId, long ownerUserId, long expectedVersion, long draftId,

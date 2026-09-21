@@ -12,24 +12,31 @@ import jakarta.servlet.http.Cookie;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.UUID;
+import app.detour.common.ClockConfiguration;
+import java.time.Instant;
+import java.time.ZonedDateTime;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(TestClockConfiguration.class)
 class TripApiIntegrationTest {
     private static final String DATABASE_URL = "jdbc:h2:mem:trip_api_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1";
 
@@ -40,6 +47,13 @@ class TripApiIntegrationTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private TestClockConfiguration.TestClock testClock;
+    @MockitoSpyBean private TripRepository tripRepository;
+
+    @AfterEach
+    void resetClock() {
+        testClock.reset();
+    }
 
     @Test
     void createsOwnedTripAndInitialComponentEmptyDraft() throws Exception {
@@ -1036,6 +1050,258 @@ class TripApiIntegrationTest {
     private static String validRequest(String additions) {
         String suffix = additions.isBlank() ? "" : "," + additions;
         return "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2" + suffix + "}";
+    }
+
+    @Test
+    void profileProjectionReturnsOwnerTripsPartitionedByDateWithAccurateCounts() throws Exception {
+        Client owner = register("profile-projection@example.test");
+        owner.unsafe(post("/api/trips"), validRequest("\"travelerAges\":[25,30],\"budgetCents\":50000"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/trips").session(owner.session).cookie(owner.csrf))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.upcoming.length()").value(1))
+                .andExpect(jsonPath("$.upcoming[0].draftCount").value(1))
+                .andExpect(jsonPath("$.upcoming[0].plannedCount").value(0))
+                .andExpect(jsonPath("$.upcoming[0].expiredAlternativeCount").value(0))
+                .andExpect(jsonPath("$.past.length()").value(0));
+
+        mockMvc.perform(get("/api/profile").session(owner.session).cookie(owner.csrf))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("profile-projection@example.test"))
+                .andExpect(jsonPath("$.upcoming.length()").value(1))
+                .andExpect(jsonPath("$.past.length()").value(0));
+    }
+
+    @Test
+    void profileProjectionPartitionsUpcomingAndPastWithDeterministicSort() throws Exception {
+        testClock.setInstant(Instant.parse("2027-03-08T20:00:00Z")); // 12:00:00-08:00
+        Client owner = register("profile-sorting@example.test");
+
+        // Trip 1: March 10–14, 2027 (Upcoming)
+        MvcResult trip1Res = owner.unsafe(post("/api/trips"), "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
+        String trip1Id = jsonField(trip1Res, "id");
+
+        // Trip 2: March 10–16, 2027 (Upcoming, same start date as Trip 1)
+        MvcResult trip2Res = owner.unsafe(post("/api/trips"), "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-16\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
+        String trip2Id = jsonField(trip2Res, "id");
+
+        // Trip 3: March 2–5, 2027 (Past, end date March 5 has passed)
+        MvcResult trip3Res = owner.unsafe(post("/api/trips"), "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-02\",\"endDate\":\"2027-03-05\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
+        String trip3Id = jsonField(trip3Res, "id");
+
+        // Query profile
+        mockMvc.perform(get("/api/trips").session(owner.session).cookie(owner.csrf))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.upcoming.length()").value(2))
+                .andExpect(jsonPath("$.upcoming[0].id").value(trip1Id))
+                .andExpect(jsonPath("$.upcoming[0].temporalStatus").value("UPCOMING"))
+                .andExpect(jsonPath("$.upcoming[1].id").value(trip2Id))
+                .andExpect(jsonPath("$.upcoming[1].temporalStatus").value("UPCOMING"))
+                .andExpect(jsonPath("$.past.length()").value(1))
+                .andExpect(jsonPath("$.past[0].id").value(trip3Id))
+                .andExpect(jsonPath("$.past[0].temporalStatus").value("PAST"));
+
+        // Boundary edge case: Exactly on the end date (2027-03-05T23:59:59.999-08:00): Trip 3 is still Upcoming
+        testClock.setInstant(ZonedDateTime.of(2027, 3, 5, 23, 59, 59, 999_000_000, ClockConfiguration.PDX_ZONE).toInstant());
+        mockMvc.perform(get("/api/trips").session(owner.session).cookie(owner.csrf))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.upcoming.length()").value(3))
+                .andExpect(jsonPath("$.past.length()").value(0));
+
+        // Immediately after the end date (2027-03-06T00:00:00.000-08:00): Trip 3 transitions to Past
+        testClock.setInstant(ZonedDateTime.of(2027, 3, 6, 0, 0, 0, 0, ClockConfiguration.PDX_ZONE).toInstant());
+        mockMvc.perform(get("/api/trips").session(owner.session).cookie(owner.csrf))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.upcoming.length()").value(2))
+                .andExpect(jsonPath("$.past.length()").value(1))
+                .andExpect(jsonPath("$.past[0].id").value(trip3Id));
+    }
+
+    @Test
+    void clockControlsExpirationAtDepartureMidnightAndBlocksPromotion() throws Exception {
+        Client owner = register("expiration-promotion@example.test");
+        MvcResult tripRes = owner.unsafe(post("/api/trips"), "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-15\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(tripRes, "id");
+        var tripJson = tools.jackson.databind.json.JsonMapper.builder().build().readTree(tripRes.getResponse().getContentAsString());
+        String draft1Id = tripJson.get("drafts").get(0).get("id").asString();
+
+        jdbc.update("""
+                INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id)
+                VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
+                    (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-out-sfo-d1' AND instance.service_date = DATE '2027-03-10'),
+                    (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-in-sfo-d1' AND instance.service_date = DATE '2027-03-15'))
+                """, UUID.fromString(draft1Id));
+        jdbc.update("""
+                INSERT INTO detour_trip_draft_stay_selection (draft_id, accommodation_unit_id, unit_count)
+                VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
+                    (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit'), 1)
+                """, UUID.fromString(draft1Id));
+
+        testClock.setInstant(ZonedDateTime.of(2027, 3, 9, 23, 59, 59, 999_000_000, ClockConfiguration.PDX_ZONE).toInstant());
+
+        mockMvc.perform(get("/api/trips").session(owner.session).cookie(owner.csrf))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.upcoming[0].expiredAlternativeCount").value(0))
+                .andExpect(jsonPath("$.upcoming[0].alternatives[0].expired").value(false))
+                .andExpect(jsonPath("$.upcoming[0].alternatives[0].status").value("DRAFT"));
+
+        MvcResult dupRes = owner.unsafe(post("/api/trips/" + tripId + "/drafts/" + draft1Id + "/duplicate"), "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated()).andReturn();
+
+        owner.unsafe(post("/api/trips/" + tripId + "/drafts/" + draft1Id + "/plan"), "{\"expectedVersion\":1,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated());
+
+        testClock.setInstant(ZonedDateTime.of(2027, 3, 10, 0, 0, 0, 0, ClockConfiguration.PDX_ZONE).toInstant());
+
+        mockMvc.perform(get("/api/trips").session(owner.session).cookie(owner.csrf))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.upcoming[0].draftCount").value(2))
+                .andExpect(jsonPath("$.upcoming[0].plannedCount").value(1))
+                .andExpect(jsonPath("$.upcoming[0].expiredAlternativeCount").value(3))
+                .andExpect(jsonPath("$.upcoming[0].alternatives[0].expired").value(true))
+                .andExpect(jsonPath("$.upcoming[0].alternatives[0].status").value("EXPIRED"))
+                .andExpect(jsonPath("$.upcoming[0].alternatives[1].expired").value(true))
+                .andExpect(jsonPath("$.upcoming[0].alternatives[1].status").value("EXPIRED"))
+                .andExpect(jsonPath("$.upcoming[0].alternatives[2].expired").value(true))
+                .andExpect(jsonPath("$.upcoming[0].alternatives[2].status").value("EXPIRED"));
+
+        var dupJson = tools.jackson.databind.json.JsonMapper.builder().build().readTree(dupRes.getResponse().getContentAsString());
+        String draft2Id = dupJson.get("drafts").get(1).get("id").asString();
+        owner.unsafe(post("/api/trips/" + tripId + "/drafts/" + draft2Id + "/plan"), "{\"expectedVersion\":2,\"expectedDraftVersion\":0}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("ALTERNATIVE_EXPIRED"));
+
+        // DST boundary test: departure date 2027-03-15 around March 14 DST change
+        MvcResult dstTripRes = owner.unsafe(post("/api/trips"), "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-15\",\"endDate\":\"2027-03-20\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
+        String dstTripId = jsonField(dstTripRes, "id");
+        testClock.setInstant(ZonedDateTime.of(2027, 3, 14, 23, 59, 59, 999_000_000, ClockConfiguration.PDX_ZONE).toInstant());
+        mockMvc.perform(get("/api/trips").session(owner.session).cookie(owner.csrf))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.upcoming[?(@.id == '" + dstTripId + "')].expiredAlternativeCount").value(0));
+
+        testClock.setInstant(ZonedDateTime.of(2027, 3, 15, 0, 0, 0, 0, ClockConfiguration.PDX_ZONE).toInstant());
+        mockMvc.perform(get("/api/trips").session(owner.session).cookie(owner.csrf))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.upcoming[?(@.id == '" + dstTripId + "')].expiredAlternativeCount").value(1));
+    }
+
+    @Test
+    void deletesNeverBookedTripAtomicallyWithCascadeAndPreservesCatalog() throws Exception {
+        Client owner = register("trip-delete@example.test");
+        MvcResult tripRes = owner.unsafe(post("/api/trips"), "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-15\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(tripRes, "id");
+        var tripJson = tools.jackson.databind.json.JsonMapper.builder().build().readTree(tripRes.getResponse().getContentAsString());
+        String draft1Id = tripJson.get("drafts").get(0).get("id").asString();
+
+        jdbc.update("""
+                INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id)
+                VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
+                    (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-out-sfo-d1' AND instance.service_date = DATE '2027-03-10'),
+                    (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-in-sfo-d1' AND instance.service_date = DATE '2027-03-15'))
+                """, UUID.fromString(draft1Id));
+        jdbc.update("""
+                INSERT INTO detour_trip_draft_stay_selection (draft_id, accommodation_unit_id, unit_count)
+                VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
+                    (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit'), 1)
+                """, UUID.fromString(draft1Id));
+
+        // Promote draft 1 to planned (Trip now has 1 draft, 1 planned, version 1)
+        owner.unsafe(post("/api/trips/" + tripId + "/drafts/" + draft1Id + "/plan"), "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated());
+
+        // Create second draft (Trip now has 2 drafts, 1 planned, version 2)
+        owner.unsafe(post("/api/trips/" + tripId + "/drafts"), "{\"expectedVersion\":1}")
+                .andExpect(status().isCreated());
+
+        int flightsBefore = count("flight_instance");
+        int staysBefore = count("accommodation_nightly_inventory");
+        int rentalsBefore = count("rental_unit_occupancy");
+
+        owner.unsafe(delete("/api/trips/" + tripId), "{\"expectedVersion\":2,\"expectedDraftCount\":2,\"expectedPlannedCount\":1,\"confirmed\":true}")
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/trips/{tripId}", tripId).session(owner.session).cookie(owner.csrf))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+
+        assertEquals(0, (int) jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip WHERE public_id = ?", Integer.class, UUID.fromString(tripId)));
+        assertEquals(0, (int) jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_traveler WHERE trip_id NOT IN (SELECT id FROM detour_trip)", Integer.class));
+        assertEquals(0, (int) jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft WHERE trip_id NOT IN (SELECT id FROM detour_trip)", Integer.class));
+        assertEquals(0, (int) jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_itinerary WHERE trip_id NOT IN (SELECT id FROM detour_trip)", Integer.class));
+
+        assertEquals(flightsBefore, count("flight_instance"));
+        assertEquals(staysBefore, count("accommodation_nightly_inventory"));
+        assertEquals(rentalsBefore, count("rental_unit_occupancy"));
+    }
+
+    @Test
+    void tripDeletionRejectsStaleConfirmationAndVersionConflicts() throws Exception {
+        Client owner = register("trip-delete-guards@example.test");
+        MvcResult tripRes = owner.unsafe(post("/api/trips"), "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-15\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(tripRes, "id");
+
+        owner.unsafe(delete("/api/trips/" + tripId), "{\"expectedVersion\":0,\"expectedDraftCount\":2,\"expectedPlannedCount\":0,\"confirmed\":true}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("STALE_CONFIRMATION"));
+
+        owner.unsafe(delete("/api/trips/" + tripId), "{\"expectedVersion\":0,\"expectedDraftCount\":1,\"expectedPlannedCount\":1,\"confirmed\":true}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("STALE_CONFIRMATION"));
+
+        owner.unsafe(delete("/api/trips/" + tripId), "{\"expectedVersion\":99,\"expectedDraftCount\":1,\"expectedPlannedCount\":0,\"confirmed\":true}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+
+        owner.unsafe(delete("/api/trips/" + tripId), "{\"expectedVersion\":0,\"expectedDraftCount\":1,\"expectedPlannedCount\":0,\"confirmed\":false}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+
+        mockMvc.perform(get("/api/trips/{tripId}", tripId).session(owner.session).cookie(owner.csrf))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(0))
+                .andExpect(jsonPath("$.drafts.length()").value(1));
+    }
+
+    @Test
+    void tripOperationsEnforceOwnershipAndNondisclosure() throws Exception {
+        Client ownerA = register("owner-a@example.test");
+        Client ownerB = register("owner-b@example.test");
+
+        MvcResult tripARes = ownerA.unsafe(post("/api/trips"), "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-15\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
+        String tripAId = jsonField(tripARes, "id");
+
+        mockMvc.perform(get("/api/trips").session(ownerB.session).cookie(ownerB.csrf))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.upcoming.length()").value(0))
+                .andExpect(jsonPath("$.past.length()").value(0));
+
+        ownerB.unsafe(delete("/api/trips/" + tripAId), "{\"expectedVersion\":0,\"expectedDraftCount\":1,\"expectedPlannedCount\":0,\"confirmed\":true}")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+
+        mockMvc.perform(get("/api/trips/{tripId}", tripAId).session(ownerA.session).cookie(ownerA.csrf))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(tripAId));
+    }
+
+    @Test
+    void tripDeletionBlocksWhenBookingHistoryPresent() throws Exception {
+        Client owner = register("booked-guard@example.test");
+        MvcResult tripRes = owner.unsafe(post("/api/trips"), "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-15\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(tripRes, "id");
+        long internalTripId = jdbc.queryForObject("SELECT id FROM detour_trip WHERE public_id = ?", Long.class, UUID.fromString(tripId));
+
+        org.mockito.Mockito.doReturn(true).when(tripRepository).hasBookingHistory(internalTripId);
+
+        owner.unsafe(delete("/api/trips/" + tripId), "{\"expectedVersion\":0,\"expectedDraftCount\":1,\"expectedPlannedCount\":0,\"confirmed\":true}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CANNOT_DELETE_BOOKED_TRIP"));
+
+        mockMvc.perform(get("/api/trips/{tripId}", tripId).session(owner.session).cookie(owner.csrf))
+                .andExpect(status().isOk());
+
+        org.mockito.Mockito.doReturn(false).when(tripRepository).hasBookingHistory(internalTripId);
     }
 
     private int count(String table) {

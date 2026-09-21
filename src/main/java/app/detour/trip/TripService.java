@@ -1,8 +1,11 @@
 package app.detour.trip;
 
 import app.detour.api.ApiException;
+import app.detour.common.ClockConfiguration;
 import tools.jackson.databind.JsonNode;
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -21,9 +24,11 @@ public class TripService {
     private static final LocalDate FIRST_SUPPORTED_DATE = LocalDate.of(2027, 3, 1);
     private static final LocalDate LAST_SUPPORTED_DATE = LocalDate.of(2027, 3, 31);
     private final TripRepository trips;
+    private final Clock clock;
 
-    TripService(TripRepository trips) {
+    TripService(TripRepository trips, Clock clock) {
         this.trips = trips;
+        this.clock = clock;
     }
 
     @Transactional
@@ -54,6 +59,75 @@ public class TripService {
             throw notFound();
         }
         return trips.findByPublicIdAndOwnerUserId(publicId, ownerUserId).map(this::response).orElseThrow(this::notFound);
+    }
+
+    public boolean isPast(LocalDate endDate) {
+        LocalDate today = LocalDate.ofInstant(clock.instant(), ClockConfiguration.PDX_ZONE);
+        return today.isAfter(endDate);
+    }
+
+    public boolean isExpired(LocalDate startDate) {
+        Instant departureMidnight = startDate.atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant();
+        return !clock.instant().isBefore(departureMidnight);
+    }
+
+    public TripsProfileResponse tripsProfile(long ownerUserId) {
+        List<Trip> allTrips = trips.findAllByOwnerUserId(ownerUserId);
+        List<TripProfileSummary> upcoming = new ArrayList<>();
+        List<TripProfileSummary> past = new ArrayList<>();
+
+        for (Trip trip : allTrips) {
+            boolean pastTrip = isPast(trip.endDate());
+            String temporalStatus = pastTrip ? "PAST" : "UPCOMING";
+
+            boolean expired = isExpired(trip.startDate());
+            int draftCount = trip.drafts().size();
+            int plannedCount = trip.planned().size();
+            int expiredCount = expired ? (draftCount + plannedCount) : 0;
+
+            List<AlternativeProfileSummary> alternatives = new ArrayList<>();
+            for (TripDraft draft : trip.drafts()) {
+                alternatives.add(new AlternativeProfileSummary(
+                        draft.publicId(),
+                        draft.lifecycle(),
+                        draft.version(),
+                        expired ? "EXPIRED" : "DRAFT",
+                        expired));
+            }
+            for (PlannedItinerary planned : trip.planned()) {
+                alternatives.add(new AlternativeProfileSummary(
+                        planned.publicId(),
+                        planned.lifecycle(),
+                        null,
+                        expired ? "EXPIRED" : "PLANNED",
+                        expired));
+            }
+
+            TripProfileSummary summary = new TripProfileSummary(
+                    trip.publicId(),
+                    trip.destination().key(),
+                    trip.destination().name(),
+                    trip.startDate(),
+                    trip.endDate(),
+                    trip.label(),
+                    trip.version(),
+                    temporalStatus,
+                    draftCount,
+                    plannedCount,
+                    expiredCount,
+                    0,
+                    trips.hasBookingHistory(trip.id()),
+                    List.copyOf(alternatives));
+
+            if (pastTrip) {
+                past.add(summary);
+            } else {
+                upcoming.add(summary);
+            }
+        }
+
+        java.util.Collections.reverse(past);
+        return new TripsProfileResponse(List.copyOf(upcoming), List.copyOf(past));
     }
 
     @Transactional
@@ -169,6 +243,9 @@ public class TripService {
         if (request == null) throw validation("request", "A request body is required.");
         Trip trip = ownedTrip(ownerUserId, tripId);
         TripDraft draft = ownedDraft(trip, draftId);
+        if (isExpired(trip.startDate())) {
+            throw new ApiException(400, "ALTERNATIVE_EXPIRED", "Expired alternatives cannot be promoted.");
+        }
         DraftSelections resolved = trips.resolveSelectionsForPromotion(trip, draft);
         Map<String, String> issues = readinessIssues(trip, resolved);
         if (!issues.isEmpty()) throw new ApiException(400, "PLANNING_NOT_READY", "The Draft is not ready to be planned.", issues);
@@ -214,6 +291,25 @@ public class TripService {
             trips.deletePlanned(trip.id(), source.id());
         }
         return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+    }
+
+    @Transactional
+    public void deleteTrip(long ownerUserId, String tripId, TripRequests.TripDelete request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        if (!Boolean.TRUE.equals(request.confirmed())) {
+            throw validation("confirmed", "Set confirmed to true before deleting a Trip.");
+        }
+        if (trips.hasBookingHistory(trip.id())) {
+            throw new ApiException(409, "CANNOT_DELETE_BOOKED_TRIP", "Trips with booking history cannot be permanently deleted.");
+        }
+        if (trip.version() != request.expectedVersion()) {
+            throw parentConflict(ownerUserId, trip.publicId());
+        }
+        if (trip.drafts().size() != request.expectedDraftCount() || trip.planned().size() != request.expectedPlannedCount()) {
+            throw new ApiException(409, "STALE_CONFIRMATION", "The Trip alternative counts have changed since confirmation.");
+        }
+        trips.deleteTrip(trip.id(), ownerUserId);
     }
 
     @Transactional

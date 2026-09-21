@@ -8,6 +8,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -206,9 +208,80 @@ class TripApplicationRestartIntegrationTest {
         }
     }
 
+    @Test
+    void upcomingAndPastDeriveCorrectlyAcrossRestartWithoutMutation() throws Exception {
+        String databaseUrl = "jdbc:h2:file:" + temporaryDirectory.resolve("temporal-restart-" + UUID.randomUUID()).toAbsolutePath().toString().replace('\\', '/')
+                + ";DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000";
+        String tripId;
+        String sessionCookie;
+
+        // Start with clock on March 3, 2027
+        ConfigurableApplicationContext first = start(databaseUrl, "2027-03-03T12:00:00Z");
+        try {
+            URI base = baseUri(first);
+            String csrf = csrfCookie(base);
+            HttpResponse<String> registration = request(base, "POST", "/api/auth/register", csrf,
+                    "{\"email\":\"temporal-restart@example.test\",\"password\":\"aaaaaaaaaaaa\"}").send();
+            assertEquals(201, registration.statusCode());
+            sessionCookie = cookie(registration, "JSESSIONID");
+
+            // Trip ends on March 5, 2027
+            HttpResponse<String> created = request(base, "POST", "/api/trips", sessionCookie + "|" + csrf,
+                    "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-02\",\"endDate\":\"2027-03-05\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").send();
+            assertEquals(201, created.statusCode());
+            var body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(created.body());
+            tripId = body.get("id").asString();
+
+            // On March 3, Trip ending March 5 is Upcoming
+            HttpResponse<String> profile1 = request(base, "GET", "/api/trips", sessionCookie, null).send();
+            assertEquals(200, profile1.statusCode());
+            var profile1Body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(profile1.body());
+            assertEquals(1, profile1Body.get("upcoming").size());
+            assertEquals(0, profile1Body.get("past").size());
+            assertEquals(tripId, profile1Body.get("upcoming").get(0).get("id").asString());
+            assertEquals("UPCOMING", profile1Body.get("upcoming").get(0).get("temporalStatus").asString());
+        } finally {
+            first.close();
+        }
+
+        // Restart application context with clock advanced to March 7, 2027 (after trip end date)
+        ConfigurableApplicationContext second = start(databaseUrl, "2027-03-07T12:00:00Z");
+        try {
+            URI base = baseUri(second);
+            String csrf = csrfCookie(base);
+            HttpResponse<String> login = request(base, "POST", "/api/auth/login", csrf,
+                    "{\"email\":\"temporal-restart@example.test\",\"password\":\"aaaaaaaaaaaa\"}").send();
+            assertEquals(204, login.statusCode());
+            String newSession = cookie(login, "JSESSIONID");
+
+            // Query /api/trips -> Trip is now in Past
+            HttpResponse<String> profile2 = request(base, "GET", "/api/trips", newSession, null).send();
+            assertEquals(200, profile2.statusCode());
+            var profile2Body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(profile2.body());
+            assertEquals(0, profile2Body.get("upcoming").size());
+            assertEquals(1, profile2Body.get("past").size());
+            assertEquals(tripId, profile2Body.get("past").get(0).get("id").asString());
+            assertEquals("PAST", profile2Body.get("past").get(0).get("temporalStatus").asString());
+
+            // Check database: no background job or status column was updated; version is still 0
+            org.springframework.jdbc.core.JdbcTemplate jdbc = second.getBean(org.springframework.jdbc.core.JdbcTemplate.class);
+            long version = jdbc.queryForObject("SELECT version FROM detour_trip WHERE public_id = ?", Long.class, UUID.fromString(tripId));
+            assertEquals(0, version);
+        } finally {
+            second.close();
+        }
+    }
+
     private ConfigurableApplicationContext start(String databaseUrl) {
-        return new SpringApplicationBuilder(DetourApplication.class)
-                .run("--server.address=127.0.0.1", "--server.port=0", "--spring.datasource.url=" + databaseUrl);
+        return start(databaseUrl, null);
+    }
+
+    private ConfigurableApplicationContext start(String databaseUrl, String fixedInstant) {
+        List<String> args = new ArrayList<>(List.of("--server.address=127.0.0.1", "--server.port=0", "--spring.datasource.url=" + databaseUrl));
+        if (fixedInstant != null && !fixedInstant.isBlank()) {
+            args.add("--detour.clock.fixed-instant=" + fixedInstant);
+        }
+        return new SpringApplicationBuilder(DetourApplication.class).run(args.toArray(String[]::new));
     }
 
     private static URI baseUri(ConfigurableApplicationContext context) {

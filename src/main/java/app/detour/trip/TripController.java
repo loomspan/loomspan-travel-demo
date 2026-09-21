@@ -30,6 +30,11 @@ public class TripController {
         return ResponseEntity.status(201).body(trips.create(requirePrincipal(principal).userId(), TripRequests.from(request)));
     }
 
+    @GetMapping
+    TripsProfileResponse list(@AuthenticationPrincipal DetourUserPrincipal principal) {
+        return trips.tripsProfile(requirePrincipal(principal).userId());
+    }
+
     @GetMapping("/{tripId}")
     TripResponse detail(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId) {
         return trips.detail(requirePrincipal(principal).userId(), tripId);
@@ -76,6 +81,12 @@ public class TripController {
     @DeleteMapping("/{tripId}/drafts/{draftId}")
     TripResponse deleteDraft(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @PathVariable String draftId, @RequestBody JsonNode request) {
         return trips.deleteDraft(requirePrincipal(principal).userId(), tripId, draftId, TripRequests.draftMutation(request));
+    }
+
+    @DeleteMapping("/{tripId}")
+    ResponseEntity<Void> deleteTrip(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @RequestBody JsonNode request) {
+        trips.deleteTrip(requirePrincipal(principal).userId(), tripId, TripRequests.tripDelete(request));
+        return ResponseEntity.noContent().build();
     }
 
     private static DetourUserPrincipal requirePrincipal(DetourUserPrincipal principal) {

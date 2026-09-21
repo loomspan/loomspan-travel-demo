@@ -25,12 +25,14 @@ import org.springframework.beans.factory.annotation.Value;
 @RequestMapping("/api")
 public class IdentityController {
     private final IdentityService identityService;
+    private final app.detour.trip.TripService tripService;
     private final SecurityContextRepository securityContextRepository;
     private final boolean secureCookies;
 
-    IdentityController(IdentityService identityService, SecurityContextRepository securityContextRepository,
+    IdentityController(IdentityService identityService, app.detour.trip.TripService tripService, SecurityContextRepository securityContextRepository,
             @Value("${detour.security.secure-cookies}") boolean secureCookies) {
         this.identityService = identityService;
+        this.tripService = tripService;
         this.securityContextRepository = securityContextRepository;
         this.secureCookies = secureCookies;
     }
@@ -64,7 +66,10 @@ public class IdentityController {
 
     @GetMapping("/profile")
     ProfileResponse profile(@AuthenticationPrincipal DetourUserPrincipal principal) {
-        return identityService.profile(requirePrincipal(principal).userId());
+        long userId = requirePrincipal(principal).userId();
+        ProfileResponse identity = identityService.profile(userId);
+        app.detour.trip.TripsProfileResponse trips = tripService.tripsProfile(userId);
+        return new ProfileResponse(identity.email(), trips.upcoming(), trips.past());
     }
 
     @PutMapping("/profile/password")

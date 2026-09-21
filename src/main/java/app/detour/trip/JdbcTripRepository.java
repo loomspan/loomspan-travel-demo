@@ -59,6 +59,15 @@ class JdbcTripRepository implements TripRepository {
                 WHERE trip.public_id = ? AND trip.owner_user_id = ?""", (r, n) -> loadTrip(r.getLong("id"), r, ownerUserId), publicId, ownerUserId).stream().findFirst();
     }
 
+    @Override public List<Trip> findAllByOwnerUserId(long ownerUserId) {
+        return jdbc.query("""
+                SELECT trip.id, trip.public_id, trip.owner_user_id, destination.id AS destination_id, destination.catalog_key, destination.name AS destination_name,
+                       trip.start_date, trip.end_date, trip.traveler_count, trip.budget_cents, trip.display_label, trip.version
+                FROM detour_trip trip JOIN catalog_destination destination ON destination.id = trip.catalog_destination_id
+                WHERE trip.owner_user_id = ?
+                ORDER BY trip.start_date ASC, trip.id ASC""", (r, n) -> loadTrip(r.getLong("id"), r, ownerUserId), ownerUserId);
+    }
+
     private Trip loadTrip(long tripId, java.sql.ResultSet row, long ownerUserId) throws java.sql.SQLException {
         List<Integer> ages = jdbc.query("SELECT age FROM detour_trip_traveler WHERE trip_id = ? ORDER BY traveler_ordinal", (r, n) -> (Integer) r.getObject("age"), tripId);
         List<Integer> knownAges = ages.stream().allMatch(java.util.Objects::nonNull) ? List.copyOf(ages) : null;
@@ -107,6 +116,8 @@ class JdbcTripRepository implements TripRepository {
     @Override public void insertDraft(long tripId, UUID publicId) { jdbc.update("INSERT INTO detour_trip_draft (public_id, trip_id, version) VALUES (?, ?, 0)", publicId, tripId); }
     @Override public void deleteDraft(long tripId, long draftId) { jdbc.update("DELETE FROM detour_trip_draft WHERE trip_id = ? AND id = ?", tripId, draftId); }
     @Override public void deletePlanned(long tripId, long plannedId) { jdbc.update("DELETE FROM detour_planned_itinerary WHERE trip_id = ? AND id = ?", tripId, plannedId); }
+    @Override public void deleteTrip(long tripId, long ownerUserId) { jdbc.update("DELETE FROM detour_trip WHERE id = ? AND owner_user_id = ?", tripId, ownerUserId); }
+    @Override public boolean hasBookingHistory(long tripId) { return false; }
 
     @Override public void insertDraftCopy(long tripId, UUID publicId, DraftSelections selections) {
         insertDraft(tripId, publicId);

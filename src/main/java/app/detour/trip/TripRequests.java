@@ -30,6 +30,7 @@ public final class TripRequests {
     public record Promotion(long expectedVersion, long expectedDraftVersion) { }
     public record AlternativeDuplicate(long expectedVersion, Long expectedDraftVersion) { }
     public record AlternativeDelete(long expectedVersion, Long expectedDraftVersion, Boolean confirmed) { }
+    public record TripDelete(long expectedVersion, int expectedDraftCount, int expectedPlannedCount, Boolean confirmed) { }
 
     static Create from(JsonNode body) {
         requireObject(body, Set.of("destinationKey", "startDate", "endDate", "travelerCount", "travelerAges", "budgetCents"));
@@ -78,6 +79,15 @@ public final class TripRequests {
         return new AlternativeDelete(version(body.get("expectedVersion"), "expectedVersion"), optionalVersion(body.get("expectedDraftVersion"), "expectedDraftVersion"), confirmed);
     }
 
+    static TripDelete tripDelete(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion", "expectedDraftCount", "expectedPlannedCount", "confirmed"));
+        Boolean confirmed = body.get("confirmed") == null || body.get("confirmed").isNull() ? null : booleanValue(body.get("confirmed"), "confirmed");
+        return new TripDelete(version(body.get("expectedVersion"), "expectedVersion"),
+                nonNegativeInt(body.get("expectedDraftCount"), "expectedDraftCount"),
+                nonNegativeInt(body.get("expectedPlannedCount"), "expectedPlannedCount"),
+                confirmed);
+    }
+
     private static void requireObject(JsonNode body, Set<String> allowed) {
         if (body == null || !body.isObject()) throw invalid("request", "A JSON object is required.");
         for (var property : body.properties()) {
@@ -113,6 +123,11 @@ public final class TripRequests {
         return node.longValue();
     }
     private static Long optionalVersion(JsonNode node, String field) { return node == null || node.isNull() ? null : version(node, field); }
+    private static int nonNegativeInt(JsonNode node, String field) {
+        if (node == null || node.isNull()) throw invalid(field, "This field is required.");
+        if (!node.isIntegralNumber() || !node.canConvertToInt() || node.intValue() < 0) throw invalid(field, "This field must be a non-negative integer.");
+        return node.intValue();
+    }
     private static boolean booleanValue(JsonNode node, String field) {
         if (!node.isBoolean()) throw invalid(field, "This field must be true or false.");
         return node.asBoolean();

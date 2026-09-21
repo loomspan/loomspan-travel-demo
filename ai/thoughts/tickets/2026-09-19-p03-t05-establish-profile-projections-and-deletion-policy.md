@@ -17,14 +17,14 @@ The backend provides a deterministic profile view of upcoming and past Trips wit
 
 ## Acceptance criteria
 
-- [ ] The profile endpoint returns only the signed-in user's Trips, orders upcoming Trips by start date with a deterministic tie-breaker, and reports accurate Draft and Planned counts/statuses.
-- [ ] A controllable clock proves the precise transition to Expired at midnight on the departure date in `America/Los_Angeles`, and expired unbooked alternatives cannot be promoted or booked.
-- [ ] Upcoming versus Past changes through date-derived reads without a scheduled database mutation, and records remain correct across restart.
-- [ ] Delete Draft, Delete Planned itinerary, and Delete Trip have distinct guarded behavior; stale confirmations and cross-user requests fail without partial deletion or protected-data disclosure.
-- [ ] An eligible never-booked Trip is deleted atomically only after confirmation that lists every Draft and Planned alternative count that will disappear.
-- [ ] No Phase 3 deletion operation models, accepts, or removes Booked/Canceled Booking history, and the downstream requirement for Phase 6 to block permanent deletion after any Booking is explicit in the deletion contract.
-- [ ] Profile queries avoid leaking another user's counts or identifiers and remain deterministic when multiple Trips share a date.
-- [ ] Phase 6 booking creation, inventory cancellation, confirmation references, and Canceled Trips UI are not introduced.
+- [x] The profile endpoint returns only the signed-in user's Trips, orders upcoming Trips by start date with a deterministic tie-breaker, and reports accurate Draft and Planned counts/statuses.
+- [x] A controllable clock proves the precise transition to Expired at midnight on the departure date in `America/Los_Angeles`, and expired unbooked alternatives cannot be promoted or booked.
+- [x] Upcoming versus Past changes through date-derived reads without a scheduled database mutation, and records remain correct across restart.
+- [x] Delete Draft, Delete Planned itinerary, and Delete Trip have distinct guarded behavior; stale confirmations and cross-user requests fail without partial deletion or protected-data disclosure.
+- [x] An eligible never-booked Trip is deleted atomically only after confirmation that lists every Draft and Planned alternative count that will disappear.
+- [x] No Phase 3 deletion operation models, accepts, or removes Booked/Canceled Booking history, and the downstream requirement for Phase 6 to block permanent deletion after any Booking is explicit in the deletion contract.
+- [x] Profile queries avoid leaking another user's counts or identifiers and remain deterministic when multiple Trips share a date.
+- [x] Phase 6 booking creation, inventory cancellation, confirmation references, and Canceled Trips UI are not introduced.
 
 ## Context
 
