@@ -6,5 +6,6 @@ import java.util.UUID;
 
 public record TripResponse(UUID id, String destinationKey, String destinationName, String originAirportCode,
         LocalDate startDate, LocalDate endDate, int travelerCount, List<Integer> travelerAges, Long budgetCents,
-        String label, long version, List<DraftResponse> drafts) {
+        String label, long version, List<DraftResponse> drafts, List<PlannedResponse> planned,
+        List<AlternativeResponse> alternatives) {
 }

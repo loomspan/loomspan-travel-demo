@@ -23,6 +23,9 @@ public final class TripRequests {
     public record DraftCreate(long expectedVersion) { }
 
     public record DraftMutation(long expectedVersion, long expectedDraftVersion) { }
+    public record Promotion(long expectedVersion, long expectedDraftVersion) { }
+    public record AlternativeDuplicate(long expectedVersion, Long expectedDraftVersion) { }
+    public record AlternativeDelete(long expectedVersion, Long expectedDraftVersion, Boolean confirmed) { }
 
     static Create from(JsonNode body) {
         requireObject(body, Set.of("destinationKey", "startDate", "endDate", "travelerCount", "travelerAges", "budgetCents"));
@@ -46,6 +49,22 @@ public final class TripRequests {
     static DraftMutation draftMutation(JsonNode body) {
         requireObject(body, Set.of("expectedVersion", "expectedDraftVersion"));
         return new DraftMutation(version(body.get("expectedVersion"), "expectedVersion"), version(body.get("expectedDraftVersion"), "expectedDraftVersion"));
+    }
+
+    static Promotion promotion(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion", "expectedDraftVersion"));
+        return new Promotion(version(body.get("expectedVersion"), "expectedVersion"), version(body.get("expectedDraftVersion"), "expectedDraftVersion"));
+    }
+
+    static AlternativeDuplicate alternativeDuplicate(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion", "expectedDraftVersion"));
+        return new AlternativeDuplicate(version(body.get("expectedVersion"), "expectedVersion"), optionalVersion(body.get("expectedDraftVersion"), "expectedDraftVersion"));
+    }
+
+    static AlternativeDelete alternativeDelete(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion", "expectedDraftVersion", "confirmed"));
+        Boolean confirmed = body.get("confirmed") == null || body.get("confirmed").isNull() ? null : booleanValue(body.get("confirmed"), "confirmed");
+        return new AlternativeDelete(version(body.get("expectedVersion"), "expectedVersion"), optionalVersion(body.get("expectedDraftVersion"), "expectedDraftVersion"), confirmed);
     }
 
     private static void requireObject(JsonNode body, Set<String> allowed) {
@@ -81,6 +100,11 @@ public final class TripRequests {
         if (node == null || node.isNull()) throw invalid(field, "This field is required.");
         if (!node.isIntegralNumber() || !node.canConvertToLong() || node.longValue() < 0) throw invalid(field, "This field must be a non-negative integer.");
         return node.longValue();
+    }
+    private static Long optionalVersion(JsonNode node, String field) { return node == null || node.isNull() ? null : version(node, field); }
+    private static boolean booleanValue(JsonNode node, String field) {
+        if (!node.isBoolean()) throw invalid(field, "This field must be true or false.");
+        return node.asBoolean();
     }
 
     private static List<Integer> ages(JsonNode node) {

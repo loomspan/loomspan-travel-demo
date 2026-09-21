@@ -91,7 +91,7 @@ public class TripService {
         if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
             throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
         }
-        trips.insertDraft(trip.id(), UUID.randomUUID());
+        trips.insertDraftCopy(trip.id(), UUID.randomUUID(), draft.selections());
         return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
     }
 
@@ -107,6 +107,58 @@ public class TripService {
         return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
     }
 
+    @Transactional
+    public TripResponse promoteDraft(long ownerUserId, String tripId, String draftId, TripRequests.Promotion request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        TripDraft draft = ownedDraft(trip, draftId);
+        DraftSelections resolved = trips.resolveSelectionsForPromotion(trip, draft);
+        Map<String, String> issues = readinessIssues(trip, resolved);
+        if (!issues.isEmpty()) throw new ApiException(400, "PLANNING_NOT_READY", "The Draft is not ready to be planned.", issues);
+        if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
+            throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
+        }
+        trips.insertPlanned(trip.id(), UUID.randomUUID(), resolved);
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+    }
+
+    @Transactional
+    public TripResponse duplicateAlternative(long ownerUserId, String tripId, String alternativeId, TripRequests.AlternativeDuplicate request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        TripAlternative source = ownedAlternative(trip, alternativeId);
+        if (source instanceof TripDraft draft) {
+            if (request.expectedDraftVersion() == null) throw validation("expectedDraftVersion", "This field is required for a Draft source.");
+            if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
+                throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
+            }
+            trips.insertDraftCopy(trip.id(), UUID.randomUUID(), draft.selections());
+        } else {
+            if (request.expectedDraftVersion() != null) throw validation("expectedDraftVersion", "Planned alternatives do not have a Draft version.");
+            if (!trips.advanceVersion(trip.id(), ownerUserId, request.expectedVersion())) throw parentConflict(ownerUserId, trip.publicId());
+            trips.insertDraftCopy(trip.id(), UUID.randomUUID(), ((PlannedItinerary) source).selections());
+        }
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+    }
+
+    @Transactional
+    public TripResponse deleteAlternative(long ownerUserId, String tripId, String alternativeId, TripRequests.AlternativeDelete request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        TripAlternative source = ownedAlternative(trip, alternativeId);
+        if (source instanceof TripDraft draft) {
+            if (request.expectedDraftVersion() == null) throw validation("expectedDraftVersion", "This field is required for a Draft source.");
+            if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
+            trips.deleteDraft(trip.id(), draft.id());
+        } else {
+            if (!Boolean.TRUE.equals(request.confirmed())) throw validation("confirmed", "Set confirmed to true before deleting a Planned alternative.");
+            if (request.expectedDraftVersion() != null) throw validation("expectedDraftVersion", "Planned alternatives do not have a Draft version.");
+            if (!trips.advanceVersion(trip.id(), ownerUserId, request.expectedVersion())) throw parentConflict(ownerUserId, trip.publicId());
+            trips.deletePlanned(trip.id(), source.id());
+        }
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+    }
+
     private Trip ownedTrip(long ownerUserId, String tripId) {
         try { return trips.findByPublicIdAndOwnerUserId(UUID.fromString(tripId), ownerUserId).orElseThrow(this::notFound); }
         catch (IllegalArgumentException exception) { throw notFound(); }
@@ -115,7 +167,20 @@ public class TripService {
     private TripDraft ownedDraft(Trip trip, String draftId) {
         try {
             UUID publicId = UUID.fromString(draftId);
-            return trip.drafts().stream().filter(draft -> draft.publicId().equals(publicId)).findFirst().orElseThrow(this::notFound);
+            TripDraft draft = trip.drafts().stream().filter(candidate -> candidate.publicId().equals(publicId)).findFirst().orElse(null);
+            if (draft != null) return draft;
+            if (trip.planned().stream().anyMatch(candidate -> candidate.publicId().equals(publicId))) {
+                throw new ApiException(409, "IMMUTABLE_ALTERNATIVE", "Planned alternatives cannot be changed in place.");
+            }
+            throw notFound();
+        } catch (IllegalArgumentException exception) { throw notFound(); }
+    }
+
+    private TripAlternative ownedAlternative(Trip trip, String alternativeId) {
+        try {
+            UUID publicId = UUID.fromString(alternativeId);
+            return java.util.stream.Stream.concat(trip.drafts().stream(), trip.planned().stream())
+                    .filter(candidate -> candidate.publicId().equals(publicId)).findFirst().orElseThrow(this::notFound);
         } catch (IllegalArgumentException exception) { throw notFound(); }
     }
 
@@ -174,9 +239,31 @@ public class TripService {
     }
 
     private TripResponse response(Trip trip) {
+        List<DraftResponse> drafts = trip.drafts().stream().map(draft -> new DraftResponse(draft.publicId(), draft.version(), selectionResponse(draft.selections()))).toList();
+        List<PlannedResponse> planned = trip.planned().stream().map(item -> new PlannedResponse(item.publicId(), selectionResponse(item.selections()))).toList();
+        List<AlternativeResponse> alternatives = new ArrayList<>();
+        trip.drafts().forEach(draft -> alternatives.add(new AlternativeResponse(draft.publicId(), draft.lifecycle(), draft.version(), selectionResponse(draft.selections()))));
+        trip.planned().forEach(item -> alternatives.add(new AlternativeResponse(item.publicId(), item.lifecycle(), null, selectionResponse(item.selections()))));
         return new TripResponse(trip.publicId(), trip.destination().key(), trip.destination().name(), "PDX", trip.startDate(),
                 trip.endDate(), trip.travelerCount(), trip.travelerAges(), trip.budgetCents(), trip.label(), trip.version(),
-                trip.drafts().stream().map(draft -> new DraftResponse(draft.publicId(), draft.version())).toList());
+                drafts, planned, List.copyOf(alternatives));
+    }
+
+    private static DraftSelectionResponse selectionResponse(DraftSelections selections) {
+        if (selections == null) return null;
+        AirfareSelection airfare = selections.airfare(); StaySelection stay = selections.stay(); RentalSelection rental = selections.rental();
+        return new DraftSelectionResponse(airfare == null ? null : new AirfareComponentResponse(airfare.outboundFlightInstanceId(), airfare.returnFlightInstanceId(), airfare.outboundDescription(), airfare.returnDescription(), airfare.outboundBaseFareCents(), airfare.outboundTaxCents(), airfare.outboundFeeCents(), airfare.returnBaseFareCents(), airfare.returnTaxCents(), airfare.returnFeeCents()),
+                stay == null ? null : new StayComponentResponse(stay.accommodationUnitId(), stay.unitCount(), stay.propertyName(), stay.unitName(), stay.nights().stream().map(n -> new StayNightResponse(n.date(), n.basePriceCents(), n.taxCents(), n.feeCents())).toList()),
+                rental == null ? null : new RentalComponentResponse(rental.rentalUnitId(), rental.pickupAt(), rental.returnAt(), rental.locationName(), rental.vehicleClassName(), rental.unitIdentifier(), rental.dailyBasePriceCents(), rental.dailyTaxCents(), rental.dailyFeeCents()));
+    }
+
+    private static Map<String, String> readinessIssues(Trip trip, DraftSelections selections) {
+        Map<String, String> issues = new java.util.LinkedHashMap<>();
+        if (trip.travelerAges() == null) issues.put("travelerAges", "Provide exact ages for every traveler before planning.");
+        else if (trip.travelerAges().stream().noneMatch(age -> age >= 18)) issues.put("adult", "At least one traveler must be an adult before planning.");
+        if (trip.budgetCents() == null) issues.put("budgetCents", "Provide a budget before planning.");
+        if (selections.airfare() == null && selections.stay() == null && selections.rental() == null) issues.put("components", "Select at least one structurally valid reservable component before planning.");
+        return issues;
     }
 
     private static <T> T required(T value, String field) {

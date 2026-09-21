@@ -50,6 +50,24 @@ public class TripController {
         return ResponseEntity.status(201).body(trips.duplicateDraft(requirePrincipal(principal).userId(), tripId, draftId, TripRequests.draftMutation(request)));
     }
 
+    @PostMapping("/{tripId}/drafts/{draftId}/plan")
+    ResponseEntity<TripResponse> promoteDraft(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId,
+            @PathVariable String draftId, @RequestBody JsonNode request) {
+        return ResponseEntity.status(201).body(trips.promoteDraft(requirePrincipal(principal).userId(), tripId, draftId, TripRequests.promotion(request)));
+    }
+
+    @PostMapping("/{tripId}/alternatives/{alternativeId}/duplicate")
+    ResponseEntity<TripResponse> duplicateAlternative(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId,
+            @PathVariable String alternativeId, @RequestBody JsonNode request) {
+        return ResponseEntity.status(201).body(trips.duplicateAlternative(requirePrincipal(principal).userId(), tripId, alternativeId, TripRequests.alternativeDuplicate(request)));
+    }
+
+    @DeleteMapping("/{tripId}/alternatives/{alternativeId}")
+    TripResponse deleteAlternative(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId,
+            @PathVariable String alternativeId, @RequestBody JsonNode request) {
+        return trips.deleteAlternative(requirePrincipal(principal).userId(), tripId, alternativeId, TripRequests.alternativeDelete(request));
+    }
+
     @DeleteMapping("/{tripId}/drafts/{draftId}")
     TripResponse deleteDraft(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @PathVariable String draftId, @RequestBody JsonNode request) {
         return trips.deleteDraft(requirePrincipal(principal).userId(), tripId, draftId, TripRequests.draftMutation(request));

@@ -25,6 +25,9 @@ class TripApplicationRestartIntegrationTest {
         String sessionCookie;
         String tripId;
         String draftId;
+        String plannedId;
+        String duplicatedDraftId;
+        long copiedFare;
         ConfigurableApplicationContext first = start(databaseUrl);
         try {
             URI base = baseUri(first);
@@ -34,17 +37,40 @@ class TripApplicationRestartIntegrationTest {
             assertEquals(201, registration.statusCode());
             sessionCookie = cookie(registration, "JSESSIONID");
             HttpResponse<String> created = request(base, "POST", "/api/trips", sessionCookie + "|" + csrf,
-                    "{\"destinationKey\":\"destination-muc\",\"startDate\":\"2027-03-01\",\"endDate\":\"2027-03-02\",\"travelerCount\":1,\"budgetCents\":0}").send();
+                    "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").send();
             assertEquals(201, created.statusCode());
             var body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(created.body());
             tripId = body.get("id").asString();
             draftId = body.get("drafts").get(0).get("id").asString();
-            HttpResponse<String> updated = request(base, "PUT", "/api/trips/" + tripId, sessionCookie + "|" + csrf,
-                    "{\"expectedVersion\":0,\"destinationKey\":\"destination-muc\",\"startDate\":\"2027-03-01\",\"endDate\":\"2027-03-02\",\"travelerCount\":1,\"budgetCents\":null}").send();
-            assertEquals(200, updated.statusCode());
-            HttpResponse<String> alternative = request(base, "POST", "/api/trips/" + tripId + "/drafts", sessionCookie + "|" + csrf,
+
+            org.springframework.jdbc.core.JdbcTemplate jdbc = first.getBean(org.springframework.jdbc.core.JdbcTemplate.class);
+            jdbc.update("""
+                    INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id)
+                    VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
+                        (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-out-sfo-d1' AND instance.service_date = DATE '2027-03-10'),
+                        (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-in-sfo-d1' AND instance.service_date = DATE '2027-03-14'))
+                    """, UUID.fromString(draftId));
+            jdbc.update("""
+                    INSERT INTO detour_trip_draft_stay_selection (draft_id, accommodation_unit_id, unit_count)
+                    VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
+                        (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit'), 1)
+                    """, UUID.fromString(draftId));
+
+            HttpResponse<String> promoted = request(base, "POST", "/api/trips/" + tripId + "/drafts/" + draftId + "/plan", sessionCookie + "|" + csrf,
+                    "{\"expectedVersion\":0,\"expectedDraftVersion\":0}").send();
+            assertEquals(201, promoted.statusCode());
+            var promotedBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(promoted.body());
+            plannedId = promotedBody.get("planned").get(0).get("id").asString();
+            copiedFare = promotedBody.get("planned").get(0).get("selections").get("airfare").get("outboundBaseFareCents").asLong();
+
+            HttpResponse<String> duplicated = request(base, "POST", "/api/trips/" + tripId + "/alternatives/" + plannedId + "/duplicate", sessionCookie + "|" + csrf,
                     "{\"expectedVersion\":1}").send();
-            assertEquals(201, alternative.statusCode());
+            assertEquals(201, duplicated.statusCode());
+            var dupBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(duplicated.body());
+            duplicatedDraftId = dupBody.get("drafts").get(1).get("id").asString();
+
+            // Mutate catalog to verify restart does not reload live catalog
+            jdbc.update("UPDATE flight_instance SET base_fare_cents = base_fare_cents + 10000");
         } finally {
             first.close();
         }
@@ -61,10 +87,15 @@ class TripApplicationRestartIntegrationTest {
             assertEquals(200, detail.statusCode());
             var body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(detail.body());
             assertEquals(tripId, body.get("id").asString());
-            assertEquals(draftId, body.get("drafts").get(0).get("id").asString());
-            assertEquals(2, body.get("drafts").size());
             assertEquals(2, body.get("version").asInt());
-            org.junit.jupiter.api.Assertions.assertTrue(body.get("budgetCents").isNull());
+            assertEquals(1, body.get("planned").size());
+            assertEquals(plannedId, body.get("planned").get(0).get("id").asString());
+            assertEquals(copiedFare, body.get("planned").get(0).get("selections").get("airfare").get("outboundBaseFareCents").asLong());
+            assertEquals("Summit Family Suites", body.get("planned").get(0).get("selections").get("stay").get("propertyName").asString());
+            assertEquals(2, body.get("drafts").size());
+            assertEquals(draftId, body.get("drafts").get(0).get("id").asString());
+            assertEquals(duplicatedDraftId, body.get("drafts").get(1).get("id").asString());
+            assertEquals(0, body.get("drafts").get(1).get("version").asInt());
         } finally {
             second.close();
         }

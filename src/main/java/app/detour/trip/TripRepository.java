@@ -25,4 +25,13 @@ interface TripRepository {
     void insertDraft(long tripId, UUID publicId);
 
     void deleteDraft(long tripId, long draftId);
+
+    void insertDraftCopy(long tripId, UUID publicId, DraftSelections selections);
+
+    void insertPlanned(long tripId, UUID publicId, DraftSelections selections);
+
+    void deletePlanned(long tripId, long plannedId);
+
+    /** Returns only components structurally consistent with the supplied Trip. */
+    DraftSelections resolveSelectionsForPromotion(Trip trip, TripDraft draft);
 }
