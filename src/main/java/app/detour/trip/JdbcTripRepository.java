@@ -85,8 +85,30 @@ class JdbcTripRepository implements TripRepository {
     }
 
     private DraftSelections loadDraftSelections(long draftId) {
-        AirfareSelection airfare = jdbc.query("SELECT outbound_flight_instance_id, return_flight_instance_id FROM detour_trip_draft_airfare_selection WHERE draft_id = ?",
-                (r, n) -> new AirfareSelection(r.getLong(1), r.getLong(2), null, null, 0, 0, 0, 0, 0, 0), draftId).stream().findFirst().orElse(null);
+        AirfareSelection airfare = jdbc.query("""
+                SELECT a.outbound_flight_instance_id, a.return_flight_instance_id,
+                       out_s.flight_number, in_s.flight_number,
+                       out_i.base_fare_cents, out_i.tax_cents, out_i.fee_cents,
+                       in_i.base_fare_cents, in_i.tax_cents, in_i.fee_cents
+                FROM detour_trip_draft_airfare_selection a
+                JOIN flight_instance out_i ON out_i.id = a.outbound_flight_instance_id
+                JOIN flight_schedule out_s ON out_s.id = out_i.flight_schedule_id
+                JOIN flight_instance in_i ON in_i.id = a.return_flight_instance_id
+                JOIN flight_schedule in_s ON in_s.id = in_i.flight_schedule_id
+                WHERE a.draft_id = ?
+                """,
+                (r, n) -> new AirfareSelection(
+                        r.getLong(1),
+                        r.getLong(2),
+                        "Flight " + r.getString(3),
+                        "Flight " + r.getString(4),
+                        r.getLong(5),
+                        r.getLong(6),
+                        r.getLong(7),
+                        r.getLong(8),
+                        r.getLong(9),
+                        r.getLong(10)
+                ), draftId).stream().findFirst().orElse(null);
         StaySelection stay = jdbc.query("SELECT accommodation_unit_id, unit_count FROM detour_trip_draft_stay_selection WHERE draft_id = ?",
                 (r,n) -> new StaySelection(r.getLong(1), r.getInt(2), null, null, List.of()), draftId).stream().findFirst().orElse(null);
         RentalSelection rental = jdbc.query("SELECT rental_unit_id, pickup_at, return_at FROM detour_trip_draft_rental_selection WHERE draft_id = ?",
@@ -107,6 +129,28 @@ class JdbcTripRepository implements TripRepository {
 
     @Override public boolean advanceVersion(long tripId, long ownerUserId, long expectedVersion) { return jdbc.update("UPDATE detour_trip SET version = version + 1 WHERE id = ? AND owner_user_id = ? AND version = ?", tripId, ownerUserId, expectedVersion) == 1; }
     @Override public boolean advanceVersionForDraft(long tripId, long ownerUserId, long expectedVersion, long draftId, long expectedDraftVersion) { return jdbc.update("UPDATE detour_trip SET version = version + 1 WHERE id = ? AND owner_user_id = ? AND version = ? AND EXISTS (SELECT 1 FROM detour_trip_draft WHERE id = ? AND trip_id = ? AND version = ?)", tripId, ownerUserId, expectedVersion, draftId, tripId, expectedDraftVersion) == 1; }
+
+    @Override public boolean advanceVersionForDraftMutation(long tripId, long ownerUserId, long expectedVersion, long draftId, long expectedDraftVersion) {
+        int updatedTrip = jdbc.update("""
+                UPDATE detour_trip SET version = version + 1
+                WHERE id = ? AND owner_user_id = ? AND version = ?
+                  AND EXISTS (SELECT 1 FROM detour_trip_draft WHERE id = ? AND trip_id = ? AND version = ?)
+                """, tripId, ownerUserId, expectedVersion, draftId, tripId, expectedDraftVersion);
+        if (updatedTrip != 1) {
+            return false;
+        }
+        int updatedDraft = jdbc.update("""
+                UPDATE detour_trip_draft SET version = version + 1
+                WHERE id = ? AND trip_id = ? AND version = ?
+                """, draftId, tripId, expectedDraftVersion);
+        return updatedDraft == 1;
+    }
+
+    @Override public void saveDraftAirfareSelection(long draftId, long outboundFlightInstanceId, long returnFlightInstanceId) {
+        jdbc.update("DELETE FROM detour_trip_draft_airfare_selection WHERE draft_id = ?", draftId);
+        jdbc.update("INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id) VALUES (?, ?, ?)",
+                draftId, outboundFlightInstanceId, returnFlightInstanceId);
+    }
 
     @Override public void replaceSharedDetails(long tripId, Destination destination, LocalDate startDate, LocalDate endDate, int travelerCount, List<Integer> ages, Long budget, String label) {
         jdbc.update("UPDATE detour_trip SET catalog_destination_id = ?, start_date = ?, end_date = ?, traveler_count = ?, budget_cents = ?, display_label = ? WHERE id = ?", destination.id(), startDate, endDate, travelerCount, budget, label, tripId);

@@ -25,6 +25,11 @@ interface TripRepository {
     boolean advanceVersionForDraft(long tripId, long ownerUserId, long expectedVersion, long draftId,
             long expectedDraftVersion);
 
+    boolean advanceVersionForDraftMutation(long tripId, long ownerUserId, long expectedVersion, long draftId,
+            long expectedDraftVersion);
+
+    void saveDraftAirfareSelection(long draftId, long outboundFlightInstanceId, long returnFlightInstanceId);
+
     void replaceSharedDetails(long tripId, Destination destination, LocalDate startDate, LocalDate endDate,
             int travelerCount, List<Integer> travelerAges, Long budgetCents, String label);
 

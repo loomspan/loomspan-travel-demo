@@ -1,5 +1,9 @@
 package app.detour.trip;
 
+import app.detour.airfare.AirfareSearchRepository;
+import app.detour.airfare.AirfareSearchResponses.AirfareSearchResponse;
+import app.detour.airfare.AirfareSearchService;
+import app.detour.airfare.AirfareSort;
 import app.detour.api.ApiException;
 import app.detour.common.ClockConfiguration;
 import tools.jackson.databind.JsonNode;
@@ -24,10 +28,14 @@ public class TripService {
     private static final LocalDate FIRST_SUPPORTED_DATE = LocalDate.of(2027, 3, 1);
     private static final LocalDate LAST_SUPPORTED_DATE = LocalDate.of(2027, 3, 31);
     private final TripRepository trips;
+    private final AirfareSearchService airfareSearchService;
+    private final AirfareSearchRepository airfareSearchRepository;
     private final Clock clock;
 
-    TripService(TripRepository trips, Clock clock) {
+    TripService(TripRepository trips, AirfareSearchService airfareSearchService, AirfareSearchRepository airfareSearchRepository, Clock clock) {
         this.trips = trips;
+        this.airfareSearchService = airfareSearchService;
+        this.airfareSearchRepository = airfareSearchRepository;
         this.clock = clock;
     }
 
@@ -512,6 +520,91 @@ public class TripService {
         if (trip.budgetCents() == null) issues.put("budgetCents", "Provide a budget before planning.");
         if (selections.airfare() == null && selections.stay() == null && selections.rental() == null) issues.put("components", "Select at least one structurally valid reservable component before planning.");
         return issues;
+    }
+
+    public AirfareSearchResponse searchAirfare(long ownerUserId, String tripId, String draftId, boolean directOnly, String sortStr) {
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        TripDraft draft = null;
+        if (draftId != null) {
+            draft = ownedDraft(trip, draftId);
+        }
+        AirfareSort sort = AirfareSort.from(sortStr);
+        return airfareSearchService.search(
+                trip.destination().id(),
+                trip.destination().key(),
+                trip.startDate(),
+                trip.endDate(),
+                trip.travelerCount(),
+                trip.publicId(),
+                draft != null ? draft.publicId() : null,
+                directOnly,
+                sort
+        );
+    }
+
+    @Transactional
+    public TripResponse selectDraftAirfare(long ownerUserId, String tripId, String draftId, TripRequests.AirfareSelectionRequest request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        TripDraft draft = ownedDraft(trip, draftId);
+
+        if (request.outboundFlightInstanceId() == request.returnFlightInstanceId()) {
+            throw validation("outboundFlightInstanceId", "Outbound and return flight instances must be distinct.");
+        }
+
+        var outboundOpt = airfareSearchRepository.findLegById(request.outboundFlightInstanceId());
+        var returnOpt = airfareSearchRepository.findLegById(request.returnFlightInstanceId());
+
+        if (outboundOpt.isEmpty()) {
+            throw validation("outboundFlightInstanceId", "Selected outbound flight was not found or is unavailable.");
+        }
+        if (returnOpt.isEmpty()) {
+            throw validation("returnFlightInstanceId", "Selected return flight was not found or is unavailable.");
+        }
+
+        var outbound = outboundOpt.get();
+        var returnFlight = returnOpt.get();
+
+        String expectedDestAirport = airfareSearchRepository.findAirportIataCodeForDestination(trip.destination().id()).orElse("");
+
+        boolean outboundMatches = "PDX".equals(outbound.originAirportCode())
+                && expectedDestAirport.equals(outbound.destinationAirportCode())
+                && trip.startDate().equals(outbound.departureTime().atZoneSameInstant(java.time.ZoneId.of(outbound.departureTimeZone())).toLocalDate())
+                && outbound.availableSeats() >= trip.travelerCount();
+
+        if (!outboundMatches) {
+            throw validation("outboundFlightInstanceId", "Selected outbound flight does not match trip destination, dates, or party size.");
+        }
+
+        boolean returnMatches = expectedDestAirport.equals(returnFlight.originAirportCode())
+                && "PDX".equals(returnFlight.destinationAirportCode())
+                && trip.endDate().equals(returnFlight.departureTime().atZoneSameInstant(java.time.ZoneId.of(returnFlight.departureTimeZone())).toLocalDate())
+                && returnFlight.availableSeats() >= trip.travelerCount();
+
+        if (!returnMatches) {
+            throw validation("returnFlightInstanceId", "Selected return flight does not match trip destination, dates, or party size.");
+        }
+
+        if (!trips.advanceVersionForDraftMutation(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
+            throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
+        }
+
+        trips.saveDraftAirfareSelection(draft.id(), request.outboundFlightInstanceId(), request.returnFlightInstanceId());
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+    }
+
+    @Transactional
+    public TripResponse removeDraftAirfare(long ownerUserId, String tripId, String draftId, TripRequests.DraftMutation request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        TripDraft draft = ownedDraft(trip, draftId);
+
+        if (!trips.advanceVersionForDraftMutation(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
+            throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
+        }
+
+        trips.deleteDraftAirfareSelection(draft.id());
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
     }
 
     private static <T> T required(T value, String field) {

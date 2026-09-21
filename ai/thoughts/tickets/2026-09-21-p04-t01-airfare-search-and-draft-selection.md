@@ -35,18 +35,18 @@ Authenticated users can search round-trip flight combinations between PDX and th
 
 ## Acceptance criteria
 
-- [ ] An authenticated user can search round-trip flights for their Trip destination and dates and receives available round-trip combinations between PDX and the destination.
-- [ ] Combinations with insufficient seat capacity for the traveler count are omitted from results.
-- [ ] The `directOnly` filter restricts results to direct flights; omitting it returns direct and one-stop flights.
-- [ ] Default ranking places direct flights first, then orders by complete-party price, then duration, ending with the deterministic flight combination key tie-breaker.
-- [ ] Sort overrides for lowest price, shortest duration, earliest departure, and fewest stops sort deterministically with the combination key tie-breaker.
-- [ ] Pricing calculates the exact complete-party total (`travelerCount * perSeatTotal`) in USD integer cents with transparent base/tax/fee breakdown.
-- [ ] Saving an airfare selection persists outbound and return flight instance IDs in `detour_trip_draft_airfare_selection`, advances draft version, and returns updated `TripResponse`.
-- [ ] Replacing an airfare selection replaces the existing selection cleanly without orphaned or duplicate rows.
-- [ ] Removing an airfare selection deletes the draft airfare record and advances the draft version.
-- [ ] Mutations with mismatched `expectedVersion` or `expectedDraftVersion` return 409 `VERSION_CONFLICT` without modifying persisted data.
-- [ ] Another user cannot search or mutate airfare on a Trip they do not own and receives 404 with no data disclosure.
-- [ ] Backend integration tests verify search, filtering, deterministic sorting, concurrency conflict handling, and cross-user isolation.
+- [x] An authenticated user can search round-trip flights for their Trip destination and dates and receives available round-trip combinations between PDX and the destination.
+- [x] Combinations with insufficient seat capacity for the traveler count are omitted from results.
+- [x] The `directOnly` filter restricts results to direct flights; omitting it returns direct and one-stop flights.
+- [x] Default ranking places direct flights first, then orders by complete-party price, then duration, ending with the deterministic flight combination key tie-breaker.
+- [x] Sort overrides for lowest price, shortest duration, earliest departure, and fewest stops sort deterministically with the combination key tie-breaker.
+- [x] Pricing calculates the exact complete-party total (`travelerCount * perSeatTotal`) in USD integer cents with transparent base/tax/fee breakdown.
+- [x] Saving an airfare selection persists outbound and return flight instance IDs in `detour_trip_draft_airfare_selection`, advances draft version, and returns updated `TripResponse`.
+- [x] Replacing an airfare selection replaces the existing selection cleanly without orphaned or duplicate rows.
+- [x] Removing an airfare selection deletes the draft airfare record and advances the draft version.
+- [x] Mutations with mismatched `expectedVersion` or `expectedDraftVersion` return 409 `VERSION_CONFLICT` without modifying persisted data.
+- [x] Another user cannot search or mutate airfare on a Trip they do not own and receives 404 with no data disclosure.
+- [x] Backend integration tests verify search, filtering, deterministic sorting, concurrency conflict handling, and cross-user isolation.
 
 ## Context
 

@@ -1,5 +1,6 @@
 package app.detour.trip;
 
+import app.detour.airfare.AirfareSearchResponses.AirfareSearchResponse;
 import app.detour.api.ApiException;
 import app.detour.identity.DetourUserPrincipal;
 import java.util.Map;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.JsonNode;
 
@@ -76,6 +78,53 @@ public class TripController {
     TripResponse deleteAlternative(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId,
             @PathVariable String alternativeId, @RequestBody JsonNode request) {
         return trips.deleteAlternative(requirePrincipal(principal).userId(), tripId, alternativeId, TripRequests.alternativeDelete(request));
+    }
+
+    @GetMapping("/{tripId}/drafts/{draftId}/airfare")
+    AirfareSearchResponse searchDraftAirfare(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId,
+            @PathVariable String draftId,
+            @RequestParam(defaultValue = "false") boolean directOnly,
+            @RequestParam(defaultValue = "DEFAULT") String sort) {
+        return trips.searchAirfare(requirePrincipal(principal).userId(), tripId, draftId, directOnly, sort);
+    }
+
+    @GetMapping("/{tripId}/airfare")
+    AirfareSearchResponse searchTripAirfare(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId,
+            @RequestParam(defaultValue = "false") boolean directOnly,
+            @RequestParam(defaultValue = "DEFAULT") String sort) {
+        return trips.searchAirfare(requirePrincipal(principal).userId(), tripId, null, directOnly, sort);
+    }
+
+    @PutMapping("/{tripId}/drafts/{draftId}/airfare")
+    TripResponse selectDraftAirfare(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId,
+            @PathVariable String draftId,
+            @RequestBody JsonNode request) {
+        return trips.selectDraftAirfare(
+                requirePrincipal(principal).userId(),
+                tripId,
+                draftId,
+                TripRequests.airfareSelection(request)
+        );
+    }
+
+    @DeleteMapping("/{tripId}/drafts/{draftId}/airfare")
+    TripResponse removeDraftAirfare(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId,
+            @PathVariable String draftId,
+            @RequestBody JsonNode request) {
+        return trips.removeDraftAirfare(
+                requirePrincipal(principal).userId(),
+                tripId,
+                draftId,
+                TripRequests.draftMutation(request)
+        );
     }
 
     @DeleteMapping("/{tripId}/drafts/{draftId}")
