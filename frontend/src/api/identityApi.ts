@@ -14,8 +14,9 @@ export class IdentityApiError extends Error {
     public readonly status?: number,
     public readonly code?: string,
     public readonly fields: Record<string, string> = {},
+    public readonly apiMessage?: string,
   ) {
-    super('Identity request failed');
+    super(apiMessage ?? 'Identity request failed');
   }
 }
 
@@ -51,7 +52,8 @@ export async function request<T>(path: string, method = 'GET', body?: unknown): 
   const fields = typeof envelope.fields === 'object' && envelope.fields !== null
     ? Object.fromEntries(Object.entries(envelope.fields).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
     : {};
-  throw new IdentityApiError('api', response.status, typeof envelope.code === 'string' ? envelope.code : undefined, fields);
+  const apiMessage = typeof envelope.message === 'string' ? envelope.message : undefined;
+  throw new IdentityApiError('api', response.status, typeof envelope.code === 'string' ? envelope.code : undefined, fields, apiMessage);
 }
 
 export const identityApi = {

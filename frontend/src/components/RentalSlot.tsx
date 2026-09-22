@@ -11,6 +11,7 @@ type RentalSlotProps = {
   draftId: string;
   selectedRental: RentalComponentResponse | null;
   mode: 'hidden' | 'searching' | 'selected';
+  highlighted?: boolean;
   onSelect: (option: RentalOptionResponse, pickupAtIso: string, returnAtIso: string) => Promise<void>;
   onChange: () => void;
   onRemove: () => void;
@@ -23,6 +24,7 @@ export function RentalSlot({
   draftId,
   selectedRental,
   mode,
+  highlighted = false,
   onSelect,
   onChange,
   onRemove,
@@ -38,9 +40,9 @@ export function RentalSlot({
   const showSelected = mode === 'selected' && Boolean(selectedRental);
 
   return (
-    <section className="card component-slot rental-slot" aria-labelledby="rental-slot-heading">
+    <section className={`card component-slot rental-slot ${highlighted ? 'slot-highlighted' : ''}`} aria-labelledby="rental-slot-heading">
       <div className="slot-header">
-        <h3 id="rental-slot-heading">Rental Car</h3>
+        <h3 id="rental-slot-heading" tabIndex={-1}>Rental Car</h3>
         {showSelected && <span className="badge badge-success">Selected</span>}
       </div>
 

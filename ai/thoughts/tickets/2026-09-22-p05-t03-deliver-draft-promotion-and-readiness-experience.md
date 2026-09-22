@@ -35,14 +35,14 @@ Authenticated users can promote ready Drafts into immutable Planned snapshots di
 
 ## Acceptance criteria
 
-- [ ] "Promote to Planned" action is accessible in the progressive trip builder and Draft alternative cards.
-- [ ] Incomplete Drafts display actionable blocking issues, and clicking an issue moves focus directly to the missing field or component slot.
-- [ ] Over-budget Draft promotion displays a warning modal showing budget, grand total, and overage, requiring explicit checkbox acknowledgment before enabling confirmation.
-- [ ] Successfully promoted Drafts appear immediately as Planned snapshots with read-only badges and duplicate/delete actions.
-- [ ] In-place modifications to Planned snapshots are prevented, and duplicating a Planned snapshot produces a new mutable Draft.
-- [ ] Form edits following an overage warning invalidate previous client acknowledgment and require fresh acknowledgment on subsequent promotion attempts.
-- [ ] Keyboard navigation, focus trapping, Escape key dismissal, and `aria-live` status announcements are verified in Vitest tests.
-- [ ] Responsive tests confirm accessible layout and functionality on both desktop and mobile viewports.
+- [x] "Promote to Planned" action is accessible in the progressive trip builder and Draft alternative cards.
+- [x] Incomplete Drafts display actionable blocking issues, and clicking an issue moves focus directly to the missing field or component slot.
+- [x] Over-budget Draft promotion displays a warning modal showing budget, grand total, and overage, requiring explicit checkbox acknowledgment before enabling confirmation.
+- [x] Successfully promoted Drafts appear immediately as Planned snapshots with read-only badges and duplicate/delete actions.
+- [x] In-place modifications to Planned snapshots are prevented, and duplicating a Planned snapshot produces a new mutable Draft.
+- [x] Form edits following an overage warning invalidate previous client acknowledgment and require fresh acknowledgment on subsequent promotion attempts.
+- [x] Keyboard navigation, focus trapping, Escape key dismissal, and `aria-live` status announcements are verified in Vitest tests.
+- [x] Responsive tests confirm accessible layout and functionality on both desktop and mobile viewports.
 
 ## Context
 

@@ -12,6 +12,7 @@ type StaySlotProps = {
   draftId: string;
   selectedStay: StayComponentResponse | null;
   mode: 'empty' | 'searching' | 'selected';
+  highlighted?: boolean;
   initialType?: AccommodationType;
   onStartSearch: () => void;
   onSelect: (option: StayOptionResponse) => Promise<void>;
@@ -26,6 +27,7 @@ export function StaySlot({
   draftId,
   selectedStay,
   mode,
+  highlighted = false,
   initialType = 'HOTEL',
   onStartSearch,
   onSelect,
@@ -42,9 +44,9 @@ export function StaySlot({
   const showEmpty = mode === 'empty' || (mode === 'selected' && !selectedStay);
 
   return (
-    <section className="card component-slot stay-slot" aria-labelledby="stay-slot-heading">
+    <section className={`card component-slot stay-slot ${highlighted ? 'slot-highlighted' : ''}`} aria-labelledby="stay-slot-heading">
       <div className="slot-header">
-        <h3 id="stay-slot-heading">Stay</h3>
+        <h3 id="stay-slot-heading" tabIndex={-1}>Stay</h3>
         {showSelected && <span className="badge badge-success">Selected</span>}
       </div>
 

@@ -3,19 +3,25 @@ import type {AlternativeResponse} from '../api/tripsApi';
 type AlternativeCardProps = {
   alternative: AlternativeResponse;
   tripExpired?: boolean;
+  hasBookingHistory?: boolean;
+  promotionPending?: boolean;
   onDuplicateDraft: (draftId: string, version: number) => void;
   onDuplicatePlanned: (alternativeId: string) => void;
   onDeleteDraft: (draftId: string, version: number) => void;
   onDeletePlanned: (alternativeId: string) => void;
+  onPromoteDraft?: (draftId: string, version: number) => void;
 };
 
 export function AlternativeCard({
   alternative,
   tripExpired = false,
+  hasBookingHistory = false,
+  promotionPending = false,
   onDuplicateDraft,
   onDuplicatePlanned,
   onDeleteDraft,
   onDeletePlanned,
+  onPromoteDraft,
 }: AlternativeCardProps) {
   const isDraft = alternative.lifecycle.toUpperCase() === 'DRAFT';
   const isPlanned = alternative.lifecycle.toUpperCase() === 'PLANNED';
@@ -97,6 +103,17 @@ export function AlternativeCard({
             >
               Duplicate to new draft
             </button>
+            {onPromoteDraft && (
+              <button
+                type="button"
+                className="primary-button promote-draft-btn"
+                disabled={tripExpired || promotionPending}
+                onClick={() => onPromoteDraft(alternative.id, alternative.version ?? 0)}
+                aria-label={`Promote draft ${alternative.id.slice(0, 8)} to planned`}
+              >
+                {promotionPending ? 'Saving planned itinerary…' : 'Promote to Planned'}
+              </button>
+            )}
           </>
         ) : (
           <>

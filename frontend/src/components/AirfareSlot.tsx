@@ -11,6 +11,7 @@ type AirfareSlotProps = {
   draftId: string;
   selectedAirfare: AirfareComponentResponse | null;
   mode: 'empty' | 'searching' | 'selected';
+  highlighted?: boolean;
   onStartSearch: () => void;
   onSelect: (option: FlightCombinationResponse) => Promise<void>;
   onChange: () => void;
@@ -24,6 +25,7 @@ export function AirfareSlot({
   draftId,
   selectedAirfare,
   mode,
+  highlighted = false,
   onStartSearch,
   onSelect,
   onChange,
@@ -39,9 +41,9 @@ export function AirfareSlot({
   const showEmpty = mode === 'empty' || (mode === 'selected' && !selectedAirfare);
 
   return (
-    <section className="card component-slot airfare-slot" aria-labelledby="airfare-slot-heading">
+    <section className={`card component-slot airfare-slot ${highlighted ? 'slot-highlighted' : ''}`} aria-labelledby="airfare-slot-heading">
       <div className="slot-header">
-        <h3 id="airfare-slot-heading">Airfare</h3>
+        <h3 id="airfare-slot-heading" tabIndex={-1}>Airfare</h3>
         {showSelected && (
           <span className="badge badge-success">Selected</span>
         )}

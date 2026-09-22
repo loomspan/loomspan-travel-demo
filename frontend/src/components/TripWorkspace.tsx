@@ -12,6 +12,8 @@ import {
 import {IdentityApiError} from '../api/identityApi';
 import {AlternativeCard} from './AlternativeCard';
 import {RevisionSummaryBanner} from './RevisionSummaryBanner';
+import {DraftReadinessBanner} from './DraftReadinessBanner';
+import {BudgetOverageModal} from './BudgetOverageModal';
 import {TripRevisionModal} from './TripRevisionModal';
 import {ConfirmDeleteModal, type DeleteTarget} from './ConfirmDeleteModal';
 import {
@@ -133,6 +135,21 @@ export function TripWorkspace({
 
   const [componentMutationPending, setComponentMutationPending] = useState(false);
 
+  const [promotionPending, setPromotionPending] = useState(false);
+  const [readinessIssues, setReadinessIssues] = useState<Record<string, string> | null>(null);
+  const [isReadinessBannerOpen, setIsReadinessBannerOpen] = useState(false);
+  const [isOverageModalOpen, setIsOverageModalOpen] = useState(false);
+  const [overageDetails, setOverageDetails] = useState<{
+    budgetCents: number;
+    grandTotalCents: number;
+    budgetOverageCents: number;
+    draftId: string;
+    draftVersion: number;
+  } | null>(null);
+  const [overageErrorMessage, setOverageErrorMessage] = useState<string | undefined>();
+  const [budgetOverageAcknowledged, setBudgetOverageAcknowledged] = useState(false);
+  const [highlightedSlot, setHighlightedSlot] = useState<'airfare' | 'stay' | 'rental' | null>(null);
+
   useEffect(() => {
     if (activeDraft?.selections?.airfare) {
       setAirfareMode('selected');
@@ -157,10 +174,23 @@ export function TripWorkspace({
     }
   }, [activeDraft?.selections?.rental]);
 
+  useEffect(() => {
+    if (highlightedSlot === 'rental' && rentalMode !== 'hidden') {
+      const el = document.getElementById('rental-slot-heading');
+      if (el && document.activeElement !== el) {
+        if (typeof el.scrollIntoView === 'function') {
+          el.scrollIntoView({behavior: 'smooth', block: 'center'});
+        }
+        el.focus();
+      }
+    }
+  }, [highlightedSlot, rentalMode]);
+
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialMount = useRef(true);
   const isSavingRef = useRef(false);
   const pendingSaveRef = useRef(false);
+  const isPromotingRef = useRef(false);
 
   const applyTripState = useCallback((t: TripResponse) => {
     setTrip(t);
@@ -390,6 +420,7 @@ export function TripWorkspace({
     try {
       const updated = await tripsApi.createDraft(trip.id, {expectedVersion: trip.version});
       setTrip(updated);
+      setBudgetOverageAcknowledged(false);
       setAutosaveStatus('saved');
       setAutosaveMessage('Empty draft created.');
     } catch (err) {
@@ -406,6 +437,7 @@ export function TripWorkspace({
         expectedDraftVersion: version,
       });
       setTrip(updated);
+      setBudgetOverageAcknowledged(false);
       setAutosaveStatus('saved');
       setAutosaveMessage('Draft duplicated.');
     } catch (err) {
@@ -421,6 +453,7 @@ export function TripWorkspace({
         expectedVersion: trip.version,
       });
       setTrip(updated);
+      setBudgetOverageAcknowledged(false);
       setAutosaveStatus('saved');
       setAutosaveMessage('Planned itinerary duplicated to draft.');
     } catch (err) {
@@ -444,6 +477,7 @@ export function TripWorkspace({
         returnFlightInstanceId: option.returnFlight.flightInstanceId,
       });
       applyTripState(updatedTrip);
+      setBudgetOverageAcknowledged(false);
       setAirfareMode('selected');
       setAutosaveStatus('saved');
       setAutosaveMessage('Flight saved to draft.');
@@ -473,6 +507,7 @@ export function TripWorkspace({
         unitCount: option.pricing.requiredRooms,
       });
       applyTripState(updatedTrip);
+      setBudgetOverageAcknowledged(false);
       setStayMode('selected');
       setAutosaveStatus('saved');
       setAutosaveMessage('Stay saved to draft.');
@@ -507,6 +542,7 @@ export function TripWorkspace({
         returnAt: returnAtIso,
       });
       applyTripState(updatedTrip);
+      setBudgetOverageAcknowledged(false);
       setRentalMode('selected');
       setAutosaveStatus('saved');
       setAutosaveMessage('Rental car saved to draft.');
@@ -584,6 +620,7 @@ export function TripWorkspace({
         setRentalMode('hidden');
       }
       applyTripState(updatedTrip);
+      setBudgetOverageAcknowledged(false);
       const title = removeTarget.title;
       setRemoveTarget(null);
       setAutosaveStatus('saved');
@@ -691,11 +728,170 @@ export function TripWorkspace({
   };
 
   const updateTravelerAge = (index: number, val: string) => {
+    setBudgetOverageAcknowledged(false);
     setTravelerAges((prev) => {
       const next = [...prev];
       next[index] = val;
       return next;
     });
+  };
+
+  const handlePromoteDraft = async (
+    draftId: string,
+    draftVersion: number,
+    forceAcknowledged?: boolean
+  ) => {
+    if (isPromotingRef.current || promotionPending) return;
+    isPromotingRef.current = true;
+    setPromotionPending(true);
+    setOverageErrorMessage(undefined);
+    setAutosaveStatus('saving');
+    setAutosaveMessage('Saving draft as planned itinerary…');
+
+    const acknowledge = forceAcknowledged ?? budgetOverageAcknowledged;
+
+    try {
+      const updatedTrip = await tripsApi.promoteDraft(trip.id, draftId, {
+        expectedVersion: trip.version,
+        expectedDraftVersion: draftVersion,
+        budgetOverageAcknowledged: acknowledge ? true : undefined,
+      });
+      applyTripState(updatedTrip);
+      if (onTripUpdated) {
+        onTripUpdated(updatedTrip);
+      }
+      setIsOverageModalOpen(false);
+      setIsReadinessBannerOpen(false);
+      setReadinessIssues(null);
+      setOverageDetails(null);
+      setBudgetOverageAcknowledged(false);
+      setHighlightedSlot(null);
+      setAutosaveStatus('saved');
+      setAutosaveMessage('Draft successfully saved as planned itinerary.');
+    } catch (err) {
+      if (err instanceof IdentityApiError) {
+        if (err.code === 'PLANNING_NOT_READY') {
+          const issues =
+            err.fields && Object.keys(err.fields).length > 0
+              ? err.fields
+              : {general: err.apiMessage || 'Draft is not ready to be saved as a planned itinerary.'};
+          setReadinessIssues(issues);
+          setIsReadinessBannerOpen(true);
+          setAutosaveStatus('error');
+          setAutosaveMessage('Draft cannot be planned yet. Please review the blocking issues.');
+        } else if (err.code === 'BUDGET_OVERAGE_UNACKNOWLEDGED') {
+          const targetDraft = trip.drafts?.find((d) => d.id === draftId) ?? activeDraft;
+          const bCents = err.fields?.budgetCents
+            ? parseInt(err.fields.budgetCents, 10)
+            : (trip.budgetCents ?? 0);
+          const gtCents = err.fields?.grandTotalCents
+            ? parseInt(err.fields.grandTotalCents, 10)
+            : (targetDraft?.tally?.grandTotalCents ?? 0);
+          const boCents = err.fields?.budgetOverageCents
+            ? parseInt(err.fields.budgetOverageCents, 10)
+            : Math.max(0, gtCents - bCents);
+
+          setOverageDetails({
+            budgetCents: bCents,
+            grandTotalCents: gtCents,
+            budgetOverageCents: boCents,
+            draftId,
+            draftVersion,
+          });
+          setIsOverageModalOpen(true);
+          setAutosaveStatus('idle');
+          setAutosaveMessage(undefined);
+        } else if (err.code === 'VERSION_CONFLICT') {
+          setAutosaveStatus('conflict');
+          setAutosaveMessage('The Trip has changed on the server. Reload before saving.');
+          if (isOverageModalOpen) {
+            setOverageErrorMessage('The Trip has changed on the server. Please reload.');
+          }
+        } else if (err.code === 'ALTERNATIVE_EXPIRED') {
+          setAutosaveStatus('error');
+          setAutosaveMessage('This trip or draft alternative has expired and can no longer be planned.');
+          if (isOverageModalOpen) {
+            setOverageErrorMessage('This trip or draft alternative has expired.');
+          }
+        } else {
+          const msg = err.apiMessage || 'Failed to save draft as planned itinerary.';
+          setAutosaveStatus('error');
+          setAutosaveMessage(msg);
+          if (isOverageModalOpen) {
+            setOverageErrorMessage(msg);
+          }
+        }
+      } else {
+        const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+        setAutosaveStatus('error');
+        setAutosaveMessage(msg);
+        if (isOverageModalOpen) {
+          setOverageErrorMessage(msg);
+        }
+      }
+    } finally {
+      isPromotingRef.current = false;
+      setPromotionPending(false);
+    }
+  };
+
+  const handleConfirmOveragePromotion = async () => {
+    if (!overageDetails) return;
+    setBudgetOverageAcknowledged(true);
+    await handlePromoteDraft(overageDetails.draftId, overageDetails.draftVersion, true);
+  };
+
+  const handleJumpToIssue = (key: string) => {
+    setHighlightedSlot(null);
+    let targetEl: HTMLElement | null = null;
+
+    if (key === 'travelerAges') {
+      let firstEmpty = travelerAges.findIndex((age) => !age.trim());
+      if (firstEmpty === -1) firstEmpty = 0;
+      targetEl = document.getElementById(`traveler-age-${firstEmpty}`);
+    } else if (key === 'adult') {
+      targetEl = document.getElementById('traveler-age-0');
+    } else if (key === 'budgetCents' || key === 'budget') {
+      targetEl = document.getElementById('workspace-budget');
+    } else if (key === 'components') {
+      targetEl = document.getElementById('builder-heading') || document.querySelector('.component-slots-grid');
+    } else if (key === 'airfare') {
+      setHighlightedSlot('airfare');
+      targetEl = document.getElementById('airfare-slot-heading');
+    } else if (key === 'stay') {
+      setHighlightedSlot('stay');
+      targetEl = document.getElementById('stay-slot-heading');
+    } else if (key === 'rental') {
+      if (rentalMode === 'hidden') {
+        setRentalMode('searching');
+      }
+      setHighlightedSlot('rental');
+      targetEl = document.getElementById('rental-slot-heading');
+      if (!targetEl) {
+        setTimeout(() => {
+          const el = document.getElementById('rental-slot-heading');
+          if (el) {
+            if (typeof el.scrollIntoView === 'function') {
+              el.scrollIntoView({behavior: 'smooth', block: 'center'});
+            }
+            el.focus();
+          }
+        }, 0);
+      }
+    } else if (key === 'destination') {
+      targetEl = document.getElementById('workspace-destination');
+    } else if (key === 'dates' || key === 'startDate' || key === 'endDate') {
+      targetEl = document.getElementById('workspace-start-date');
+    } else if (key === 'travelerCount') {
+      targetEl = document.getElementById('workspace-traveler-count');
+    }
+
+    if (targetEl) {
+      if (typeof targetEl.scrollIntoView === 'function') {
+        targetEl.scrollIntoView({behavior: 'smooth', block: 'center'});
+      }
+      targetEl.focus();
+    }
   };
 
   return (
@@ -749,8 +945,8 @@ export function TripWorkspace({
           role="status"
           aria-live="polite"
         >
-          {autosaveStatus === 'saving' && <span>Saving…</span>}
-          {autosaveStatus === 'saved' && <span>All changes saved.</span>}
+          {autosaveStatus === 'saving' && <span>{autosaveMessage || 'Saving…'}</span>}
+          {autosaveStatus === 'saved' && <span>{autosaveMessage || 'All changes saved.'}</span>}
           {autosaveStatus === 'error' && <span className="field-error">{autosaveMessage}</span>}
           {autosaveStatus === 'conflict' && (
             <div className="conflict-alert" role="alert">
@@ -774,11 +970,31 @@ export function TripWorkspace({
         />
       )}
 
+      {isReadinessBannerOpen && readinessIssues && (
+        <DraftReadinessBanner
+          issues={readinessIssues}
+          onJumpTo={handleJumpToIssue}
+          onDismiss={() => {
+            setIsReadinessBannerOpen(false);
+            setHighlightedSlot(null);
+          }}
+        />
+      )}
+
       {/* Progressive Builder & Component Slots */}
       {activeDraft && (
         <section className="workspace-section builder-section" aria-labelledby="builder-heading">
-          <div className="section-header">
-            <h3 id="builder-heading">Progressive Trip Builder</h3>
+          <div className="section-header builder-header">
+            <h3 id="builder-heading" tabIndex={-1}>Progressive Trip Builder</h3>
+            <button
+              type="button"
+              className="primary-button promote-draft-btn"
+              disabled={isExpired || promotionPending}
+              onClick={() => void handlePromoteDraft(activeDraft.id, activeDraft.version)}
+              aria-label="Save as Planned Itinerary"
+            >
+              {promotionPending ? 'Saving planned itinerary…' : 'Save as Planned Itinerary'}
+            </button>
           </div>
 
           <ItinerarySummaryTally trip={trip} selections={activeDraft.selections} />
@@ -789,6 +1005,7 @@ export function TripWorkspace({
               draftId={activeDraft.id}
               selectedAirfare={activeDraft.selections.airfare}
               mode={airfareMode}
+              highlighted={highlightedSlot === 'airfare'}
               onStartSearch={() => setAirfareMode('searching')}
               onSelect={handleSelectAirfare}
               onChange={() => setAirfareMode('searching')}
@@ -804,6 +1021,7 @@ export function TripWorkspace({
               draftId={activeDraft.id}
               selectedStay={activeDraft.selections.stay}
               mode={stayMode}
+              highlighted={highlightedSlot === 'stay'}
               initialType={stayAccommodationType}
               onStartSearch={() => setStayMode('searching')}
               onSelect={handleSelectStay}
@@ -820,6 +1038,7 @@ export function TripWorkspace({
               draftId={activeDraft.id}
               selectedRental={activeDraft.selections.rental}
               mode={rentalMode}
+              highlighted={highlightedSlot === 'rental'}
               onSelect={handleSelectRental}
               onChange={() => setRentalMode('searching')}
               onRemove={promptRemoveRental}
@@ -875,7 +1094,10 @@ export function TripWorkspace({
                 id="workspace-destination"
                 value={destinationKey}
                 disabled={hasPlanned}
-                onChange={(e) => setDestinationKey(e.target.value)}
+                onChange={(e) => {
+                  setDestinationKey(e.target.value);
+                  setBudgetOverageAcknowledged(false);
+                }}
               >
                 {SUPPORTED_DESTINATIONS.map((dest) => (
                   <option key={dest.key} value={dest.key}>
@@ -894,7 +1116,10 @@ export function TripWorkspace({
                 disabled={hasPlanned}
                 min="2027-03-01"
                 max="2027-03-31"
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setBudgetOverageAcknowledged(false);
+                }}
                 aria-describedby={fieldErrors.dates ? 'workspace-dates-error' : undefined}
               />
             </div>
@@ -908,7 +1133,10 @@ export function TripWorkspace({
                 disabled={hasPlanned}
                 min="2027-03-01"
                 max="2027-03-31"
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setBudgetOverageAcknowledged(false);
+                }}
                 aria-describedby={fieldErrors.dates ? 'workspace-dates-error' : undefined}
               />
             </div>
@@ -930,7 +1158,10 @@ export function TripWorkspace({
                 step="0.01"
                 placeholder="e.g. 2500.00"
                 value={budgetDollars}
-                onChange={(e) => setBudgetDollars(e.target.value)}
+                onChange={(e) => {
+                  setBudgetDollars(e.target.value);
+                  setBudgetOverageAcknowledged(false);
+                }}
                 aria-describedby={fieldErrors.budget ? 'workspace-budget-error' : undefined}
               />
               {fieldErrors.budget && (
@@ -952,6 +1183,7 @@ export function TripWorkspace({
                 onChange={(e) => {
                   const raw = e.target.value;
                   setTravelerCountInput(raw);
+                  setBudgetOverageAcknowledged(false);
                   const val = parseInt(raw, 10);
                   if (!isNaN(val) && val >= 1 && val <= 8) {
                     setTravelerCount(val);
@@ -1033,10 +1265,12 @@ export function TripWorkspace({
                 key={alt.id}
                 alternative={alt}
                 tripExpired={isExpired}
+                promotionPending={promotionPending}
                 onDuplicateDraft={(id, ver) => void handleDuplicateDraft(id, ver)}
                 onDuplicatePlanned={(id) => void handleDuplicatePlanned(id)}
                 onDeleteDraft={(id, ver) => promptDeleteDraft(id, ver)}
                 onDeletePlanned={(id) => promptDeletePlanned(id)}
+                onPromoteDraft={(id, ver) => void handlePromoteDraft(id, ver)}
               />
             ))}
           </div>
@@ -1082,6 +1316,23 @@ export function TripWorkspace({
             setRemoveError(undefined);
           }}
           onConfirm={() => void handleConfirmRemove()}
+        />
+      )}
+
+      {/* Budget overage acknowledgment modal */}
+      {isOverageModalOpen && overageDetails && (
+        <BudgetOverageModal
+          isOpen={isOverageModalOpen}
+          budgetCents={overageDetails.budgetCents}
+          grandTotalCents={overageDetails.grandTotalCents}
+          budgetOverageCents={overageDetails.budgetOverageCents}
+          pending={promotionPending}
+          errorMessage={overageErrorMessage}
+          onClose={() => {
+            setIsOverageModalOpen(false);
+            setOverageErrorMessage(undefined);
+          }}
+          onConfirm={() => void handleConfirmOveragePromotion()}
         />
       )}
     </section>
