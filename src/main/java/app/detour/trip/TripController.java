@@ -1,6 +1,7 @@
 package app.detour.trip;
 
 import app.detour.airfare.AirfareSearchResponses.AirfareSearchResponse;
+import app.detour.stay.StaySearchResponses.StaySearchResponse;
 import app.detour.api.ApiException;
 import app.detour.identity.DetourUserPrincipal;
 import java.util.Map;
@@ -120,6 +121,53 @@ public class TripController {
             @PathVariable String draftId,
             @RequestBody JsonNode request) {
         return trips.removeDraftAirfare(
+                requirePrincipal(principal).userId(),
+                tripId,
+                draftId,
+                TripRequests.draftMutation(request)
+        );
+    }
+
+    @GetMapping({"/{tripId}/drafts/{draftId}/stays", "/{tripId}/drafts/{draftId}/stay"})
+    StaySearchResponse searchDraftStays(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId,
+            @PathVariable String draftId,
+            @RequestParam(required = false) String type,
+            @RequestParam(defaultValue = "DEFAULT") String sort) {
+        return trips.searchStays(requirePrincipal(principal).userId(), tripId, draftId, type, sort);
+    }
+
+    @GetMapping({"/{tripId}/stays", "/{tripId}/stay"})
+    StaySearchResponse searchTripStays(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId,
+            @RequestParam(required = false) String type,
+            @RequestParam(defaultValue = "DEFAULT") String sort) {
+        return trips.searchStays(requirePrincipal(principal).userId(), tripId, null, type, sort);
+    }
+
+    @PutMapping({"/{tripId}/drafts/{draftId}/stays", "/{tripId}/drafts/{draftId}/stay"})
+    TripResponse selectDraftStay(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId,
+            @PathVariable String draftId,
+            @RequestBody JsonNode request) {
+        return trips.selectDraftStay(
+                requirePrincipal(principal).userId(),
+                tripId,
+                draftId,
+                TripRequests.staySelection(request)
+        );
+    }
+
+    @DeleteMapping({"/{tripId}/drafts/{draftId}/stays", "/{tripId}/drafts/{draftId}/stay"})
+    TripResponse removeDraftStay(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId,
+            @PathVariable String draftId,
+            @RequestBody JsonNode request) {
+        return trips.removeDraftStay(
                 requirePrincipal(principal).userId(),
                 tripId,
                 draftId,

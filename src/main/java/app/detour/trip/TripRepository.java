@@ -49,6 +49,8 @@ interface TripRepository {
 
     void deleteDraftAirfareSelection(long draftId);
 
+    void saveDraftStaySelection(long draftId, long accommodationUnitId, int unitCount);
+
     void deleteDraftStaySelection(long draftId);
 
     void deleteDraftRentalSelection(long draftId);

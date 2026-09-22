@@ -29,6 +29,8 @@ public final class TripRequests {
     public record DraftMutation(long expectedVersion, long expectedDraftVersion) { }
     public record AirfareSelectionRequest(long expectedVersion, long expectedDraftVersion,
             long outboundFlightInstanceId, long returnFlightInstanceId) { }
+    public record StaySelectionRequest(long expectedVersion, long expectedDraftVersion,
+            long accommodationUnitId, Integer unitCount) { }
     public record Promotion(long expectedVersion, long expectedDraftVersion) { }
     public record AlternativeDuplicate(long expectedVersion, Long expectedDraftVersion) { }
     public record AlternativeDelete(long expectedVersion, Long expectedDraftVersion, Boolean confirmed) { }
@@ -72,6 +74,15 @@ public final class TripRequests {
                 version(body.get("expectedDraftVersion"), "expectedDraftVersion"),
                 positiveLong(body.get("outboundFlightInstanceId"), "outboundFlightInstanceId"),
                 positiveLong(body.get("returnFlightInstanceId"), "returnFlightInstanceId"));
+    }
+
+    static StaySelectionRequest staySelection(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion", "expectedDraftVersion", "accommodationUnitId", "unitCount"));
+        return new StaySelectionRequest(
+                version(body.get("expectedVersion"), "expectedVersion"),
+                version(body.get("expectedDraftVersion"), "expectedDraftVersion"),
+                positiveLong(body.get("accommodationUnitId"), "accommodationUnitId"),
+                positiveInt(body.get("unitCount"), "unitCount"));
     }
 
     static Promotion promotion(JsonNode body) {
@@ -137,6 +148,11 @@ public final class TripRequests {
         if (node == null || node.isNull()) throw invalid(field, "This field is required.");
         if (!node.isIntegralNumber() || !node.canConvertToLong() || node.longValue() <= 0) throw invalid(field, "This field must be a positive integer.");
         return node.longValue();
+    }
+    private static Integer positiveInt(JsonNode node, String field) {
+        if (node == null || node.isNull()) return null;
+        if (!node.isIntegralNumber() || !node.canConvertToInt() || node.intValue() <= 0) throw invalid(field, "This field must be a positive integer.");
+        return node.intValue();
     }
     private static Long optionalVersion(JsonNode node, String field) { return node == null || node.isNull() ? null : version(node, field); }
     private static int nonNegativeInt(JsonNode node, String field) {

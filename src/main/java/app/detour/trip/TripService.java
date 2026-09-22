@@ -6,6 +6,11 @@ import app.detour.airfare.AirfareSearchService;
 import app.detour.airfare.AirfareSort;
 import app.detour.api.ApiException;
 import app.detour.common.ClockConfiguration;
+import app.detour.stay.AccommodationType;
+import app.detour.stay.StaySearchRepository;
+import app.detour.stay.StaySearchResponses.StaySearchResponse;
+import app.detour.stay.StaySearchService;
+import app.detour.stay.StaySort;
 import tools.jackson.databind.JsonNode;
 import java.math.BigInteger;
 import java.time.Clock;
@@ -30,12 +35,22 @@ public class TripService {
     private final TripRepository trips;
     private final AirfareSearchService airfareSearchService;
     private final AirfareSearchRepository airfareSearchRepository;
+    private final StaySearchService staySearchService;
+    private final StaySearchRepository staySearchRepository;
     private final Clock clock;
 
-    TripService(TripRepository trips, AirfareSearchService airfareSearchService, AirfareSearchRepository airfareSearchRepository, Clock clock) {
+    TripService(
+            TripRepository trips,
+            AirfareSearchService airfareSearchService,
+            AirfareSearchRepository airfareSearchRepository,
+            StaySearchService staySearchService,
+            StaySearchRepository staySearchRepository,
+            Clock clock) {
         this.trips = trips;
         this.airfareSearchService = airfareSearchService;
         this.airfareSearchRepository = airfareSearchRepository;
+        this.staySearchService = staySearchService;
+        this.staySearchRepository = staySearchRepository;
         this.clock = clock;
     }
 
@@ -604,6 +619,119 @@ public class TripService {
         }
 
         trips.deleteDraftAirfareSelection(draft.id());
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+    }
+
+    public StaySearchResponse searchStays(long ownerUserId, String tripId, String draftId, String typeStr, String sortStr) {
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        TripDraft draft = null;
+        if (draftId != null) {
+            draft = ownedDraft(trip, draftId);
+        }
+        AccommodationType type = AccommodationType.from(typeStr);
+        StaySort sort = StaySort.from(sortStr);
+
+        Long availableBudgetCents = null;
+        if (trip.budgetCents() != null) {
+            long selectedAirfareTotal = 0;
+            long selectedCarTotal = 0;
+            if (draft != null && draft.selections() != null) {
+                if (draft.selections().airfare() != null) {
+                    AirfareSelection a = draft.selections().airfare();
+                    long perPerson = a.outboundBaseFareCents() + a.outboundTaxCents() + a.outboundFeeCents()
+                            + a.returnBaseFareCents() + a.returnTaxCents() + a.returnFeeCents();
+                    selectedAirfareTotal = perPerson * trip.travelerCount();
+                }
+                if (draft.selections().rental() != null) {
+                    RentalSelection r = draft.selections().rental();
+                    long dailyRate = r.dailyBasePriceCents() + r.dailyTaxCents() + r.dailyFeeCents();
+                    if (dailyRate == 0) {
+                        dailyRate = staySearchRepository.findRentalDailyTotal(r.rentalUnitId()).orElse(0L);
+                    }
+                    long cycles = 1;
+                    if (r.pickupAt() != null && r.returnAt() != null) {
+                        long seconds = java.time.Duration.between(r.pickupAt(), r.returnAt()).getSeconds();
+                        cycles = Math.max(1, (seconds + 86399) / 86400);
+                    }
+                    selectedCarTotal = cycles * dailyRate;
+                }
+            }
+            availableBudgetCents = trip.budgetCents() - selectedAirfareTotal - selectedCarTotal;
+        }
+
+        return staySearchService.search(
+                trip.destination().id(),
+                trip.destination().key(),
+                trip.startDate(),
+                trip.endDate(),
+                trip.travelerCount(),
+                trip.publicId(),
+                draft != null ? draft.publicId() : null,
+                type,
+                sort,
+                availableBudgetCents
+        );
+    }
+
+    @Transactional
+    public TripResponse selectDraftStay(long ownerUserId, String tripId, String draftId, TripRequests.StaySelectionRequest request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        TripDraft draft = ownedDraft(trip, draftId);
+
+        var candidateOpt = staySearchRepository.findCandidateById(request.accommodationUnitId(), trip.startDate(), trip.endDate());
+        if (candidateOpt.isEmpty()) {
+            throw validation("accommodationUnitId", "Selected accommodation unit was not found or is unavailable.");
+        }
+        var candidate = candidateOpt.get();
+
+        if (candidate.destinationId() != trip.destination().id()) {
+            throw validation("accommodationUnitId", "Selected accommodation does not match trip destination.");
+        }
+
+        int requiredRooms;
+        if ("WHOLE_PROPERTY".equals(candidate.unitKind()) || "VACATION_RENTAL".equals(candidate.propertyCategory())) {
+            if (candidate.guestCapacity() < trip.travelerCount()) {
+                throw validation("accommodationUnitId", "Selected accommodation capacity is insufficient for " + trip.travelerCount() + " travelers.");
+            }
+            requiredRooms = 1;
+        } else {
+            requiredRooms = (int) Math.ceil((double) trip.travelerCount() / candidate.guestCapacity());
+        }
+
+        if (request.unitCount() != null && request.unitCount() != requiredRooms) {
+            throw validation("unitCount", "Unit count must be " + requiredRooms + " for " + trip.travelerCount() + " travelers.");
+        }
+
+        long requiredNights = java.time.temporal.ChronoUnit.DAYS.between(trip.startDate(), trip.endDate());
+        if (candidate.nights().size() != requiredNights) {
+            throw validation("accommodationUnitId", "Selected accommodation has no inventory for trip dates.");
+        }
+        boolean hasSufficientInventory = candidate.nights().stream()
+                .allMatch(night -> night.availableInventory() >= requiredRooms);
+        if (!hasSufficientInventory) {
+            throw validation("accommodationUnitId", "Selected accommodation has insufficient inventory for the trip dates.");
+        }
+
+        if (!trips.advanceVersionForDraftMutation(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
+            throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
+        }
+
+        trips.saveDraftStaySelection(draft.id(), candidate.unitId(), requiredRooms);
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+    }
+
+    @Transactional
+    public TripResponse removeDraftStay(long ownerUserId, String tripId, String draftId, TripRequests.DraftMutation request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        TripDraft draft = ownedDraft(trip, draftId);
+
+        if (!trips.advanceVersionForDraftMutation(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
+            throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
+        }
+
+        trips.deleteDraftStaySelection(draft.id());
         return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
     }
 

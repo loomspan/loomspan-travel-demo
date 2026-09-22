@@ -40,21 +40,21 @@ Authenticated users can search accommodations for their Trip destination and dat
 
 ## Acceptance criteria
 
-- [ ] An authenticated user can search stays for their Trip destination and dates by supplying a required accommodation type (`HOTEL`, `BED_AND_BREAKFAST`, or `VACATION_RENTAL`).
-- [ ] Required room count is automatically calculated based on party size and unit capacity for hotels and B&Bs, and is set to 1 for vacation rentals.
-- [ ] Vacation rentals with guest capacity less than the traveler count are excluded.
-- [ ] Stays with insufficient inventory on any night during the trip are excluded from selectable results.
-- [ ] Complete-stay pricing sums all nightly base, tax, and fee amounts multiplied by the required room count in USD integer cents.
-- [ ] Available trip budget correctly subtracts already-selected airfare and car totals, but does not subtract an existing stay when replacing it.
-- [ ] Default ranking places within-budget stays before over-budget stays when a budget is present, ordered by rating, price, and distance with property catalog key tie-breaker.
-- [ ] When no trip budget is set, budget-fit tiering is omitted and results order directly by rating, price, and distance.
-- [ ] Sort overrides for lowest price, highest rating, and nearest city center order results deterministically.
-- [ ] Saving a stay selection persists unit ID and unit count in `detour_trip_draft_stay_selection`, advances draft version, and returns updated `TripResponse`.
-- [ ] Replacing a stay selection updates the existing selection without duplicate rows.
-- [ ] Removing a stay selection deletes the draft stay record cleanly and advances the draft version.
-- [ ] Mismatched `expectedVersion` or `expectedDraftVersion` returns 409 `VERSION_CONFLICT`.
-- [ ] Unauthorized access to another user's Trip returns 404 with no data disclosure.
-- [ ] Backend integration tests verify room calculation, inventory filtering, available budget math, ranking determinism, and selection persistence.
+- [x] An authenticated user can search stays for their Trip destination and dates by supplying a required accommodation type (`HOTEL`, `BED_AND_BREAKFAST`, or `VACATION_RENTAL`).
+- [x] Required room count is automatically calculated based on party size and unit capacity for hotels and B&Bs, and is set to 1 for vacation rentals.
+- [x] Vacation rentals with guest capacity less than the traveler count are excluded.
+- [x] Stays with insufficient inventory on any night during the trip are excluded from selectable results.
+- [x] Complete-stay pricing sums all nightly base, tax, and fee amounts multiplied by the required room count in USD integer cents.
+- [x] Available trip budget correctly subtracts already-selected airfare and car totals, but does not subtract an existing stay when replacing it.
+- [x] Default ranking places within-budget stays before over-budget stays when a budget is present, ordered by rating, price, and distance with property catalog key tie-breaker.
+- [x] When no trip budget is set, budget-fit tiering is omitted and results order directly by rating, price, and distance.
+- [x] Sort overrides for lowest price, highest rating, and nearest city center order results deterministically.
+- [x] Saving a stay selection persists unit ID and unit count in `detour_trip_draft_stay_selection`, advances draft version, and returns updated `TripResponse`.
+- [x] Replacing a stay selection updates the existing selection without duplicate rows.
+- [x] Removing a stay selection deletes the draft stay record cleanly and advances the draft version.
+- [x] Mismatched `expectedVersion` or `expectedDraftVersion` returns 409 `VERSION_CONFLICT`.
+- [x] Unauthorized access to another user's Trip returns 404 with no data disclosure.
+- [x] Backend integration tests verify room calculation, inventory filtering, available budget math, ranking determinism, and selection persistence.
 
 ## Context
 

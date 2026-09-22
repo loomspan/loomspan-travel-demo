@@ -71,8 +71,10 @@ class JdbcTripRepository implements TripRepository {
     private Trip loadTrip(long tripId, java.sql.ResultSet row, long ownerUserId) throws java.sql.SQLException {
         List<Integer> ages = jdbc.query("SELECT age FROM detour_trip_traveler WHERE trip_id = ? ORDER BY traveler_ordinal", (r, n) -> (Integer) r.getObject("age"), tripId);
         List<Integer> knownAges = ages.stream().allMatch(java.util.Objects::nonNull) ? List.copyOf(ages) : null;
+        LocalDate startDate = row.getObject("start_date", LocalDate.class);
+        LocalDate endDate = row.getObject("end_date", LocalDate.class);
         List<TripDraft> drafts = jdbc.query("SELECT id, public_id, version FROM detour_trip_draft WHERE trip_id = ? ORDER BY id", (r, n) -> {
-            long draftId = r.getLong("id"); return new TripDraft(draftId, r.getObject("public_id", UUID.class), r.getLong("version"), loadDraftSelections(draftId));
+            long draftId = r.getLong("id"); return new TripDraft(draftId, r.getObject("public_id", UUID.class), r.getLong("version"), loadDraftSelections(draftId, startDate, endDate));
         }, tripId);
         List<PlannedItinerary> planned = jdbc.query("SELECT id, public_id FROM detour_planned_itinerary WHERE trip_id = ? ORDER BY id", (r, n) -> {
             long plannedId = r.getLong("id"); return new PlannedItinerary(plannedId, r.getObject("public_id", UUID.class), loadPlannedSelections(plannedId));
@@ -80,11 +82,11 @@ class JdbcTripRepository implements TripRepository {
         Long budget = (Long) row.getObject("budget_cents");
         return new Trip(tripId, row.getObject("public_id", UUID.class), ownerUserId,
                 new Destination(row.getLong("destination_id"), row.getString("catalog_key"), row.getString("destination_name")),
-                row.getObject("start_date", LocalDate.class), row.getObject("end_date", LocalDate.class), row.getInt("traveler_count"), knownAges,
+                startDate, endDate, row.getInt("traveler_count"), knownAges,
                 budget, row.getString("display_label"), row.getLong("version"), List.copyOf(drafts), List.copyOf(planned));
     }
 
-    private DraftSelections loadDraftSelections(long draftId) {
+    private DraftSelections loadDraftSelections(long draftId, LocalDate startDate, LocalDate endDate) {
         AirfareSelection airfare = jdbc.query("""
                 SELECT a.outbound_flight_instance_id, a.return_flight_instance_id,
                        out_s.flight_number, in_s.flight_number,
@@ -109,10 +111,51 @@ class JdbcTripRepository implements TripRepository {
                         r.getLong(9),
                         r.getLong(10)
                 ), draftId).stream().findFirst().orElse(null);
-        StaySelection stay = jdbc.query("SELECT accommodation_unit_id, unit_count FROM detour_trip_draft_stay_selection WHERE draft_id = ?",
-                (r,n) -> new StaySelection(r.getLong(1), r.getInt(2), null, null, List.of()), draftId).stream().findFirst().orElse(null);
-        RentalSelection rental = jdbc.query("SELECT rental_unit_id, pickup_at, return_at FROM detour_trip_draft_rental_selection WHERE draft_id = ?",
-                (r,n) -> new RentalSelection(r.getLong(1), r.getObject(2, OffsetDateTime.class), r.getObject(3, OffsetDateTime.class), null, null, null, 0, 0, 0), draftId).stream().findFirst().orElse(null);
+        StaySelection stay = jdbc.query("""
+                SELECT s.accommodation_unit_id, s.unit_count, p.name AS property_name, u.name AS unit_name
+                FROM detour_trip_draft_stay_selection s
+                JOIN accommodation_unit u ON u.id = s.accommodation_unit_id
+                JOIN accommodation_property p ON p.id = u.accommodation_property_id
+                WHERE s.draft_id = ?
+                """,
+                (r, n) -> {
+                    long unitId = r.getLong(1);
+                    int unitCount = r.getInt(2);
+                    String propName = r.getString(3);
+                    String uName = r.getString(4);
+                    List<StayNight> nights = (startDate != null && endDate != null)
+                            ? jdbc.query("""
+                                    SELECT night_date, base_price_cents, tax_cents, fee_cents
+                                    FROM accommodation_nightly_inventory
+                                    WHERE accommodation_unit_id = ? AND night_date >= ? AND night_date < ?
+                                    ORDER BY night_date ASC
+                                    """,
+                                    (nr, ni) -> new StayNight(nr.getObject(1, LocalDate.class), nr.getLong(2), nr.getLong(3), nr.getLong(4)),
+                                    unitId, startDate, endDate)
+                            : List.of();
+                    return new StaySelection(unitId, unitCount, propName, uName, List.copyOf(nights));
+                }, draftId).stream().findFirst().orElse(null);
+        RentalSelection rental = jdbc.query("""
+                SELECT r.rental_unit_id, r.pickup_at, r.return_at,
+                       loc.name AS location_name, c.name AS vehicle_class_name, u.unit_identifier,
+                       c.daily_base_price_cents, c.daily_tax_cents, c.daily_fee_cents
+                FROM detour_trip_draft_rental_selection r
+                JOIN rental_unit u ON u.id = r.rental_unit_id
+                JOIN rental_vehicle_class c ON c.id = u.rental_vehicle_class_id
+                JOIN rental_location loc ON loc.id = c.rental_location_id
+                WHERE r.draft_id = ?
+                """,
+                (r, n) -> new RentalSelection(
+                        r.getLong(1),
+                        r.getObject(2, OffsetDateTime.class),
+                        r.getObject(3, OffsetDateTime.class),
+                        r.getString(4),
+                        r.getString(5),
+                        r.getString(6),
+                        r.getLong(7),
+                        r.getLong(8),
+                        r.getLong(9)
+                ), draftId).stream().findFirst().orElse(null);
         return new DraftSelections(airfare, stay, rental);
     }
 
@@ -206,6 +249,11 @@ class JdbcTripRepository implements TripRepository {
             (r,n)->new RentalSelection(r.getLong(1),selected.pickupAt(),selected.returnAt(),r.getString(2),r.getString(3),r.getString(4),r.getLong(5),r.getLong(6),r.getLong(7)),selected.rentalUnitId(),trip.destination().id(),selected.pickupAt(),trip.startDate(),selected.returnAt(),trip.endDate()).stream().findFirst().orElse(null); }
     @Override public void deleteDraftAirfareSelection(long draftId) {
         jdbc.update("DELETE FROM detour_trip_draft_airfare_selection WHERE draft_id = ?", draftId);
+    }
+    @Override public void saveDraftStaySelection(long draftId, long accommodationUnitId, int unitCount) {
+        jdbc.update("DELETE FROM detour_trip_draft_stay_selection WHERE draft_id = ?", draftId);
+        jdbc.update("INSERT INTO detour_trip_draft_stay_selection (draft_id, accommodation_unit_id, unit_count) VALUES (?, ?, ?)",
+                draftId, accommodationUnitId, unitCount);
     }
     @Override public void deleteDraftStaySelection(long draftId) {
         jdbc.update("DELETE FROM detour_trip_draft_stay_selection WHERE draft_id = ?", draftId);
