@@ -1,8 +1,18 @@
 type EmptyProfileStateProps = {
-  onPlanTrip: () => void;
+  onPlanTrip?: () => void;
+  onStartPlanTrip?: () => void;
+  onStartAirfare?: () => void;
+  onStartStay?: () => void;
 };
 
-export function EmptyProfileState({onPlanTrip}: EmptyProfileStateProps) {
+export function EmptyProfileState({
+  onPlanTrip,
+  onStartPlanTrip,
+  onStartAirfare,
+  onStartStay,
+}: EmptyProfileStateProps) {
+  const handlePlanTrip = onStartPlanTrip ?? onPlanTrip;
+
   return (
     <section className="empty-state" aria-labelledby="empty-heading">
       <h2 id="empty-heading">Your profile is ready</h2>
@@ -10,9 +20,25 @@ export function EmptyProfileState({onPlanTrip}: EmptyProfileStateProps) {
         Trips let you organize and compare travel options from Portland (PDX) to San Francisco, Munich, or Mexico City.
         Create draft alternatives to explore itineraries, autosave your details, and prepare your travel plans.
       </p>
-      <button type="button" className="primary" onClick={onPlanTrip}>
-        Plan Trip
-      </button>
+      <div className="empty-state-actions" style={{display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap'}}>
+        <button type="button" className="primary" onClick={handlePlanTrip}>
+          Plan Trip
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={onStartAirfare ?? handlePlanTrip}
+        >
+          Airfare
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={onStartStay ?? handlePlanTrip}
+        >
+          Stay
+        </button>
+      </div>
     </section>
   );
 }

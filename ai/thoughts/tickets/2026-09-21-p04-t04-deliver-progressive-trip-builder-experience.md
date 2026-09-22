@@ -47,17 +47,17 @@ Authenticated users can initiate trips through Plan Trip, Airfare, or Stay entry
 
 ## Acceptance criteria
 
-- [ ] Authenticated users can start trip creation from "Plan Trip", "Airfare", or "Stay" entry actions.
-- [ ] "Stay" flow collects accommodation type preference upfront; "Airfare" flow launches directly into flight search; "Plan Trip" opens builder with flight and stay slots visible.
-- [ ] Optional car component remains hidden until the user explicitly clicks "Add a car".
-- [ ] Persistent summary displays accurate component totals, total itinerary cost, and remaining budget or overage when a budget is defined.
-- [ ] Airfare search interface allows filtering by direct flights, sorting by price/duration/departure/stops, and selecting a combination updates the draft.
-- [ ] Stay search interface displays calculated room count, complete stay price, rating, and city center distance, allows sorting, and selecting a stay updates the draft.
-- [ ] Rental car search interface validates pickup/return dates, shows the 25+ age requirement explanation when ineligible, and selecting a car updates the draft.
-- [ ] Removing an active selection opens a confirmation modal naming the discarded item; confirming removes it and updates the persistent tally.
-- [ ] Concurrency conflicts explain that newer server data exists and provide a reload button without losing context.
-- [ ] All interactive dialogs trap focus, close on Escape, return focus to the trigger, and provide screen-reader announcements.
-- [ ] Frontend tests (Vitest) cover the 3 entry flows, progressive disclosure, search/select/remove interactions, confirmation dialogs, and budget tally updates.
+- [x] Authenticated users can start trip creation from "Plan Trip", "Airfare", or "Stay" entry actions.
+- [x] "Stay" flow collects accommodation type preference upfront; "Airfare" flow launches directly into flight search; "Plan Trip" opens builder with flight and stay slots visible.
+- [x] Optional car component remains hidden until the user explicitly clicks "Add a car".
+- [x] Persistent summary displays accurate component totals, total itinerary cost, and remaining budget or overage when a budget is defined.
+- [x] Airfare search interface allows filtering by direct flights, sorting by price/duration/departure/stops, and selecting a combination updates the draft.
+- [x] Stay search interface displays calculated room count, complete stay price, rating, and city center distance, allows sorting, and selecting a stay updates the draft.
+- [x] Rental car search interface validates pickup/return dates, shows the 25+ age requirement explanation when ineligible, and selecting a car updates the draft.
+- [x] Removing an active selection opens a confirmation modal naming the discarded item; confirming removes it and updates the persistent tally.
+- [x] Concurrency conflicts explain that newer server data exists and provide a reload button without losing context.
+- [x] All interactive dialogs trap focus, close on Escape, return focus to the trigger, and provide screen-reader announcements.
+- [x] Frontend tests (Vitest) cover the 3 entry flows, progressive disclosure, search/select/remove interactions, confirmation dialogs, and budget tally updates.
 
 ## Context
 

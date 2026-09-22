@@ -6,7 +6,7 @@ import {TripListSection} from './TripListSection';
 import {TripCreateModal} from './TripCreateModal';
 import {TripWorkspace} from './TripWorkspace';
 import {ConfirmDeleteModal, type DeleteTarget} from './ConfirmDeleteModal';
-import {tripsApi, type TripProfileSummary, type TripResponse} from '../api/tripsApi';
+import {tripsApi, type TripProfileSummary, type TripResponse, type AccommodationType} from '../api/tripsApi';
 import {IdentityApiError} from '../api/identityApi';
 
 type ProfileScreenProps = {
@@ -35,7 +35,11 @@ export function ProfileScreen({
   const [activeTrip, setActiveTrip] = useState<TripResponse | null>(null);
 
   // Modals state
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createModalMode, setCreateModalMode] = useState<'PLAN_TRIP' | 'AIRFARE' | 'STAY' | null>(null);
+  const [entryContext, setEntryContext] = useState<{
+    mode: 'PLAN_TRIP' | 'AIRFARE' | 'STAY';
+    accommodationType?: AccommodationType;
+  } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | undefined>();
@@ -164,6 +168,8 @@ export function ProfileScreen({
     return (
       <TripWorkspace
         initialTrip={activeTrip}
+        initialEntryMode={entryContext?.mode ?? 'PLAN_TRIP'}
+        initialAccommodationType={entryContext?.accommodationType}
         hasBookingHistory={activeTripBookingHistory}
         temporalStatus={temporalStatus}
         isExpired={isExpired}
@@ -172,11 +178,13 @@ export function ProfileScreen({
         onBack={() => {
           setViewMode('overview');
           setActiveTrip(null);
+          setEntryContext(null);
           if (onRefreshProfile) void onRefreshProfile();
         }}
         onTripDeleted={() => {
           setViewMode('overview');
           setActiveTrip(null);
+          setEntryContext(null);
           if (onRefreshProfile) void onRefreshProfile();
         }}
         onTripUpdated={(updatedTrip) => {
@@ -218,10 +226,18 @@ export function ProfileScreen({
           past={past}
           onSelectTrip={(id) => void handleOpenTrip(id)}
           onDeleteTrip={handlePromptDeleteTrip}
-          onPlanTrip={() => setIsCreateModalOpen(true)}
+          onPlanTrip={() => setCreateModalMode('PLAN_TRIP')}
+          onStartPlanTrip={() => setCreateModalMode('PLAN_TRIP')}
+          onStartAirfare={() => setCreateModalMode('AIRFARE')}
+          onStartStay={() => setCreateModalMode('STAY')}
         />
       ) : (
-        <EmptyProfileState onPlanTrip={() => setIsCreateModalOpen(true)} />
+        <EmptyProfileState
+          onPlanTrip={() => setCreateModalMode('PLAN_TRIP')}
+          onStartPlanTrip={() => setCreateModalMode('PLAN_TRIP')}
+          onStartAirfare={() => setCreateModalMode('AIRFARE')}
+          onStartStay={() => setCreateModalMode('STAY')}
+        />
       )}
 
       {/* Change Password Section */}
@@ -252,10 +268,12 @@ export function ProfileScreen({
 
       {/* Plan Trip Creation Modal */}
       <TripCreateModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onSuccess={(createdTrip) => {
-          setIsCreateModalOpen(false);
+        isOpen={createModalMode !== null}
+        mode={createModalMode ?? 'PLAN_TRIP'}
+        onClose={() => setCreateModalMode(null)}
+        onSuccess={(createdTrip, mode, accommodationType) => {
+          setCreateModalMode(null);
+          setEntryContext({mode, accommodationType});
           setActiveTrip(createdTrip);
           setViewMode('workspace');
           if (onRefreshProfile) void onRefreshProfile();

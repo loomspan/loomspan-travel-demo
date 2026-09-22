@@ -70,6 +70,230 @@ export type RentalComponentResponse = {
   dailyFeeCents: number;
 };
 
+export type AirfareSort =
+  | 'DEFAULT'
+  | 'LOWEST_PRICE'
+  | 'SHORTEST_DURATION'
+  | 'EARLIEST_DEPARTURE'
+  | 'FEWEST_STOPS';
+
+export type StaySort =
+  | 'DEFAULT'
+  | 'LOWEST_PRICE'
+  | 'HIGHEST_RATING'
+  | 'NEAREST_CITY_CENTER';
+
+export type RentalSort =
+  | 'DEFAULT'
+  | 'LOWEST_PRICE';
+
+export type AccommodationType =
+  | 'HOTEL'
+  | 'BED_AND_BREAKFAST'
+  | 'VACATION_RENTAL';
+
+export type LayoverResponse = {
+  airportCode: string;
+  airportName: string;
+  durationMinutes: number;
+};
+
+export type FlightLegResponse = {
+  flightInstanceId: number;
+  catalogKey: string;
+  carrier: string;
+  flightNumber: string;
+  stopCount: number;
+  originAirportCode: string;
+  originAirportName: string;
+  destinationAirportCode: string;
+  destinationAirportName: string;
+  departureTime: string;
+  arrivalTime: string;
+  departureTimeZone: string;
+  arrivalTimeZone: string;
+  durationMinutes: number;
+  availableSeats: number;
+  baseFareCents: number;
+  taxCents: number;
+  feeCents: number;
+  totalFareCents: number;
+  layover?: LayoverResponse | null;
+};
+
+export type PartyPricingResponse = {
+  travelerCount: number;
+  perTravelerBaseFareCents: number;
+  perTravelerTaxCents: number;
+  perTravelerFeeCents: number;
+  perTravelerTotalCents: number;
+  partyBaseFareCents: number;
+  partyTaxCents: number;
+  partyFeeCents: number;
+  partyTotalPriceCents: number;
+};
+
+export type FlightCombinationResponse = {
+  combinationKey: string;
+  outbound: FlightLegResponse;
+  returnFlight: FlightLegResponse;
+  totalDurationMinutes: number;
+  direct: boolean;
+  pricing: PartyPricingResponse;
+};
+
+export type AirfareSearchResponse = {
+  tripId: string;
+  draftId?: string;
+  destinationKey: string;
+  originAirportCode: string;
+  destinationAirportCode: string;
+  startDate: string;
+  endDate: string;
+  travelerCount: number;
+  directOnly: boolean;
+  sort: AirfareSort;
+  options: FlightCombinationResponse[];
+};
+
+export type StayNightPricingResponse = {
+  date: string;
+  basePriceCents: number;
+  taxCents: number;
+  feeCents: number;
+  totalCents: number;
+  availableInventory: number;
+};
+
+export type StayPricingResponse = {
+  requiredRooms: number;
+  nightCount: number;
+  perRoomBasePriceCents: number;
+  perRoomTaxCents: number;
+  perRoomFeeCents: number;
+  perRoomTotalPriceCents: number;
+  totalBasePriceCents: number;
+  totalTaxCents: number;
+  totalFeeCents: number;
+  totalPriceCents: number;
+  nights: StayNightPricingResponse[];
+};
+
+export type StayOptionResponse = {
+  accommodationUnitId: number;
+  propertyId: number;
+  propertyCatalogKey: string;
+  unitCatalogKey: string;
+  propertyName: string;
+  unitName: string;
+  propertyCategory: string;
+  unitKind: string;
+  locationDescription: string;
+  guestRating: number;
+  distanceToCityCenterMeters: number;
+  latitude: number;
+  longitude: number;
+  guestCapacity: number;
+  inventoryCapacity: number;
+  pricing: StayPricingResponse;
+  fitsBudget?: boolean | null;
+};
+
+export type StaySearchResponse = {
+  tripId: string;
+  draftId?: string;
+  destinationKey: string;
+  accommodationType: AccommodationType;
+  startDate: string;
+  endDate: string;
+  travelerCount: number;
+  availableTripBudgetCents?: number | null;
+  sort: StaySort;
+  options: StayOptionResponse[];
+};
+
+export type RentalPricingResponse = {
+  billingCycles: number;
+  dailyBasePriceCents: number;
+  dailyTaxCents: number;
+  dailyFeeCents: number;
+  dailyTotalPriceCents: number;
+  totalBasePriceCents: number;
+  totalTaxCents: number;
+  totalFeeCents: number;
+  totalPriceCents: number;
+};
+
+export type RentalOptionResponse = {
+  rentalUnitId: number;
+  unitCatalogKey: string;
+  unitIdentifier: string;
+  vehicleClassId: number;
+  vehicleClassCatalogKey: string;
+  vehicleClassName: string;
+  vehicleCategory: string;
+  locationId: number;
+  locationCatalogKey: string;
+  locationName: string;
+  airportIataCode: string;
+  pricing: RentalPricingResponse;
+  fitsBudget?: boolean | null;
+};
+
+export type RentalSearchResponse = {
+  tripId: string;
+  draftId?: string;
+  destinationKey: string;
+  pickupAt?: string;
+  returnAt?: string;
+  billingCycles: number;
+  driverEligible: boolean;
+  selectionDisabled: boolean;
+  disabledReason?: string | null;
+  explanation?: string | null;
+  availableTripBudgetCents?: number | null;
+  sort: RentalSort;
+  options: RentalOptionResponse[];
+};
+
+export type SelectAirfareRequest = {
+  expectedVersion: number;
+  expectedDraftVersion: number;
+  outboundFlightInstanceId: number;
+  returnFlightInstanceId: number;
+};
+
+export type SelectStayRequest = {
+  expectedVersion: number;
+  expectedDraftVersion: number;
+  accommodationUnitId: number;
+  unitCount: number;
+};
+
+export type SelectRentalRequest = {
+  expectedVersion: number;
+  expectedDraftVersion: number;
+  rentalUnitId: number;
+  pickupAt: string;
+  returnAt: string;
+};
+
+export type AirfareSearchParams = {
+  directOnly?: boolean;
+  sort?: AirfareSort;
+};
+
+export type StaySearchParams = {
+  type?: AccommodationType;
+  sort?: StaySort;
+};
+
+export type RentalSearchParams = {
+  pickupAt?: string;
+  returnAt?: string;
+  sort?: RentalSort;
+};
+
 export type DraftSelectionResponse = {
   airfare: AirfareComponentResponse | null;
   stay: StayComponentResponse | null;
@@ -78,6 +302,7 @@ export type DraftSelectionResponse = {
 
 export type DraftResponse = {
   id: string;
+  version: number;
   selections: DraftSelectionResponse;
 };
 
@@ -268,6 +493,46 @@ function cleanTripDeletePayload(p: TripDeleteRequest): Record<string, unknown> {
   return body;
 }
 
+function cleanSelectAirfarePayload(p: SelectAirfareRequest): Record<string, unknown> {
+  return {
+    expectedVersion: p.expectedVersion,
+    expectedDraftVersion: p.expectedDraftVersion,
+    outboundFlightInstanceId: p.outboundFlightInstanceId,
+    returnFlightInstanceId: p.returnFlightInstanceId,
+  };
+}
+
+function cleanSelectStayPayload(p: SelectStayRequest): Record<string, unknown> {
+  return {
+    expectedVersion: p.expectedVersion,
+    expectedDraftVersion: p.expectedDraftVersion,
+    accommodationUnitId: p.accommodationUnitId,
+    unitCount: p.unitCount,
+  };
+}
+
+function cleanSelectRentalPayload(p: SelectRentalRequest): Record<string, unknown> {
+  return {
+    expectedVersion: p.expectedVersion,
+    expectedDraftVersion: p.expectedDraftVersion,
+    rentalUnitId: p.rentalUnitId,
+    pickupAt: p.pickupAt,
+    returnAt: p.returnAt,
+  };
+}
+
+function buildQueryString(params?: Record<string, string | number | boolean | undefined>): string {
+  if (!params) return '';
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') {
+      searchParams.set(key, String(value));
+    }
+  }
+  const qs = searchParams.toString();
+  return qs ? `?${qs}` : '';
+}
+
 export const tripsApi = {
   createTrip: (payload: CreateTripRequest): Promise<TripResponse> =>
     request<TripResponse>('/api/trips', 'POST', cleanCreatePayload(payload)),
@@ -301,4 +566,31 @@ export const tripsApi = {
 
   deleteTrip: (tripId: string, payload: TripDeleteRequest): Promise<void> =>
     request<void>(`/api/trips/${tripId}`, 'DELETE', cleanTripDeletePayload(payload)),
+
+  searchAirfare: (tripId: string, draftId: string, params?: AirfareSearchParams): Promise<AirfareSearchResponse> =>
+    request<AirfareSearchResponse>(`/api/trips/${tripId}/drafts/${draftId}/airfare${buildQueryString(params as Record<string, string | number | boolean | undefined>)}`, 'GET'),
+
+  selectAirfare: (tripId: string, draftId: string, payload: SelectAirfareRequest): Promise<TripResponse> =>
+    request<TripResponse>(`/api/trips/${tripId}/drafts/${draftId}/airfare`, 'PUT', cleanSelectAirfarePayload(payload)),
+
+  removeAirfare: (tripId: string, draftId: string, payload: DraftMutationRequest): Promise<TripResponse> =>
+    request<TripResponse>(`/api/trips/${tripId}/drafts/${draftId}/airfare`, 'DELETE', cleanDraftMutationPayload(payload)),
+
+  searchStays: (tripId: string, draftId: string, params?: StaySearchParams): Promise<StaySearchResponse> =>
+    request<StaySearchResponse>(`/api/trips/${tripId}/drafts/${draftId}/stays${buildQueryString(params as Record<string, string | number | boolean | undefined>)}`, 'GET'),
+
+  selectStay: (tripId: string, draftId: string, payload: SelectStayRequest): Promise<TripResponse> =>
+    request<TripResponse>(`/api/trips/${tripId}/drafts/${draftId}/stays`, 'PUT', cleanSelectStayPayload(payload)),
+
+  removeStay: (tripId: string, draftId: string, payload: DraftMutationRequest): Promise<TripResponse> =>
+    request<TripResponse>(`/api/trips/${tripId}/drafts/${draftId}/stays`, 'DELETE', cleanDraftMutationPayload(payload)),
+
+  searchRentals: (tripId: string, draftId: string, params?: RentalSearchParams): Promise<RentalSearchResponse> =>
+    request<RentalSearchResponse>(`/api/trips/${tripId}/drafts/${draftId}/rentals${buildQueryString(params as Record<string, string | number | boolean | undefined>)}`, 'GET'),
+
+  selectRental: (tripId: string, draftId: string, payload: SelectRentalRequest): Promise<TripResponse> =>
+    request<TripResponse>(`/api/trips/${tripId}/drafts/${draftId}/rentals`, 'PUT', cleanSelectRentalPayload(payload)),
+
+  removeRental: (tripId: string, draftId: string, payload: DraftMutationRequest): Promise<TripResponse> =>
+    request<TripResponse>(`/api/trips/${tripId}/drafts/${draftId}/rentals`, 'DELETE', cleanDraftMutationPayload(payload)),
 };

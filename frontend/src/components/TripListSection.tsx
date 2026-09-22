@@ -5,7 +5,10 @@ type TripListSectionProps = {
   past: TripProfileSummary[];
   onSelectTrip: (tripId: string) => void;
   onDeleteTrip: (trip: TripProfileSummary) => void;
-  onPlanTrip: () => void;
+  onPlanTrip?: () => void;
+  onStartPlanTrip?: () => void;
+  onStartAirfare?: () => void;
+  onStartStay?: () => void;
 };
 
 function AlternativeSummaryItem({alt}: {alt: AlternativeProfileSummary}) {
@@ -105,14 +108,35 @@ export function TripListSection({
   onSelectTrip,
   onDeleteTrip,
   onPlanTrip,
+  onStartPlanTrip,
+  onStartAirfare,
+  onStartStay,
 }: TripListSectionProps) {
+  const handlePlanTrip = onStartPlanTrip ?? onPlanTrip;
+
   return (
     <div className="trips-container">
       <div className="trips-header">
         <h2>Your trips</h2>
-        <button type="button" className="primary" onClick={onPlanTrip}>
-          Plan Trip
-        </button>
+        <div className="trips-header-actions" style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
+          <button type="button" className="primary" onClick={handlePlanTrip}>
+            Plan Trip
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={onStartAirfare ?? handlePlanTrip}
+          >
+            Airfare
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={onStartStay ?? handlePlanTrip}
+          >
+            Stay
+          </button>
+        </div>
       </div>
 
       <section className="trips-section" aria-labelledby="upcoming-trips-heading">

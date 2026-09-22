@@ -175,4 +175,154 @@ describe('tripsApi client', () => {
       }),
     });
   });
+
+  it('airfare search, selection, and removal send correct queries, payloads, and CSRF', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, {options: []}));
+    await tripsApi.searchAirfare('trip-1', 'draft-1', {directOnly: true, sort: 'LOWEST_PRICE'});
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/trips/trip-1/drafts/draft-1/airfare?directOnly=true&sort=LOWEST_PRICE',
+      {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: undefined,
+        body: undefined,
+      }
+    );
+
+    fetchMock.mockResolvedValueOnce(json(200, {id: 'trip-1', version: 6}));
+    await tripsApi.selectAirfare('trip-1', 'draft-1', {
+      expectedVersion: 5,
+      expectedDraftVersion: 1,
+      outboundFlightInstanceId: 101,
+      returnFlightInstanceId: 202,
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/drafts/draft-1/airfare', {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': 'secret-token'},
+      body: JSON.stringify({
+        expectedVersion: 5,
+        expectedDraftVersion: 1,
+        outboundFlightInstanceId: 101,
+        returnFlightInstanceId: 202,
+      }),
+    });
+
+    fetchMock.mockResolvedValueOnce(json(200, {id: 'trip-1', version: 7}));
+    await tripsApi.removeAirfare('trip-1', 'draft-1', {
+      expectedVersion: 6,
+      expectedDraftVersion: 2,
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/drafts/draft-1/airfare', {
+      method: 'DELETE',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': 'secret-token'},
+      body: JSON.stringify({
+        expectedVersion: 6,
+        expectedDraftVersion: 2,
+      }),
+    });
+  });
+
+  it('stay search, selection, and removal send correct queries, payloads, and CSRF', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, {options: []}));
+    await tripsApi.searchStays('trip-1', 'draft-1', {type: 'HOTEL', sort: 'NEAREST_CITY_CENTER'});
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/trips/trip-1/drafts/draft-1/stays?type=HOTEL&sort=NEAREST_CITY_CENTER',
+      {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: undefined,
+        body: undefined,
+      }
+    );
+
+    fetchMock.mockResolvedValueOnce(json(200, {id: 'trip-1', version: 8}));
+    await tripsApi.selectStay('trip-1', 'draft-1', {
+      expectedVersion: 7,
+      expectedDraftVersion: 3,
+      accommodationUnitId: 303,
+      unitCount: 2,
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/drafts/draft-1/stays', {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': 'secret-token'},
+      body: JSON.stringify({
+        expectedVersion: 7,
+        expectedDraftVersion: 3,
+        accommodationUnitId: 303,
+        unitCount: 2,
+      }),
+    });
+
+    fetchMock.mockResolvedValueOnce(json(200, {id: 'trip-1', version: 9}));
+    await tripsApi.removeStay('trip-1', 'draft-1', {
+      expectedVersion: 8,
+      expectedDraftVersion: 4,
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/drafts/draft-1/stays', {
+      method: 'DELETE',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': 'secret-token'},
+      body: JSON.stringify({
+        expectedVersion: 8,
+        expectedDraftVersion: 4,
+      }),
+    });
+  });
+
+  it('rental search, selection, and removal send correct queries, payloads, and CSRF', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, {options: []}));
+    await tripsApi.searchRentals('trip-1', 'draft-1', {
+      pickupAt: '2027-03-10T10:00:00Z',
+      returnAt: '2027-03-14T10:00:00Z',
+      sort: 'LOWEST_PRICE',
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/trips/trip-1/drafts/draft-1/rentals?pickupAt=2027-03-10T10%3A00%3A00Z&returnAt=2027-03-14T10%3A00%3A00Z&sort=LOWEST_PRICE',
+      {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: undefined,
+        body: undefined,
+      }
+    );
+
+    fetchMock.mockResolvedValueOnce(json(200, {id: 'trip-1', version: 10}));
+    await tripsApi.selectRental('trip-1', 'draft-1', {
+      expectedVersion: 9,
+      expectedDraftVersion: 5,
+      rentalUnitId: 404,
+      pickupAt: '2027-03-10T10:00:00Z',
+      returnAt: '2027-03-14T10:00:00Z',
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/drafts/draft-1/rentals', {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': 'secret-token'},
+      body: JSON.stringify({
+        expectedVersion: 9,
+        expectedDraftVersion: 5,
+        rentalUnitId: 404,
+        pickupAt: '2027-03-10T10:00:00Z',
+        returnAt: '2027-03-14T10:00:00Z',
+      }),
+    });
+
+    fetchMock.mockResolvedValueOnce(json(200, {id: 'trip-1', version: 11}));
+    await tripsApi.removeRental('trip-1', 'draft-1', {
+      expectedVersion: 10,
+      expectedDraftVersion: 6,
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/drafts/draft-1/rentals', {
+      method: 'DELETE',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': 'secret-token'},
+      body: JSON.stringify({
+        expectedVersion: 10,
+        expectedDraftVersion: 6,
+      }),
+    });
+  });
 });

@@ -113,6 +113,50 @@ h1, h2 { color: #12333c; } h1 { margin: 0; font-family: Georgia, serif; font-siz
 .delete-confirm-button { background: #b91c1c; }
 .delete-confirm-button:hover:not(:disabled) { background: #991b1b; }
 
+/* Progressive Trip Builder & Component Slots */
+.builder-section { margin-top: 1.5rem; border-top: 1px solid #e2ece9; padding-top: 1.25rem; }
+.itinerary-tally { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 1.25rem; margin-bottom: 1.5rem; }
+.tally-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.tally-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+.tally-item { display: flex; flex-direction: column; gap: 0.25rem; }
+.tally-item-label { font-size: 0.85rem; color: #64748b; font-weight: 600; }
+.tally-item-value { font-size: 1.1rem; font-weight: 700; color: #0f172a; }
+.tally-divider { border: 0; border-top: 1px solid #e2e8f0; margin: 0.75rem 0; }
+.tally-total-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 1.25rem; font-weight: 800; color: #0f172a; margin-bottom: 0.75rem; }
+.tally-budget-section { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.375rem; padding: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.9rem; }
+.tally-budget-row { display: flex; justify-content: space-between; font-weight: 600; }
+.tally-overage { color: #dc2626; }
+.tally-remaining { color: #16a34a; }
+
+.component-slots-grid { display: flex; flex-direction: column; gap: 1.25rem; }
+.component-slot { border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 1.25rem; background: #ffffff; }
+.slot-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.5rem; }
+.slot-empty-state { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; }
+.slot-selected-content { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; }
+.slot-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.selected-details { display: flex; flex-direction: column; gap: 0.25rem; }
+.selected-title { font-weight: 700; font-size: 1.05rem; margin: 0; color: #0f172a; }
+.selected-meta { margin: 0; font-size: 0.9rem; color: #475569; }
+.selected-price { margin: 0.5rem 0 0 0; font-size: 1rem; color: #0f172a; }
+
+.component-search-section { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; margin-top: 0.5rem; }
+.search-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.flight-options-list, .stay-options-list, .rental-options-list { display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem; }
+.flight-option-card, .stay-option-card, .rental-option-card { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; padding: 1rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; background: #ffffff; }
+.flight-legs { display: flex; flex-direction: column; gap: 0.75rem; flex: 1 1 300px; }
+.flight-leg { display: flex; gap: 0.75rem; align-items: flex-start; }
+.leg-badge { background: #e2e8f0; font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 0.25rem; text-transform: uppercase; color: #334155; }
+.flight-carrier { font-weight: 700; margin: 0; font-size: 0.95rem; }
+.flight-times { margin: 0.15rem 0; font-size: 0.9rem; color: #1e293b; }
+.flight-subtext { margin: 0; font-size: 0.8rem; color: #64748b; }
+.flight-pricing-action, .stay-pricing-action, .rental-pricing-action { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; min-width: 140px; }
+.flight-price-total, .stay-price-total, .rental-price-total { font-size: 1.25rem; font-weight: 800; color: #0f172a; }
+.flight-price-caption, .stay-price-caption, .rental-price-caption { font-size: 0.8rem; color: #64748b; }
+.stay-main-info, .rental-main-info { display: flex; flex-direction: column; gap: 0.35rem; flex: 1 1 300px; }
+.stay-meta-row { display: flex; gap: 0.75rem; flex-wrap: wrap; font-size: 0.85rem; color: #475569; }
+.add-car-container { display: flex; justify-content: center; padding: 0.75rem; }
+.driver-age-notice { margin-bottom: 1rem; color: #c53030; background-color: #fff5f5; padding: 0.75rem; border-radius: 4px; border: 1px solid #feb2b2; font-weight: 500; }
+
 @media (max-width: 520px) {
   .shell { padding: 1rem 0.75rem; place-items: start center; }
   .card { width: 100%; margin-top: 1.5rem; padding: 1.25rem; }
@@ -129,4 +173,8 @@ h1, h2 { color: #12333c; } h1 { margin: 0; font-family: Georgia, serif; font-siz
   .alternative-card-actions { flex-direction: column; align-items: stretch; }
   .alternative-card-actions button { width: 100%; text-align: center; }
   .modal { width: 100%; }
+  .flight-option-card, .stay-option-card, .rental-option-card { flex-direction: column; align-items: stretch; }
+  .flight-pricing-action, .stay-pricing-action, .rental-pricing-action { align-items: stretch; width: 100%; }
+  .slot-selected-content { flex-direction: column; }
+  .slot-actions { width: 100%; justify-content: space-between; }
 }

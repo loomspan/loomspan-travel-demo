@@ -4,15 +4,32 @@ import {
   type TripResponse,
   type AlternativeResponse,
   type RevisionSummaryResponse,
+  type FlightCombinationResponse,
+  type StayOptionResponse,
+  type RentalOptionResponse,
+  type AccommodationType,
 } from '../api/tripsApi';
 import {IdentityApiError} from '../api/identityApi';
 import {AlternativeCard} from './AlternativeCard';
 import {RevisionSummaryBanner} from './RevisionSummaryBanner';
 import {TripRevisionModal} from './TripRevisionModal';
 import {ConfirmDeleteModal, type DeleteTarget} from './ConfirmDeleteModal';
+import {
+  ItinerarySummaryTally,
+  formatCents,
+  computeAirfareTotalCents,
+  computeStayTotalCents,
+  computeRentalTotalCents,
+} from './ItinerarySummaryTally';
+import {AirfareSlot} from './AirfareSlot';
+import {StaySlot} from './StaySlot';
+import {RentalSlot} from './RentalSlot';
+import {ConfirmRemoveModal} from './ConfirmRemoveModal';
 
 type TripWorkspaceProps = {
   initialTrip: TripResponse;
+  initialEntryMode?: 'PLAN_TRIP' | 'AIRFARE' | 'STAY';
+  initialAccommodationType?: AccommodationType;
   hasBookingHistory?: boolean;
   temporalStatus?: string;
   isExpired?: boolean;
@@ -43,6 +60,8 @@ function validateDates(startDate: string, endDate: string): string | undefined {
 
 export function TripWorkspace({
   initialTrip,
+  initialEntryMode = 'PLAN_TRIP',
+  initialAccommodationType,
   hasBookingHistory = false,
   temporalStatus = 'UPCOMING',
   isExpired = false,
@@ -81,6 +100,62 @@ export function TripWorkspace({
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | undefined>();
+
+  const activeDraft = trip.drafts && trip.drafts.length > 0 ? trip.drafts[0] : null;
+
+  const [airfareMode, setAirfareMode] = useState<'empty' | 'searching' | 'selected'>(() => {
+    if (initialTrip.drafts?.[0]?.selections?.airfare) return 'selected';
+    if (initialEntryMode === 'AIRFARE') return 'searching';
+    return 'empty';
+  });
+
+  const [stayMode, setStayMode] = useState<'empty' | 'searching' | 'selected'>(() => {
+    if (initialTrip.drafts?.[0]?.selections?.stay) return 'selected';
+    if (initialEntryMode === 'STAY') return 'searching';
+    return 'empty';
+  });
+
+  const [rentalMode, setRentalMode] = useState<'hidden' | 'searching' | 'selected'>(() => {
+    if (initialTrip.drafts?.[0]?.selections?.rental) return 'selected';
+    return 'hidden';
+  });
+
+  const [stayAccommodationType, setStayAccommodationType] = useState<AccommodationType>(
+    initialAccommodationType ?? 'HOTEL'
+  );
+
+  const [removeTarget, setRemoveTarget] = useState<{
+    component: 'AIRFARE' | 'STAY' | 'RENTAL';
+    title: string;
+    formattedPrice: string;
+  } | null>(null);
+  const [removeError, setRemoveError] = useState<string | undefined>();
+
+  const [componentMutationPending, setComponentMutationPending] = useState(false);
+
+  useEffect(() => {
+    if (activeDraft?.selections?.airfare) {
+      setAirfareMode('selected');
+    } else {
+      setAirfareMode((prev) => (prev === 'selected' ? 'empty' : prev));
+    }
+  }, [activeDraft?.selections?.airfare]);
+
+  useEffect(() => {
+    if (activeDraft?.selections?.stay) {
+      setStayMode('selected');
+    } else {
+      setStayMode((prev) => (prev === 'selected' ? 'empty' : prev));
+    }
+  }, [activeDraft?.selections?.stay]);
+
+  useEffect(() => {
+    if (activeDraft?.selections?.rental) {
+      setRentalMode('selected');
+    } else {
+      setRentalMode((prev) => (prev === 'selected' ? 'hidden' : prev));
+    }
+  }, [activeDraft?.selections?.rental]);
 
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialMount = useRef(true);
@@ -355,6 +430,181 @@ export function TripWorkspace({
     }
   };
 
+  // Component Selection handlers
+  const handleSelectAirfare = async (option: FlightCombinationResponse) => {
+    if (!activeDraft) return;
+    setComponentMutationPending(true);
+    setAutosaveStatus('saving');
+    setAutosaveMessage('Saving flight selection…');
+    try {
+      const updatedTrip = await tripsApi.selectAirfare(trip.id, activeDraft.id, {
+        expectedVersion: trip.version,
+        expectedDraftVersion: activeDraft.version,
+        outboundFlightInstanceId: option.outbound.flightInstanceId,
+        returnFlightInstanceId: option.returnFlight.flightInstanceId,
+      });
+      applyTripState(updatedTrip);
+      setAirfareMode('selected');
+      setAutosaveStatus('saved');
+      setAutosaveMessage('Flight saved to draft.');
+    } catch (err) {
+      if (err instanceof IdentityApiError && err.code === 'VERSION_CONFLICT') {
+        setAutosaveStatus('conflict');
+        setAutosaveMessage('The Trip has changed on the server. Reload before saving.');
+      } else {
+        setAutosaveStatus('error');
+        setAutosaveMessage(err instanceof Error ? err.message : 'Could not save flight.');
+      }
+    } finally {
+      setComponentMutationPending(false);
+    }
+  };
+
+  const handleSelectStay = async (option: StayOptionResponse) => {
+    if (!activeDraft) return;
+    setComponentMutationPending(true);
+    setAutosaveStatus('saving');
+    setAutosaveMessage('Saving stay selection…');
+    try {
+      const updatedTrip = await tripsApi.selectStay(trip.id, activeDraft.id, {
+        expectedVersion: trip.version,
+        expectedDraftVersion: activeDraft.version,
+        accommodationUnitId: option.accommodationUnitId,
+        unitCount: option.pricing.requiredRooms,
+      });
+      applyTripState(updatedTrip);
+      setStayMode('selected');
+      setAutosaveStatus('saved');
+      setAutosaveMessage('Stay saved to draft.');
+    } catch (err) {
+      if (err instanceof IdentityApiError && err.code === 'VERSION_CONFLICT') {
+        setAutosaveStatus('conflict');
+        setAutosaveMessage('The Trip has changed on the server. Reload before saving.');
+      } else {
+        setAutosaveStatus('error');
+        setAutosaveMessage(err instanceof Error ? err.message : 'Could not save stay.');
+      }
+    } finally {
+      setComponentMutationPending(false);
+    }
+  };
+
+  const handleSelectRental = async (
+    option: RentalOptionResponse,
+    pickupAtIso: string,
+    returnAtIso: string
+  ) => {
+    if (!activeDraft) return;
+    setComponentMutationPending(true);
+    setAutosaveStatus('saving');
+    setAutosaveMessage('Saving rental car selection…');
+    try {
+      const updatedTrip = await tripsApi.selectRental(trip.id, activeDraft.id, {
+        expectedVersion: trip.version,
+        expectedDraftVersion: activeDraft.version,
+        rentalUnitId: option.rentalUnitId,
+        pickupAt: pickupAtIso,
+        returnAt: returnAtIso,
+      });
+      applyTripState(updatedTrip);
+      setRentalMode('selected');
+      setAutosaveStatus('saved');
+      setAutosaveMessage('Rental car saved to draft.');
+    } catch (err) {
+      if (err instanceof IdentityApiError && err.code === 'VERSION_CONFLICT') {
+        setAutosaveStatus('conflict');
+        setAutosaveMessage('The Trip has changed on the server. Reload before saving.');
+      } else {
+        setAutosaveStatus('error');
+        setAutosaveMessage(err instanceof Error ? err.message : 'Could not save car.');
+      }
+    } finally {
+      setComponentMutationPending(false);
+    }
+  };
+
+  const promptRemoveAirfare = () => {
+    if (!activeDraft?.selections.airfare) return;
+    const priceCents = computeAirfareTotalCents(activeDraft.selections, trip.travelerCount);
+    setRemoveError(undefined);
+    setRemoveTarget({
+      component: 'AIRFARE',
+      title: 'Airfare',
+      formattedPrice: formatCents(priceCents),
+    });
+  };
+
+  const promptRemoveStay = () => {
+    if (!activeDraft?.selections.stay) return;
+    const priceCents = computeStayTotalCents(activeDraft.selections);
+    setRemoveError(undefined);
+    setRemoveTarget({
+      component: 'STAY',
+      title: 'Stay',
+      formattedPrice: formatCents(priceCents),
+    });
+  };
+
+  const promptRemoveRental = () => {
+    if (!activeDraft?.selections.rental) return;
+    const priceCents = computeRentalTotalCents(activeDraft.selections);
+    setRemoveError(undefined);
+    setRemoveTarget({
+      component: 'RENTAL',
+      title: 'Rental Car',
+      formattedPrice: formatCents(priceCents),
+    });
+  };
+
+  const handleConfirmRemove = async () => {
+    if (!removeTarget || !activeDraft) return;
+    setComponentMutationPending(true);
+    setRemoveError(undefined);
+    setAutosaveStatus('saving');
+    setAutosaveMessage(`Removing ${removeTarget.title.toLowerCase()}…`);
+    try {
+      let updatedTrip: TripResponse;
+      if (removeTarget.component === 'AIRFARE') {
+        updatedTrip = await tripsApi.removeAirfare(trip.id, activeDraft.id, {
+          expectedVersion: trip.version,
+          expectedDraftVersion: activeDraft.version,
+        });
+        setAirfareMode('empty');
+      } else if (removeTarget.component === 'STAY') {
+        updatedTrip = await tripsApi.removeStay(trip.id, activeDraft.id, {
+          expectedVersion: trip.version,
+          expectedDraftVersion: activeDraft.version,
+        });
+        setStayMode('empty');
+      } else {
+        updatedTrip = await tripsApi.removeRental(trip.id, activeDraft.id, {
+          expectedVersion: trip.version,
+          expectedDraftVersion: activeDraft.version,
+        });
+        setRentalMode('hidden');
+      }
+      applyTripState(updatedTrip);
+      const title = removeTarget.title;
+      setRemoveTarget(null);
+      setAutosaveStatus('saved');
+      setAutosaveMessage(`${title} removed from draft.`);
+    } catch (err) {
+      if (err instanceof IdentityApiError && err.code === 'VERSION_CONFLICT') {
+        setRemoveTarget(null);
+        setRemoveError(undefined);
+        setAutosaveStatus('conflict');
+        setAutosaveMessage('The Trip has changed on the server. Reload before saving.');
+      } else {
+        const failure = err instanceof Error ? err.message : 'Could not remove component.';
+        setRemoveError(failure);
+        setAutosaveStatus('error');
+        setAutosaveMessage(failure);
+      }
+    } finally {
+      setComponentMutationPending(false);
+    }
+  };
+
   // Delete modal triggers
   const promptDeleteDraft = (draftId: string, version: number) => {
     setDeleteError(undefined);
@@ -522,6 +772,77 @@ export function TripWorkspace({
           summary={revisionSummary}
           onDismiss={() => setRevisionSummary(null)}
         />
+      )}
+
+      {/* Progressive Builder & Component Slots */}
+      {activeDraft && (
+        <section className="workspace-section builder-section" aria-labelledby="builder-heading">
+          <div className="section-header">
+            <h3 id="builder-heading">Progressive Trip Builder</h3>
+          </div>
+
+          <ItinerarySummaryTally trip={trip} selections={activeDraft.selections} />
+
+          <div className="component-slots-grid">
+            <AirfareSlot
+              trip={trip}
+              draftId={activeDraft.id}
+              selectedAirfare={activeDraft.selections.airfare}
+              mode={airfareMode}
+              onStartSearch={() => setAirfareMode('searching')}
+              onSelect={handleSelectAirfare}
+              onChange={() => setAirfareMode('searching')}
+              onRemove={promptRemoveAirfare}
+              onCancelSearch={() =>
+                setAirfareMode(activeDraft.selections.airfare ? 'selected' : 'empty')
+              }
+              pending={componentMutationPending}
+            />
+
+            <StaySlot
+              trip={trip}
+              draftId={activeDraft.id}
+              selectedStay={activeDraft.selections.stay}
+              mode={stayMode}
+              initialType={stayAccommodationType}
+              onStartSearch={() => setStayMode('searching')}
+              onSelect={handleSelectStay}
+              onChange={() => setStayMode('searching')}
+              onRemove={promptRemoveStay}
+              onCancelSearch={() =>
+                setStayMode(activeDraft.selections.stay ? 'selected' : 'empty')
+              }
+              pending={componentMutationPending}
+            />
+
+            <RentalSlot
+              trip={trip}
+              draftId={activeDraft.id}
+              selectedRental={activeDraft.selections.rental}
+              mode={rentalMode}
+              onSelect={handleSelectRental}
+              onChange={() => setRentalMode('searching')}
+              onRemove={promptRemoveRental}
+              onCancelSearch={() =>
+                setRentalMode(activeDraft.selections.rental ? 'selected' : 'hidden')
+              }
+              pending={componentMutationPending}
+            />
+
+            {(rentalMode === 'hidden' || (rentalMode === 'selected' && !activeDraft.selections.rental)) && (
+              <div className="add-car-container">
+                <button
+                  type="button"
+                  className="secondary add-car-btn"
+                  onClick={() => setRentalMode('searching')}
+                  disabled={componentMutationPending}
+                >
+                  Add a car
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
       )}
 
       {/* Shared details form */}
@@ -745,6 +1066,22 @@ export function TripWorkspace({
           errorMessage={deleteError}
           onClose={() => setDeleteTarget(null)}
           onConfirm={() => void handleConfirmDelete()}
+        />
+      )}
+
+      {/* Removal confirmation modal */}
+      {removeTarget && (
+        <ConfirmRemoveModal
+          isOpen={Boolean(removeTarget)}
+          componentTitle={removeTarget.title}
+          formattedPrice={removeTarget.formattedPrice}
+          pending={componentMutationPending}
+          errorMessage={removeError}
+          onClose={() => {
+            setRemoveTarget(null);
+            setRemoveError(undefined);
+          }}
+          onConfirm={() => void handleConfirmRemove()}
         />
       )}
     </section>

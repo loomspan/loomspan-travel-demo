@@ -1,11 +1,12 @@
 import {FormEvent, useEffect, useRef, useState} from 'react';
-import {tripsApi, type TripResponse} from '../api/tripsApi';
+import {tripsApi, type TripResponse, type AccommodationType} from '../api/tripsApi';
 import {IdentityApiError} from '../api/identityApi';
 
 type TripCreateModalProps = {
   isOpen: boolean;
+  mode?: 'PLAN_TRIP' | 'AIRFARE' | 'STAY';
   onClose: () => void;
-  onSuccess: (trip: TripResponse) => void;
+  onSuccess: (trip: TripResponse, mode: 'PLAN_TRIP' | 'AIRFARE' | 'STAY', accommodationType?: AccommodationType) => void;
 };
 
 const SUPPORTED_DESTINATIONS = [
@@ -26,11 +27,12 @@ function validateDates(startDate: string, endDate: string): string | undefined {
   return undefined;
 }
 
-export function TripCreateModal({isOpen, onClose, onSuccess}: TripCreateModalProps) {
+export function TripCreateModal({isOpen, mode = 'PLAN_TRIP', onClose, onSuccess}: TripCreateModalProps) {
   const [destinationKey, setDestinationKey] = useState('destination-sfo');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [travelerCount, setTravelerCount] = useState('1');
+  const [accommodationType, setAccommodationType] = useState<AccommodationType>('HOTEL');
   const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [globalError, setGlobalError] = useState<string | undefined>();
@@ -111,7 +113,7 @@ export function TripCreateModal({isOpen, onClose, onSuccess}: TripCreateModalPro
         endDate,
         travelerCount: count,
       });
-      onSuccess(trip);
+      onSuccess(trip, mode, mode === 'STAY' ? accommodationType : undefined);
       onClose();
     } catch (err) {
       if (err instanceof IdentityApiError) {
@@ -141,7 +143,13 @@ export function TripCreateModal({isOpen, onClose, onSuccess}: TripCreateModalPro
         ref={modalRef}
       >
         <div className="modal-header">
-          <h2 id="create-trip-heading">Plan a new trip</h2>
+          <h2 id="create-trip-heading">
+            {mode === 'AIRFARE'
+              ? 'Plan a trip with airfare'
+              : mode === 'STAY'
+              ? 'Plan a trip with stay'
+              : 'Plan a new trip'}
+          </h2>
           <button type="button" className="text-button" onClick={onClose} aria-label="Close dialog">
             ✕
           </button>
@@ -179,6 +187,21 @@ export function TripCreateModal({isOpen, onClose, onSuccess}: TripCreateModalPro
               </p>
             )}
           </div>
+
+          {mode === 'STAY' && (
+            <div className="field">
+              <label htmlFor="trip-accommodation-type">Accommodation type</label>
+              <select
+                id="trip-accommodation-type"
+                value={accommodationType}
+                onChange={(e) => setAccommodationType(e.target.value as AccommodationType)}
+              >
+                <option value="HOTEL">Hotel</option>
+                <option value="BED_AND_BREAKFAST">Bed &amp; Breakfast</option>
+                <option value="VACATION_RENTAL">Vacation Rental</option>
+              </select>
+            </div>
+          )}
 
           <div className="field-group">
             <div className="field">
