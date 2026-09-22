@@ -258,6 +258,11 @@ class JdbcTripRepository implements TripRepository {
     @Override public void deleteDraftStaySelection(long draftId) {
         jdbc.update("DELETE FROM detour_trip_draft_stay_selection WHERE draft_id = ?", draftId);
     }
+    @Override public void saveDraftRentalSelection(long draftId, long rentalUnitId, OffsetDateTime pickupAt, OffsetDateTime returnAt) {
+        jdbc.update("DELETE FROM detour_trip_draft_rental_selection WHERE draft_id = ?", draftId);
+        jdbc.update("INSERT INTO detour_trip_draft_rental_selection (draft_id, rental_unit_id, pickup_at, return_at) VALUES (?, ?, ?, ?)",
+                draftId, rentalUnitId, pickupAt, returnAt);
+    }
     @Override public void deleteDraftRentalSelection(long draftId) {
         jdbc.update("DELETE FROM detour_trip_draft_rental_selection WHERE draft_id = ?", draftId);
     }

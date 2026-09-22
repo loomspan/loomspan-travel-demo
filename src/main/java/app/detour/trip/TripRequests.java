@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import tools.jackson.databind.JsonNode;
@@ -31,6 +32,8 @@ public final class TripRequests {
             long outboundFlightInstanceId, long returnFlightInstanceId) { }
     public record StaySelectionRequest(long expectedVersion, long expectedDraftVersion,
             long accommodationUnitId, Integer unitCount) { }
+    public record RentalSelectionRequest(long expectedVersion, long expectedDraftVersion,
+            long rentalUnitId, OffsetDateTime pickupAt, OffsetDateTime returnAt) { }
     public record Promotion(long expectedVersion, long expectedDraftVersion) { }
     public record AlternativeDuplicate(long expectedVersion, Long expectedDraftVersion) { }
     public record AlternativeDelete(long expectedVersion, Long expectedDraftVersion, Boolean confirmed) { }
@@ -85,6 +88,16 @@ public final class TripRequests {
                 positiveInt(body.get("unitCount"), "unitCount"));
     }
 
+    static RentalSelectionRequest rentalSelection(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion", "expectedDraftVersion", "rentalUnitId", "pickupAt", "returnAt"));
+        return new RentalSelectionRequest(
+                version(body.get("expectedVersion"), "expectedVersion"),
+                version(body.get("expectedDraftVersion"), "expectedDraftVersion"),
+                positiveLong(body.get("rentalUnitId"), "rentalUnitId"),
+                offsetDateTime(body.get("pickupAt"), "pickupAt"),
+                offsetDateTime(body.get("returnAt"), "returnAt"));
+    }
+
     static Promotion promotion(JsonNode body) {
         requireObject(body, Set.of("expectedVersion", "expectedDraftVersion"));
         return new Promotion(version(body.get("expectedVersion"), "expectedVersion"), version(body.get("expectedDraftVersion"), "expectedDraftVersion"));
@@ -130,6 +143,20 @@ public final class TripRequests {
             return LocalDate.parse(value);
         } catch (DateTimeParseException exception) {
             throw invalid(field, "Enter an ISO date.");
+        }
+    }
+
+    private static OffsetDateTime offsetDateTime(JsonNode node, String field) {
+        String value = text(node, field);
+        if (value == null) throw invalid(field, "This field is required.");
+        try {
+            return OffsetDateTime.parse(value);
+        } catch (DateTimeParseException exception) {
+            try {
+                return java.time.LocalDateTime.parse(value).atOffset(java.time.ZoneOffset.UTC);
+            } catch (DateTimeParseException ignored) {
+                throw invalid(field, "Enter a valid ISO timestamp.");
+            }
         }
     }
 

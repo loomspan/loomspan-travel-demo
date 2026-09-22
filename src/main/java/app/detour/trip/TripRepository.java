@@ -1,6 +1,7 @@
 package app.detour.trip;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -52,6 +53,8 @@ interface TripRepository {
     void saveDraftStaySelection(long draftId, long accommodationUnitId, int unitCount);
 
     void deleteDraftStaySelection(long draftId);
+
+    void saveDraftRentalSelection(long draftId, long rentalUnitId, OffsetDateTime pickupAt, OffsetDateTime returnAt);
 
     void deleteDraftRentalSelection(long draftId);
 

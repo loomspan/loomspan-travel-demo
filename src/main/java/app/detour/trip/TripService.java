@@ -6,6 +6,10 @@ import app.detour.airfare.AirfareSearchService;
 import app.detour.airfare.AirfareSort;
 import app.detour.api.ApiException;
 import app.detour.common.ClockConfiguration;
+import app.detour.rental.RentalSearchRepository;
+import app.detour.rental.RentalSearchResponses.RentalSearchResponse;
+import app.detour.rental.RentalSearchService;
+import app.detour.rental.RentalSort;
 import app.detour.stay.AccommodationType;
 import app.detour.stay.StaySearchRepository;
 import app.detour.stay.StaySearchResponses.StaySearchResponse;
@@ -16,6 +20,8 @@ import java.math.BigInteger;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,6 +43,8 @@ public class TripService {
     private final AirfareSearchRepository airfareSearchRepository;
     private final StaySearchService staySearchService;
     private final StaySearchRepository staySearchRepository;
+    private final RentalSearchService rentalSearchService;
+    private final RentalSearchRepository rentalSearchRepository;
     private final Clock clock;
 
     TripService(
@@ -45,12 +53,16 @@ public class TripService {
             AirfareSearchRepository airfareSearchRepository,
             StaySearchService staySearchService,
             StaySearchRepository staySearchRepository,
+            RentalSearchService rentalSearchService,
+            RentalSearchRepository rentalSearchRepository,
             Clock clock) {
         this.trips = trips;
         this.airfareSearchService = airfareSearchService;
         this.airfareSearchRepository = airfareSearchRepository;
         this.staySearchService = staySearchService;
         this.staySearchRepository = staySearchRepository;
+        this.rentalSearchService = rentalSearchService;
+        this.rentalSearchRepository = rentalSearchRepository;
         this.clock = clock;
     }
 
@@ -732,6 +744,128 @@ public class TripService {
         }
 
         trips.deleteDraftStaySelection(draft.id());
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+    }
+
+    public RentalSearchResponse searchRentals(long ownerUserId, String tripId, String draftId, String pickupAtStr, String returnAtStr, String sortStr) {
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        TripDraft draft = null;
+        if (draftId != null) {
+            draft = ownedDraft(trip, draftId);
+        }
+
+        if (pickupAtStr == null || pickupAtStr.isBlank()) {
+            throw validation("pickupAt", "Pickup time is required.");
+        }
+        if (returnAtStr == null || returnAtStr.isBlank()) {
+            throw validation("returnAt", "Return time is required.");
+        }
+
+        OffsetDateTime pickupAt;
+        try {
+            pickupAt = OffsetDateTime.parse(pickupAtStr);
+        } catch (DateTimeParseException e) {
+            try {
+                pickupAt = java.time.LocalDateTime.parse(pickupAtStr).atOffset(java.time.ZoneOffset.UTC);
+            } catch (DateTimeParseException ignored) {
+                throw validation("pickupAt", "Enter a valid ISO timestamp.");
+            }
+        }
+
+        OffsetDateTime returnAt;
+        try {
+            returnAt = OffsetDateTime.parse(returnAtStr);
+        } catch (DateTimeParseException e) {
+            try {
+                returnAt = java.time.LocalDateTime.parse(returnAtStr).atOffset(java.time.ZoneOffset.UTC);
+            } catch (DateTimeParseException ignored) {
+                throw validation("returnAt", "Enter a valid ISO timestamp.");
+            }
+        }
+
+        RentalSort sort = RentalSort.from(sortStr);
+
+        Long availableBudgetCents = null;
+        if (trip.budgetCents() != null) {
+            long selectedAirfareTotal = 0;
+            long selectedStayTotal = 0;
+            if (draft != null && draft.selections() != null) {
+                if (draft.selections().airfare() != null) {
+                    AirfareSelection a = draft.selections().airfare();
+                    long perPerson = a.outboundBaseFareCents() + a.outboundTaxCents() + a.outboundFeeCents()
+                            + a.returnBaseFareCents() + a.returnTaxCents() + a.returnFeeCents();
+                    selectedAirfareTotal = perPerson * trip.travelerCount();
+                }
+                if (draft.selections().stay() != null) {
+                    StaySelection s = draft.selections().stay();
+                    long perRoomTotal = s.nights().stream()
+                            .mapToLong(n -> n.basePriceCents() + n.taxCents() + n.feeCents())
+                            .sum();
+                    selectedStayTotal = perRoomTotal * s.unitCount();
+                }
+            }
+            availableBudgetCents = trip.budgetCents() - selectedAirfareTotal - selectedStayTotal;
+        }
+
+        return rentalSearchService.search(
+                trip.destination().id(),
+                trip.destination().key(),
+                trip.startDate(),
+                trip.endDate(),
+                trip.travelerAges(),
+                trip.publicId(),
+                draft != null ? draft.publicId() : null,
+                pickupAt,
+                returnAt,
+                sort,
+                availableBudgetCents
+        );
+    }
+
+    @Transactional
+    public TripResponse selectDraftRental(long ownerUserId, String tripId, String draftId, TripRequests.RentalSelectionRequest request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        TripDraft draft = ownedDraft(trip, draftId);
+
+        if (!rentalSearchService.isDriverEligible(trip.travelerAges())) {
+            throw validation("travelerAges", RentalSearchService.DRIVER_AGE_EXPLANATION);
+        }
+
+        var unitOpt = rentalSearchRepository.findUnitById(request.rentalUnitId());
+        if (unitOpt.isEmpty()) {
+            throw validation("rentalUnitId", "Selected rental car was not found.");
+        }
+        var unit = unitOpt.get();
+        if (unit.destinationId() != trip.destination().id()) {
+            throw validation("rentalUnitId", "Selected rental car does not match trip destination.");
+        }
+
+        rentalSearchService.validateInterval(trip.destination().id(), trip.startDate(), trip.endDate(), request.pickupAt(), request.returnAt());
+
+        if (!rentalSearchRepository.isUnitAvailable(unit.unitId(), request.pickupAt(), request.returnAt())) {
+            throw validation("rentalUnitId", "Selected rental car is unavailable for the requested interval.");
+        }
+
+        if (!trips.advanceVersionForDraftMutation(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
+            throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
+        }
+
+        trips.saveDraftRentalSelection(draft.id(), unit.unitId(), request.pickupAt(), request.returnAt());
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+    }
+
+    @Transactional
+    public TripResponse removeDraftRental(long ownerUserId, String tripId, String draftId, TripRequests.DraftMutation request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        TripDraft draft = ownedDraft(trip, draftId);
+
+        if (!trips.advanceVersionForDraftMutation(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
+            throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
+        }
+
+        trips.deleteDraftRentalSelection(draft.id());
         return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
     }
 

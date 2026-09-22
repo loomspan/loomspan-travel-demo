@@ -36,17 +36,17 @@ Authenticated users can search airport rental car inventory within their Trip da
 
 ## Acceptance criteria
 
-- [ ] An authenticated user can search rental cars for their Trip by specifying pickup and return date/times within the trip interval at the destination airport.
-- [ ] Requests with return before or equal to pickup, or times outside the trip date window, are rejected with clear validation messages.
-- [ ] When no traveler is 25 or older, search indicates selection is disabled and provides the required 25+ explanation; selecting a car in this state is rejected.
-- [ ] Rental units with overlapping reservations in `rental_unit_occupancy` over `[pickupAt, returnAt)` are excluded from selectable results.
-- [ ] Pricing charges consecutive 24-hour cycles and rounds any partial final cycle up to a full cycle (e.g., 25 hours charged as 2 full days) in USD integer cents.
-- [ ] Results default-order by Economy, Standard, SUV; then lowest total price; then vehicle unit catalog key.
-- [ ] Saving a rental selection persists unit ID, pickup time, and return time in `detour_trip_draft_rental_selection`, advances draft version, and returns updated `TripResponse`.
-- [ ] Replacing a rental selection updates the draft without duplicate rows.
-- [ ] Removing a rental selection deletes the draft rental record and advances the draft version.
-- [ ] Concurrency conflicts return 409 `VERSION_CONFLICT`; unauthorized access returns 404 with no data disclosure.
-- [ ] Backend integration tests verify age gating, 24-hour billing cycle math, half-open interval occupancy checking, ranking determinism, and selection persistence.
+- [x] An authenticated user can search rental cars for their Trip by specifying pickup and return date/times within the trip interval at the destination airport.
+- [x] Requests with return before or equal to pickup, or times outside the trip date window, are rejected with clear validation messages.
+- [x] When no traveler is 25 or older, search indicates selection is disabled and provides the required 25+ explanation; selecting a car in this state is rejected.
+- [x] Rental units with overlapping reservations in `rental_unit_occupancy` over `[pickupAt, returnAt)` are excluded from selectable results.
+- [x] Pricing charges consecutive 24-hour cycles and rounds any partial final cycle up to a full cycle (e.g., 25 hours charged as 2 full days) in USD integer cents.
+- [x] Results default-order by Economy, Standard, SUV; then lowest total price; then vehicle unit catalog key.
+- [x] Saving a rental selection persists unit ID, pickup time, and return time in `detour_trip_draft_rental_selection`, advances draft version, and returns updated `TripResponse`.
+- [x] Replacing a rental selection updates the draft without duplicate rows.
+- [x] Removing a rental selection deletes the draft rental record and advances the draft version.
+- [x] Concurrency conflicts return 409 `VERSION_CONFLICT`; unauthorized access returns 404 with no data disclosure.
+- [x] Backend integration tests verify age gating, 24-hour billing cycle math, half-open interval occupancy checking, ranking determinism, and selection persistence.
 
 ## Context
 

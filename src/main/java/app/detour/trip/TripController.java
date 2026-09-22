@@ -1,6 +1,7 @@
 package app.detour.trip;
 
 import app.detour.airfare.AirfareSearchResponses.AirfareSearchResponse;
+import app.detour.rental.RentalSearchResponses.RentalSearchResponse;
 import app.detour.stay.StaySearchResponses.StaySearchResponse;
 import app.detour.api.ApiException;
 import app.detour.identity.DetourUserPrincipal;
@@ -168,6 +169,55 @@ public class TripController {
             @PathVariable String draftId,
             @RequestBody JsonNode request) {
         return trips.removeDraftStay(
+                requirePrincipal(principal).userId(),
+                tripId,
+                draftId,
+                TripRequests.draftMutation(request)
+        );
+    }
+
+    @GetMapping({"/{tripId}/drafts/{draftId}/rentals", "/{tripId}/drafts/{draftId}/rental", "/{tripId}/drafts/{draftId}/cars", "/{tripId}/drafts/{draftId}/car"})
+    RentalSearchResponse searchDraftRentals(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId,
+            @PathVariable String draftId,
+            @RequestParam(required = false) String pickupAt,
+            @RequestParam(required = false) String returnAt,
+            @RequestParam(defaultValue = "DEFAULT") String sort) {
+        return trips.searchRentals(requirePrincipal(principal).userId(), tripId, draftId, pickupAt, returnAt, sort);
+    }
+
+    @GetMapping({"/{tripId}/rentals", "/{tripId}/rental", "/{tripId}/cars", "/{tripId}/car"})
+    RentalSearchResponse searchTripRentals(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId,
+            @RequestParam(required = false) String pickupAt,
+            @RequestParam(required = false) String returnAt,
+            @RequestParam(defaultValue = "DEFAULT") String sort) {
+        return trips.searchRentals(requirePrincipal(principal).userId(), tripId, null, pickupAt, returnAt, sort);
+    }
+
+    @PutMapping({"/{tripId}/drafts/{draftId}/rentals", "/{tripId}/drafts/{draftId}/rental", "/{tripId}/drafts/{draftId}/cars", "/{tripId}/drafts/{draftId}/car"})
+    TripResponse selectDraftRental(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId,
+            @PathVariable String draftId,
+            @RequestBody JsonNode request) {
+        return trips.selectDraftRental(
+                requirePrincipal(principal).userId(),
+                tripId,
+                draftId,
+                TripRequests.rentalSelection(request)
+        );
+    }
+
+    @DeleteMapping({"/{tripId}/drafts/{draftId}/rentals", "/{tripId}/drafts/{draftId}/rental", "/{tripId}/drafts/{draftId}/cars", "/{tripId}/drafts/{draftId}/car"})
+    TripResponse removeDraftRental(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId,
+            @PathVariable String draftId,
+            @RequestBody JsonNode request) {
+        return trips.removeDraftRental(
                 requirePrincipal(principal).userId(),
                 tripId,
                 draftId,
