@@ -34,7 +34,11 @@ public final class TripRequests {
             long accommodationUnitId, Integer unitCount) { }
     public record RentalSelectionRequest(long expectedVersion, long expectedDraftVersion,
             long rentalUnitId, OffsetDateTime pickupAt, OffsetDateTime returnAt) { }
-    public record Promotion(long expectedVersion, long expectedDraftVersion) { }
+    public record Promotion(long expectedVersion, long expectedDraftVersion, Boolean budgetOverageAcknowledged) {
+        public Promotion(long expectedVersion, long expectedDraftVersion) {
+            this(expectedVersion, expectedDraftVersion, null);
+        }
+    }
     public record AlternativeDuplicate(long expectedVersion, Long expectedDraftVersion) { }
     public record AlternativeDelete(long expectedVersion, Long expectedDraftVersion, Boolean confirmed) { }
     public record TripDelete(long expectedVersion, int expectedDraftCount, int expectedPlannedCount, Boolean confirmed) { }
@@ -99,8 +103,13 @@ public final class TripRequests {
     }
 
     static Promotion promotion(JsonNode body) {
-        requireObject(body, Set.of("expectedVersion", "expectedDraftVersion"));
-        return new Promotion(version(body.get("expectedVersion"), "expectedVersion"), version(body.get("expectedDraftVersion"), "expectedDraftVersion"));
+        requireObject(body, Set.of("expectedVersion", "expectedDraftVersion", "budgetOverageAcknowledged"));
+        Boolean acknowledged = (body.get("budgetOverageAcknowledged") == null || body.get("budgetOverageAcknowledged").isNull())
+                ? null : booleanValue(body.get("budgetOverageAcknowledged"), "budgetOverageAcknowledged");
+        return new Promotion(
+                version(body.get("expectedVersion"), "expectedVersion"),
+                version(body.get("expectedDraftVersion"), "expectedDraftVersion"),
+                acknowledged);
     }
 
     static AlternativeDuplicate alternativeDuplicate(JsonNode body) {

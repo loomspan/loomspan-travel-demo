@@ -59,7 +59,7 @@ class TripApplicationRestartIntegrationTest {
                     """, UUID.fromString(draftId));
 
             HttpResponse<String> promoted = request(base, "POST", "/api/trips/" + tripId + "/drafts/" + draftId + "/plan", sessionCookie + "|" + csrf,
-                    "{\"expectedVersion\":0,\"expectedDraftVersion\":0}").send();
+                    "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}").send();
             assertEquals(201, promoted.statusCode());
             var promotedBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(promoted.body());
             plannedId = promotedBody.get("planned").get(0).get("id").asString();
@@ -144,7 +144,7 @@ class TripApplicationRestartIntegrationTest {
                     """, UUID.fromString(draftId));
 
             HttpResponse<String> promoted = request(base, "POST", "/api/trips/" + originalTripId + "/drafts/" + draftId + "/plan", sessionCookie + "|" + csrf,
-                    "{\"expectedVersion\":0,\"expectedDraftVersion\":0}").send();
+                    "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}").send();
             assertEquals(201, promoted.statusCode());
             var promotedBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(promoted.body());
             plannedId = promotedBody.get("planned").get(0).get("id").asString();

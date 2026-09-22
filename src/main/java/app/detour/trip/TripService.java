@@ -284,9 +284,23 @@ public class TripService {
         if (isExpired(trip.startDate())) {
             throw new ApiException(400, "ALTERNATIVE_EXPIRED", "Expired alternatives cannot be promoted.");
         }
-        DraftSelections resolved = trips.resolveSelectionsForPromotion(trip, draft);
-        Map<String, String> issues = readinessIssues(trip, resolved);
+        Map<String, String> issues = evaluateDraftBlockingIssues(trip, draft);
         if (!issues.isEmpty()) throw new ApiException(400, "PLANNING_NOT_READY", "The Draft is not ready to be planned.", issues);
+
+        ItineraryTallyResponse tally = tallyEngine.calculateTally(draft.selections(), trip.travelerCount(), trip.budgetCents());
+        if (tally.isOverBudget()) {
+            if (!Boolean.TRUE.equals(request.budgetOverageAcknowledged())) {
+                throw new ApiException(400, "BUDGET_OVERAGE_UNACKNOWLEDGED",
+                        "Promotion requires explicit acknowledgment of budget overage.",
+                        Map.of(
+                                "grandTotalCents", String.valueOf(tally.grandTotalCents()),
+                                "budgetCents", String.valueOf(trip.budgetCents()),
+                                "budgetOverageCents", String.valueOf(tally.budgetOverageCents())
+                        ));
+            }
+        }
+
+        DraftSelections resolved = trips.resolveSelectionsForPromotion(trip, draft);
         if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
             throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
         }
@@ -562,17 +576,153 @@ public class TripService {
     private static DraftSelectionResponse selectionResponse(DraftSelections selections) {
         if (selections == null) return null;
         AirfareSelection airfare = selections.airfare(); StaySelection stay = selections.stay(); RentalSelection rental = selections.rental();
-        return new DraftSelectionResponse(airfare == null ? null : new AirfareComponentResponse(airfare.outboundFlightInstanceId(), airfare.returnFlightInstanceId(), airfare.outboundDescription(), airfare.returnDescription(), airfare.outboundBaseFareCents(), airfare.outboundTaxCents(), airfare.outboundFeeCents(), airfare.returnBaseFareCents(), airfare.returnTaxCents(), airfare.returnFeeCents()),
-                stay == null ? null : new StayComponentResponse(stay.accommodationUnitId(), stay.unitCount(), stay.propertyName(), stay.unitName(), stay.nights().stream().map(n -> new StayNightResponse(n.date(), n.basePriceCents(), n.taxCents(), n.feeCents())).toList()),
-                rental == null ? null : new RentalComponentResponse(rental.rentalUnitId(), rental.pickupAt(), rental.returnAt(), rental.locationName(), rental.vehicleClassName(), rental.unitIdentifier(), rental.dailyBasePriceCents(), rental.dailyTaxCents(), rental.dailyFeeCents()));
+        return new DraftSelectionResponse(
+                airfare == null ? null : new AirfareComponentResponse(
+                        airfare.outboundFlightInstanceId(), airfare.returnFlightInstanceId(),
+                        airfare.outboundDescription(), airfare.returnDescription(),
+                        airfare.outboundBaseFareCents(), airfare.outboundTaxCents(), airfare.outboundFeeCents(),
+                        airfare.returnBaseFareCents(), airfare.returnTaxCents(), airfare.returnFeeCents(),
+                        airfare.outboundCarrierName(), airfare.outboundFlightNumber(), airfare.outboundStopCount(),
+                        airfare.outboundLayoverAirportCode(), airfare.outboundLayoverDurationMinutes(),
+                        airfare.outboundDepartureTime(), airfare.outboundArrivalTime(),
+                        airfare.outboundDepartureTimeZone(), airfare.outboundArrivalTimeZone(), airfare.outboundDurationMinutes(),
+                        airfare.returnCarrierName(), airfare.returnFlightNumber(), airfare.returnStopCount(),
+                        airfare.returnLayoverAirportCode(), airfare.returnLayoverDurationMinutes(),
+                        airfare.returnDepartureTime(), airfare.returnArrivalTime(),
+                        airfare.returnDepartureTimeZone(), airfare.returnArrivalTimeZone(), airfare.returnDurationMinutes(),
+                        airfare.totalDurationMinutes()),
+                stay == null ? null : new StayComponentResponse(
+                        stay.accommodationUnitId(), stay.unitCount(), stay.propertyName(), stay.unitName(),
+                        stay.nights().stream().map(n -> new StayNightResponse(n.date(), n.basePriceCents(), n.taxCents(), n.feeCents())).toList(),
+                        stay.propertyCategory(), stay.locationDescription(), stay.distanceToCityCenterMeters(),
+                        stay.guestCapacity(), stay.requiredRoomCount()),
+                rental == null ? null : new RentalComponentResponse(
+                        rental.rentalUnitId(), rental.pickupAt(), rental.returnAt(), rental.locationName(),
+                        rental.vehicleClassName(), rental.unitIdentifier(), rental.dailyBasePriceCents(),
+                        rental.dailyTaxCents(), rental.dailyFeeCents(), rental.vehicleCategory()));
     }
 
-    private static Map<String, String> readinessIssues(Trip trip, DraftSelections selections) {
+    public DraftReadinessResponse inspectDraftReadiness(long ownerUserId, String tripId, String draftId) {
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        TripDraft draft = ownedDraft(trip, draftId);
+        return evaluateDraftReadiness(trip, draft);
+    }
+
+    public DraftReadinessResponse evaluateDraftReadiness(Trip trip, TripDraft draft) {
+        Map<String, String> issues = evaluateDraftBlockingIssues(trip, draft);
+        ItineraryTallyResponse tally = tallyEngine.calculateTally(draft.selections(), trip.travelerCount(), trip.budgetCents());
+        boolean isOverBudget = tally.isOverBudget();
+        long budgetOverageCents = isOverBudget && tally.budgetOverageCents() != null ? tally.budgetOverageCents() : 0L;
+        boolean requiresOverageAcknowledgment = isOverBudget;
+        boolean ready = issues.isEmpty() && !requiresOverageAcknowledgment;
+        return new DraftReadinessResponse(ready, issues, isOverBudget, budgetOverageCents, requiresOverageAcknowledgment);
+    }
+
+    private Map<String, String> evaluateDraftBlockingIssues(Trip trip, TripDraft draft) {
         Map<String, String> issues = new java.util.LinkedHashMap<>();
-        if (trip.travelerAges() == null) issues.put("travelerAges", "Provide exact ages for every traveler before planning.");
-        else if (trip.travelerAges().stream().noneMatch(age -> age >= 18)) issues.put("adult", "At least one traveler must be an adult before planning.");
-        if (trip.budgetCents() == null) issues.put("budgetCents", "Provide a budget before planning.");
-        if (selections.airfare() == null && selections.stay() == null && selections.rental() == null) issues.put("components", "Select at least one structurally valid reservable component before planning.");
+        if (trip.destination() == null) {
+            issues.put("destination", "Select a destination before planning.");
+        }
+        if (trip.startDate() == null || trip.endDate() == null) {
+            issues.put("dates", "Trip dates must be specified.");
+        } else if (trip.startDate().isBefore(FIRST_SUPPORTED_DATE) || trip.endDate().isAfter(LAST_SUPPORTED_DATE)
+                || !trip.startDate().isBefore(trip.endDate())
+                || ChronoUnit.DAYS.between(trip.startDate(), trip.endDate()) < 1
+                || ChronoUnit.DAYS.between(trip.startDate(), trip.endDate()) > 14) {
+            issues.put("dates", "Trip dates must be between March 1 and March 31, 2027, with a duration between 1 and 14 nights.");
+        } else if (isExpired(trip.startDate())) {
+            issues.put("dates", "Trip departure date has passed.");
+        }
+
+        if (trip.travelerCount() < 1 || trip.travelerCount() > 8) {
+            issues.put("travelerCount", "Traveler count must be between 1 and 8.");
+        }
+
+        if (trip.travelerAges() == null || trip.travelerAges().size() != trip.travelerCount()
+                || trip.travelerAges().stream().anyMatch(a -> a == null || a < 0 || a > MAX_TRAVELER_AGE)) {
+            issues.put("travelerAges", "Provide exact ages for every traveler before planning.");
+        } else if (trip.travelerAges().stream().noneMatch(a -> a >= 18)) {
+            issues.put("adult", "At least one traveler must be an adult before planning.");
+        }
+
+        if (trip.budgetCents() == null || trip.budgetCents() < 0) {
+            issues.put("budgetCents", "Provide a budget before planning.");
+        }
+
+        DraftSelections selections = draft.selections();
+        if (selections == null || (selections.airfare() == null && selections.stay() == null && selections.rental() == null)) {
+            issues.put("components", "Select at least one structurally valid reservable component before planning.");
+        }
+
+        if (selections != null && selections.airfare() != null) {
+            AirfareSelection af = selections.airfare();
+            var outOpt = airfareSearchRepository.findLegById(af.outboundFlightInstanceId());
+            var retOpt = airfareSearchRepository.findLegById(af.returnFlightInstanceId());
+            if (outOpt.isEmpty() || retOpt.isEmpty()) {
+                issues.put("airfare", "Selected flight was not found or is unavailable.");
+            } else {
+                var out = outOpt.get();
+                var ret = retOpt.get();
+                String destAirportIata = trip.destination() != null
+                        ? airfareSearchRepository.findAirportIataCodeForDestination(trip.destination().id()).orElse(null)
+                        : null;
+                LocalDate outDate = out.departureTime().atZoneSameInstant(java.time.ZoneId.of(out.departureTimeZone())).toLocalDate();
+                LocalDate retDate = ret.departureTime().atZoneSameInstant(java.time.ZoneId.of(ret.departureTimeZone())).toLocalDate();
+                if (!"PDX".equals(out.originAirportCode()) || destAirportIata == null || !out.destinationAirportCode().equals(destAirportIata)
+                        || trip.startDate() == null || !outDate.equals(trip.startDate())
+                        || !ret.originAirportCode().equals(destAirportIata) || !"PDX".equals(ret.destinationAirportCode())
+                        || trip.endDate() == null || !retDate.equals(trip.endDate())) {
+                    issues.put("airfare", "Selected flights do not match trip route or dates.");
+                } else if (out.availableSeats() < trip.travelerCount() || ret.availableSeats() < trip.travelerCount()) {
+                    issues.put("airfare", "Selected flight does not have enough available seats for party size.");
+                }
+            }
+        }
+
+        if (selections != null && selections.stay() != null) {
+            StaySelection st = selections.stay();
+            if (trip.startDate() != null && trip.endDate() != null && trip.startDate().isBefore(trip.endDate())) {
+                var stayOpt = staySearchRepository.findCandidateById(st.accommodationUnitId(), trip.startDate(), trip.endDate());
+                if (stayOpt.isEmpty() || (trip.destination() != null && stayOpt.get().destinationId() != trip.destination().id())) {
+                    issues.put("stay", "Selected accommodation unit was not found or does not match destination.");
+                } else {
+                    var candidate = stayOpt.get();
+                    if (candidate.guestCapacity() * st.unitCount() < trip.travelerCount()) {
+                        issues.put("stay", "Selected accommodation unit capacity is insufficient for party size.");
+                    } else {
+                        long expectedNights = ChronoUnit.DAYS.between(trip.startDate(), trip.endDate());
+                        if (candidate.nights().size() != expectedNights || candidate.nights().stream().anyMatch(n -> n.availableInventory() < st.unitCount())) {
+                            issues.put("stay", "Selected accommodation has insufficient inventory for the requested dates.");
+                        }
+                    }
+                }
+            } else {
+                issues.put("stay", "Valid trip dates are required to evaluate accommodation availability.");
+            }
+        }
+
+        if (selections != null && selections.rental() != null) {
+            RentalSelection rn = selections.rental();
+            var rentalOpt = rentalSearchRepository.findUnitById(rn.rentalUnitId());
+            if (rentalOpt.isEmpty()) {
+                issues.put("rental", "Selected rental car unit was not found.");
+            } else {
+                var unit = rentalOpt.get();
+                if (trip.destination() != null && unit.destinationId() != trip.destination().id()) {
+                    issues.put("rental", "Selected rental car does not match trip destination.");
+                } else if (!rn.pickupAt().isBefore(rn.returnAt())) {
+                    issues.put("rental", "Rental pickup time must be before return time.");
+                } else if (trip.startDate() != null && trip.endDate() != null
+                        && (rn.pickupAt().toLocalDate().isBefore(trip.startDate()) || rn.returnAt().toLocalDate().isAfter(trip.endDate()))) {
+                    issues.put("rental", "Rental dates must be within the trip interval.");
+                } else if (trip.travelerAges() == null || trip.travelerAges().stream().noneMatch(a -> a != null && a >= 25)) {
+                    issues.put("rental", "At least one traveler must be 25 or older to rent a vehicle.");
+                } else if (!rentalSearchRepository.isUnitAvailable(rn.rentalUnitId(), rn.pickupAt(), rn.returnAt())) {
+                    issues.put("rental", "Selected rental car is not available for the requested interval.");
+                }
+            }
+        }
+
         return issues;
     }
 

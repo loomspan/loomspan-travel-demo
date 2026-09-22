@@ -325,4 +325,45 @@ describe('tripsApi client', () => {
       }),
     });
   });
+
+  it('getDraftReadiness sends GET request and returns readiness response', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, {
+      ready: true,
+      blockingIssues: {},
+      isOverBudget: false,
+      budgetOverageCents: 0,
+      requiresOverageAcknowledgment: false,
+    }));
+
+    const result = await tripsApi.getDraftReadiness('trip-1', 'draft-1');
+    expect(result.ready).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/drafts/draft-1/readiness', {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: undefined,
+      body: undefined,
+    });
+  });
+
+  it('promoteDraft sends POST request with expected versions and overage acknowledgment', async () => {
+    fetchMock.mockResolvedValueOnce(json(201, {id: 'trip-1', version: 2}));
+
+    const result = await tripsApi.promoteDraft('trip-1', 'draft-1', {
+      expectedVersion: 1,
+      expectedDraftVersion: 0,
+      budgetOverageAcknowledged: true,
+    });
+
+    expect(result).toEqual({id: 'trip-1', version: 2});
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/drafts/draft-1/plan', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': 'secret-token'},
+      body: JSON.stringify({
+        expectedVersion: 1,
+        expectedDraftVersion: 0,
+        budgetOverageAcknowledged: true,
+      }),
+    });
+  });
 });

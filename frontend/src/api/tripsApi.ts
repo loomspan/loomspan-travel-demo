@@ -41,6 +41,27 @@ export type AirfareComponentResponse = {
   returnBaseFareCents: number;
   returnTaxCents: number;
   returnFeeCents: number;
+  outboundCarrierName?: string | null;
+  outboundFlightNumber?: string | null;
+  outboundStopCount?: number | null;
+  outboundLayoverAirportCode?: string | null;
+  outboundLayoverDurationMinutes?: number | null;
+  outboundDepartureTime?: string | null;
+  outboundArrivalTime?: string | null;
+  outboundDepartureTimeZone?: string | null;
+  outboundArrivalTimeZone?: string | null;
+  outboundDurationMinutes?: number | null;
+  returnCarrierName?: string | null;
+  returnFlightNumber?: string | null;
+  returnStopCount?: number | null;
+  returnLayoverAirportCode?: string | null;
+  returnLayoverDurationMinutes?: number | null;
+  returnDepartureTime?: string | null;
+  returnArrivalTime?: string | null;
+  returnDepartureTimeZone?: string | null;
+  returnArrivalTimeZone?: string | null;
+  returnDurationMinutes?: number | null;
+  totalDurationMinutes?: number | null;
 };
 
 export type StayNightResponse = {
@@ -56,6 +77,11 @@ export type StayComponentResponse = {
   propertyName: string;
   unitName: string;
   nights: StayNightResponse[];
+  propertyCategory?: string | null;
+  locationDescription?: string | null;
+  distanceToCityCenterMeters?: number | null;
+  guestCapacity?: number | null;
+  requiredRoomCount?: number | null;
 };
 
 export type RentalComponentResponse = {
@@ -68,6 +94,15 @@ export type RentalComponentResponse = {
   dailyBasePriceCents: number;
   dailyTaxCents: number;
   dailyFeeCents: number;
+  vehicleCategory?: string | null;
+};
+
+export type DraftReadinessResponse = {
+  ready: boolean;
+  blockingIssues: Record<string, string>;
+  isOverBudget: boolean;
+  budgetOverageCents: number;
+  requiresOverageAcknowledgment: boolean;
 };
 
 export type AirfareSort =
@@ -411,6 +446,12 @@ export type DraftMutationRequest = {
   expectedDraftVersion: number;
 };
 
+export type PromotionRequest = {
+  expectedVersion: number;
+  expectedDraftVersion: number;
+  budgetOverageAcknowledged?: boolean | null;
+};
+
 export type AlternativeDuplicateRequest = {
   expectedVersion: number;
   expectedDraftVersion?: number | null;
@@ -474,6 +515,17 @@ function cleanDraftCreatePayload(p: DraftCreateRequest): Record<string, unknown>
 
 function cleanDraftMutationPayload(p: DraftMutationRequest): Record<string, unknown> {
   return { expectedVersion: p.expectedVersion, expectedDraftVersion: p.expectedDraftVersion };
+}
+
+function cleanPromotionPayload(p: PromotionRequest): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    expectedVersion: p.expectedVersion,
+    expectedDraftVersion: p.expectedDraftVersion,
+  };
+  if (p.budgetOverageAcknowledged !== undefined && p.budgetOverageAcknowledged !== null) {
+    body.budgetOverageAcknowledged = p.budgetOverageAcknowledged;
+  }
+  return body;
 }
 
 function cleanAlternativeDuplicatePayload(p: AlternativeDuplicateRequest): Record<string, unknown> {
@@ -607,4 +659,10 @@ export const tripsApi = {
 
   removeRental: (tripId: string, draftId: string, payload: DraftMutationRequest): Promise<TripResponse> =>
     request<TripResponse>(`/api/trips/${tripId}/drafts/${draftId}/rentals`, 'DELETE', cleanDraftMutationPayload(payload)),
+
+  getDraftReadiness: (tripId: string, draftId: string): Promise<DraftReadinessResponse> =>
+    request<DraftReadinessResponse>(`/api/trips/${tripId}/drafts/${draftId}/readiness`, 'GET'),
+
+  promoteDraft: (tripId: string, draftId: string, payload: PromotionRequest): Promise<TripResponse> =>
+    request<TripResponse>(`/api/trips/${tripId}/drafts/${draftId}/plan`, 'POST', cleanPromotionPayload(payload)),
 };

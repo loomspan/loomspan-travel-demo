@@ -319,7 +319,7 @@ class TripApiIntegrationTest {
         String tripId = jsonField(created, "id");
         String draftId = tools.jackson.databind.json.JsonMapper.builder().build().readTree(created.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
         insertSfoAirfareSelection(draftId);
-        MvcResult promoted = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId), "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult promoted = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId), "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}")
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.version").value(1)).andExpect(jsonPath("$.drafts.length()").value(1))
                 .andExpect(jsonPath("$.planned.length()").value(1)).andExpect(jsonPath("$.planned[0].selections.airfare.outboundDescription").isString()).andReturn();
         var promotedBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(promoted.getResponse().getContentAsString());
@@ -333,7 +333,7 @@ class TripApiIntegrationTest {
         String secondDraftId = tools.jackson.databind.json.JsonMapper.builder().build().readTree(duplicated.getResponse().getContentAsString()).get("drafts").get(1).get("id").asString();
 
         // Promote the second draft: verify multiple Planned alternatives can coexist under one Trip
-        MvcResult secondPromoted = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, secondDraftId), "{\"expectedVersion\":2,\"expectedDraftVersion\":0}")
+        MvcResult secondPromoted = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, secondDraftId), "{\"expectedVersion\":2,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}")
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.version").value(3)).andExpect(jsonPath("$.planned.length()").value(2)).andReturn();
         String secondPlannedId = tools.jackson.databind.json.JsonMapper.builder().build().readTree(secondPromoted.getResponse().getContentAsString()).get("planned").get(1).get("id").asString();
 
@@ -420,7 +420,7 @@ class TripApiIntegrationTest {
         insertSfoStaySelection(draftId);
         insertSfoRentalSelection(draftId);
 
-        MvcResult promoted = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId), "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult promoted = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId), "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}")
                 .andExpect(status().isCreated()).andReturn();
         var promotedTree = tools.jackson.databind.json.JsonMapper.builder().build().readTree(promoted.getResponse().getContentAsString());
         String plannedId = promotedTree.get("planned").get(0).get("id").asString();
@@ -467,7 +467,7 @@ class TripApiIntegrationTest {
         assertEquals(0, dupDraftTree.get("drafts").get(1).get("version").asInt());
 
         // Promote first draft
-        MvcResult promoted = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId), "{\"expectedVersion\":1,\"expectedDraftVersion\":0}")
+        MvcResult promoted = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId), "{\"expectedVersion\":1,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}")
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.version").value(2)).andReturn();
         String plannedId = tools.jackson.databind.json.JsonMapper.builder().build().readTree(promoted.getResponse().getContentAsString()).get("planned").get(0).get("id").asString();
 
@@ -657,7 +657,7 @@ class TripApiIntegrationTest {
         insertSfoAirfareSelection(draftId);
 
         owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}")
                 .andExpect(status().isCreated());
 
         owner.unsafe(put("/api/trips/{tripId}", tripId),
@@ -681,7 +681,7 @@ class TripApiIntegrationTest {
         insertSfoRentalSelection(draftId);
 
         owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}")
                 .andExpect(status().isCreated());
 
         // Stale expectedVersion returns 409 VERSION_CONFLICT
@@ -819,7 +819,7 @@ class TripApiIntegrationTest {
 
         // Plan draft 1 -> trip version becomes 1, planned 1 exists
         owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draft1Id),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}")
                 .andExpect(status().isCreated());
 
         // Create draft 2 -> trip version becomes 2
@@ -833,7 +833,7 @@ class TripApiIntegrationTest {
 
         // Plan draft 2 -> trip version becomes 3, planned 2 exists
         MvcResult plan2Result = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draft2Id),
-                "{\"expectedVersion\":2,\"expectedDraftVersion\":0}")
+                "{\"expectedVersion\":2,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}")
                 .andExpect(status().isCreated()).andReturn();
 
         var plannedList = tools.jackson.databind.json.JsonMapper.builder().build()
@@ -878,7 +878,7 @@ class TripApiIntegrationTest {
         insertSfoRentalSelection(draftId);
 
         MvcResult plannedResult = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = tools.jackson.databind.json.JsonMapper.builder().build()
                 .readTree(plannedResult.getResponse().getContentAsString()).get("planned").get(0).get("id").asString();
@@ -909,7 +909,7 @@ class TripApiIntegrationTest {
                 .readTree(tripA1.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
         insertSfoAirfareSelection(draftA1Id);
         MvcResult planA1Result = userA.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripA1Id, draftA1Id),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}").andExpect(status().isCreated()).andReturn();
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}").andExpect(status().isCreated()).andReturn();
         String plannedA1Id = tools.jackson.databind.json.JsonMapper.builder().build()
                 .readTree(planA1Result.getResponse().getContentAsString()).get("planned").get(0).get("id").asString();
 
@@ -922,7 +922,7 @@ class TripApiIntegrationTest {
                 .readTree(tripA2.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
         insertSfoAirfareSelection(draftA2Id);
         MvcResult planA2Result = userA.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripA2Id, draftA2Id),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}").andExpect(status().isCreated()).andReturn();
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}").andExpect(status().isCreated()).andReturn();
         String plannedA2Id = tools.jackson.databind.json.JsonMapper.builder().build()
                 .readTree(planA2Result.getResponse().getContentAsString()).get("planned").get(0).get("id").asString();
 
@@ -989,7 +989,7 @@ class TripApiIntegrationTest {
 
         insertSfoAirfareSelection(draftId);
         MvcResult planResult = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}").andExpect(status().isCreated()).andReturn();
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}").andExpect(status().isCreated()).andReturn();
         String plannedId = tools.jackson.databind.json.JsonMapper.builder().build()
                 .readTree(planResult.getResponse().getContentAsString()).get("planned").get(0).get("id").asString();
 
@@ -1149,7 +1149,7 @@ class TripApiIntegrationTest {
         MvcResult dupRes = owner.unsafe(post("/api/trips/" + tripId + "/drafts/" + draft1Id + "/duplicate"), "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
 
-        owner.unsafe(post("/api/trips/" + tripId + "/drafts/" + draft1Id + "/plan"), "{\"expectedVersion\":1,\"expectedDraftVersion\":0}")
+        owner.unsafe(post("/api/trips/" + tripId + "/drafts/" + draft1Id + "/plan"), "{\"expectedVersion\":1,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}")
                 .andExpect(status().isCreated());
 
         testClock.setInstant(ZonedDateTime.of(2027, 3, 10, 0, 0, 0, 0, ClockConfiguration.PDX_ZONE).toInstant());
@@ -1207,7 +1207,7 @@ class TripApiIntegrationTest {
                 """, UUID.fromString(draft1Id));
 
         // Promote draft 1 to planned (Trip now has 1 draft, 1 planned, version 1)
-        owner.unsafe(post("/api/trips/" + tripId + "/drafts/" + draft1Id + "/plan"), "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        owner.unsafe(post("/api/trips/" + tripId + "/drafts/" + draft1Id + "/plan"), "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}")
                 .andExpect(status().isCreated());
 
         // Create second draft (Trip now has 2 drafts, 1 planned, version 2)

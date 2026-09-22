@@ -44,14 +44,14 @@ The backend validates complete planning readiness against real-time catalog avai
 
 ## Acceptance criteria
 
-- [ ] Draft promotion fails with 400 `PLANNING_NOT_READY` when any required field (destination, dates, ages, adult, budget, at least one component) is missing or incomplete, returning all issues together.
-- [ ] Draft promotion fails with 400 `PLANNING_NOT_READY` when any selected flight seats, stay nightly inventory, or rental unit are sold out or unavailable.
-- [ ] Over-budget draft promotion is rejected with 400 `BUDGET_OVERAGE_UNACKNOWLEDGED` unless `budgetOverageAcknowledged: true` is explicitly supplied in the promotion request.
-- [ ] The readiness inspection endpoint (`GET /api/trips/{tripId}/drafts/{draftId}/readiness`) returns accurate blocking issues, overage status, and promotion eligibility.
-- [ ] Complete descriptive and schedule facts (carrier, stops, duration, property category, distance, car class) are persisted into Planned snapshot records in Flyway V16 tables.
-- [ ] Modifying catalog display data or deleting a source Draft does not alter previously saved Planned snapshots.
-- [ ] Concurrency and transactional tests verify that racing promotion requests succeed once and do not produce partial or corrupted snapshots.
-- [ ] Multi-user isolation prevents unauthorized inspection, promotion, or deletion across different accounts.
+- [x] Draft promotion fails with 400 `PLANNING_NOT_READY` when any required field (destination, dates, ages, adult, budget, at least one component) is missing or incomplete, returning all issues together.
+- [x] Draft promotion fails with 400 `PLANNING_NOT_READY` when any selected flight seats, stay nightly inventory, or rental unit are sold out or unavailable.
+- [x] Over-budget draft promotion is rejected with 400 `BUDGET_OVERAGE_UNACKNOWLEDGED` unless `budgetOverageAcknowledged: true` is explicitly supplied in the promotion request.
+- [x] The readiness inspection endpoint (`GET /api/trips/{tripId}/drafts/{draftId}/readiness`) returns accurate blocking issues, overage status, and promotion eligibility.
+- [x] Complete descriptive and schedule facts (carrier, stops, duration, property category, distance, car class) are persisted into Planned snapshot records in Flyway V16 tables.
+- [x] Modifying catalog display data or deleting a source Draft does not alter previously saved Planned snapshots.
+- [x] Concurrency and transactional tests verify that racing promotion requests succeed once and do not produce partial or corrupted snapshots.
+- [x] Multi-user isolation prevents unauthorized inspection, promotion, or deletion across different accounts.
 
 ## Context
 

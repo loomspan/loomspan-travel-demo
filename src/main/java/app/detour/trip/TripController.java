@@ -64,6 +64,12 @@ public class TripController {
         return ResponseEntity.status(201).body(trips.duplicateDraft(requirePrincipal(principal).userId(), tripId, draftId, TripRequests.draftMutation(request)));
     }
 
+    @GetMapping("/{tripId}/drafts/{draftId}/readiness")
+    DraftReadinessResponse inspectDraftReadiness(@AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId, @PathVariable String draftId) {
+        return trips.inspectDraftReadiness(requirePrincipal(principal).userId(), tripId, draftId);
+    }
+
     @PostMapping("/{tripId}/drafts/{draftId}/plan")
     ResponseEntity<TripResponse> promoteDraft(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId,
             @PathVariable String draftId, @RequestBody JsonNode request) {
