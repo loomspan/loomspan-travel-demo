@@ -294,6 +294,16 @@ export type RentalSearchParams = {
   sort?: RentalSort;
 };
 
+export type ItineraryTallyResponse = {
+  airfareTotalCents: number;
+  stayTotalCents: number;
+  rentalTotalCents: number;
+  grandTotalCents: number;
+  remainingBudgetCents: number | null;
+  budgetOverageCents: number | null;
+  isOverBudget: boolean;
+};
+
 export type DraftSelectionResponse = {
   airfare: AirfareComponentResponse | null;
   stay: StayComponentResponse | null;
@@ -304,11 +314,13 @@ export type DraftResponse = {
   id: string;
   version: number;
   selections: DraftSelectionResponse;
+  tally?: ItineraryTallyResponse;
 };
 
 export type PlannedResponse = {
   id: string;
   selections: DraftSelectionResponse;
+  tally?: ItineraryTallyResponse;
 };
 
 export type AlternativeResponse = {
@@ -316,6 +328,7 @@ export type AlternativeResponse = {
   lifecycle: 'DRAFT' | 'PLANNED' | string;
   version: number | null;
   selections: DraftSelectionResponse;
+  tally?: ItineraryTallyResponse;
 };
 
 export type ComponentRemovalResponse = {
@@ -356,6 +369,7 @@ export type TripResponse = {
   planned: PlannedResponse[];
   alternatives: AlternativeResponse[];
   revisionSummary: RevisionSummaryResponse | null;
+  tally?: ItineraryTallyResponse;
 };
 
 export type CreateTripRequest = {

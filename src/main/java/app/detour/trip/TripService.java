@@ -45,6 +45,7 @@ public class TripService {
     private final StaySearchRepository staySearchRepository;
     private final RentalSearchService rentalSearchService;
     private final RentalSearchRepository rentalSearchRepository;
+    private final ItineraryTallyEngine tallyEngine;
     private final Clock clock;
 
     TripService(
@@ -55,6 +56,7 @@ public class TripService {
             StaySearchRepository staySearchRepository,
             RentalSearchService rentalSearchService,
             RentalSearchRepository rentalSearchRepository,
+            ItineraryTallyEngine tallyEngine,
             Clock clock) {
         this.trips = trips;
         this.airfareSearchService = airfareSearchService;
@@ -63,6 +65,7 @@ public class TripService {
         this.staySearchRepository = staySearchRepository;
         this.rentalSearchService = rentalSearchService;
         this.rentalSearchRepository = rentalSearchRepository;
+        this.tallyEngine = tallyEngine;
         this.clock = clock;
     }
 
@@ -522,14 +525,38 @@ public class TripService {
     }
 
     private TripResponse response(Trip trip, RevisionSummaryResponse revisionSummary) {
-        List<DraftResponse> drafts = trip.drafts().stream().map(draft -> new DraftResponse(draft.publicId(), draft.version(), selectionResponse(draft.selections()))).toList();
-        List<PlannedResponse> planned = trip.planned().stream().map(item -> new PlannedResponse(item.publicId(), selectionResponse(item.selections()))).toList();
+        List<DraftResponse> drafts = trip.drafts().stream().map(draft -> {
+            ItineraryTallyResponse tally = tallyEngine.calculateTally(draft.selections(), trip.travelerCount(), trip.budgetCents());
+            return new DraftResponse(draft.publicId(), draft.version(), selectionResponse(draft.selections()), tally);
+        }).toList();
+
+        List<PlannedResponse> planned = trip.planned().stream().map(item -> {
+            ItineraryTallyResponse tally = tallyEngine.calculateTally(item.selections(), trip.travelerCount(), trip.budgetCents());
+            return new PlannedResponse(item.publicId(), selectionResponse(item.selections()), tally);
+        }).toList();
+
         List<AlternativeResponse> alternatives = new ArrayList<>();
-        trip.drafts().forEach(draft -> alternatives.add(new AlternativeResponse(draft.publicId(), draft.lifecycle(), draft.version(), selectionResponse(draft.selections()))));
-        trip.planned().forEach(item -> alternatives.add(new AlternativeResponse(item.publicId(), item.lifecycle(), null, selectionResponse(item.selections()))));
+        trip.drafts().forEach(draft -> {
+            ItineraryTallyResponse tally = tallyEngine.calculateTally(draft.selections(), trip.travelerCount(), trip.budgetCents());
+            alternatives.add(new AlternativeResponse(draft.publicId(), draft.lifecycle(), draft.version(), selectionResponse(draft.selections()), tally));
+        });
+        trip.planned().forEach(item -> {
+            ItineraryTallyResponse tally = tallyEngine.calculateTally(item.selections(), trip.travelerCount(), trip.budgetCents());
+            alternatives.add(new AlternativeResponse(item.publicId(), item.lifecycle(), null, selectionResponse(item.selections()), tally));
+        });
+
+        ItineraryTallyResponse tripTally;
+        if (!trip.drafts().isEmpty()) {
+            tripTally = tallyEngine.calculateTally(trip.drafts().get(0).selections(), trip.travelerCount(), trip.budgetCents());
+        } else if (!trip.planned().isEmpty()) {
+            tripTally = tallyEngine.calculateTally(trip.planned().get(0).selections(), trip.travelerCount(), trip.budgetCents());
+        } else {
+            tripTally = tallyEngine.calculateTally(null, trip.travelerCount(), trip.budgetCents());
+        }
+
         return new TripResponse(trip.publicId(), trip.destination().key(), trip.destination().name(), "PDX", trip.startDate(),
                 trip.endDate(), trip.travelerCount(), trip.travelerAges(), trip.budgetCents(), trip.label(), trip.version(),
-                drafts, planned, List.copyOf(alternatives), revisionSummary);
+                drafts, planned, List.copyOf(alternatives), revisionSummary, tripTally);
     }
 
     private static DraftSelectionResponse selectionResponse(DraftSelections selections) {
@@ -643,33 +670,11 @@ public class TripService {
         AccommodationType type = AccommodationType.from(typeStr);
         StaySort sort = StaySort.from(sortStr);
 
-        Long availableBudgetCents = null;
-        if (trip.budgetCents() != null) {
-            long selectedAirfareTotal = 0;
-            long selectedCarTotal = 0;
-            if (draft != null && draft.selections() != null) {
-                if (draft.selections().airfare() != null) {
-                    AirfareSelection a = draft.selections().airfare();
-                    long perPerson = a.outboundBaseFareCents() + a.outboundTaxCents() + a.outboundFeeCents()
-                            + a.returnBaseFareCents() + a.returnTaxCents() + a.returnFeeCents();
-                    selectedAirfareTotal = perPerson * trip.travelerCount();
-                }
-                if (draft.selections().rental() != null) {
-                    RentalSelection r = draft.selections().rental();
-                    long dailyRate = r.dailyBasePriceCents() + r.dailyTaxCents() + r.dailyFeeCents();
-                    if (dailyRate == 0) {
-                        dailyRate = staySearchRepository.findRentalDailyTotal(r.rentalUnitId()).orElse(0L);
-                    }
-                    long cycles = 1;
-                    if (r.pickupAt() != null && r.returnAt() != null) {
-                        long seconds = java.time.Duration.between(r.pickupAt(), r.returnAt()).getSeconds();
-                        cycles = Math.max(1, (seconds + 86399) / 86400);
-                    }
-                    selectedCarTotal = cycles * dailyRate;
-                }
-            }
-            availableBudgetCents = trip.budgetCents() - selectedAirfareTotal - selectedCarTotal;
-        }
+        Long availableBudgetCents = tallyEngine.calculateAvailableStaySearchBudget(
+                trip.budgetCents(),
+                draft != null ? draft.selections() : null,
+                trip.travelerCount()
+        );
 
         return staySearchService.search(
                 trip.destination().id(),
@@ -785,27 +790,11 @@ public class TripService {
 
         RentalSort sort = RentalSort.from(sortStr);
 
-        Long availableBudgetCents = null;
-        if (trip.budgetCents() != null) {
-            long selectedAirfareTotal = 0;
-            long selectedStayTotal = 0;
-            if (draft != null && draft.selections() != null) {
-                if (draft.selections().airfare() != null) {
-                    AirfareSelection a = draft.selections().airfare();
-                    long perPerson = a.outboundBaseFareCents() + a.outboundTaxCents() + a.outboundFeeCents()
-                            + a.returnBaseFareCents() + a.returnTaxCents() + a.returnFeeCents();
-                    selectedAirfareTotal = perPerson * trip.travelerCount();
-                }
-                if (draft.selections().stay() != null) {
-                    StaySelection s = draft.selections().stay();
-                    long perRoomTotal = s.nights().stream()
-                            .mapToLong(n -> n.basePriceCents() + n.taxCents() + n.feeCents())
-                            .sum();
-                    selectedStayTotal = perRoomTotal * s.unitCount();
-                }
-            }
-            availableBudgetCents = trip.budgetCents() - selectedAirfareTotal - selectedStayTotal;
-        }
+        Long availableBudgetCents = tallyEngine.calculateAvailableRentalSearchBudget(
+                trip.budgetCents(),
+                draft != null ? draft.selections() : null,
+                trip.travelerCount()
+        );
 
         return rentalSearchService.search(
                 trip.destination().id(),

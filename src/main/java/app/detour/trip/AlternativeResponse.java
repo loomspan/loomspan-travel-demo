@@ -6,9 +6,17 @@ import java.util.List;
 import java.util.UUID;
 
 /** Deliberately component-level facts only: no canonical total or availability decision. */
-public record AlternativeResponse(UUID id, String lifecycle, Long version, DraftSelectionResponse selections) { }
+public record AlternativeResponse(UUID id, String lifecycle, Long version, DraftSelectionResponse selections, ItineraryTallyResponse tally) {
+    public AlternativeResponse(UUID id, String lifecycle, Long version, DraftSelectionResponse selections) {
+        this(id, lifecycle, version, selections, null);
+    }
+}
 record DraftSelectionResponse(AirfareComponentResponse airfare, StayComponentResponse stay, RentalComponentResponse rental) { }
-record PlannedResponse(UUID id, DraftSelectionResponse selections) { }
+record PlannedResponse(UUID id, DraftSelectionResponse selections, ItineraryTallyResponse tally) {
+    public PlannedResponse(UUID id, DraftSelectionResponse selections) {
+        this(id, selections, null);
+    }
+}
 record AirfareComponentResponse(long outboundFlightInstanceId, long returnFlightInstanceId, String outboundDescription,
         String returnDescription, long outboundBaseFareCents, long outboundTaxCents, long outboundFeeCents,
         long returnBaseFareCents, long returnTaxCents, long returnFeeCents) { }

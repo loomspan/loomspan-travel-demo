@@ -32,13 +32,13 @@ The server deterministically calculates canonical airfare, stay, rental car, and
 
 ## Acceptance criteria
 
-- [ ] Airfare, stay, rental car, and grand totals are calculated on the server and returned in integer cents for all Draft, Planned, and Alternative responses.
-- [ ] Trips with a defined budget return accurate `remainingBudgetCents`, `budgetOverageCents`, and `isOverBudget` indicators matching the server-calculated totals.
-- [ ] Trips without a defined budget return `null` for remaining budget and overage, and omit budget-fit ranking inputs in component searches.
-- [ ] Overall budgets of `0` cents are accepted, while negative values and values exceeding `100_000_000` cents are rejected with 400 `VALIDATION_FAILED`.
-- [ ] Available budget in stay and rental car searches accurately deducts other selected components while excluding the component being searched or replaced.
-- [ ] Unit and HTTP integration tests prove consistent tally calculations across all combinations of components (airfare only, stay only, rental only, airfare+stay, stay+car, airfare+car, and all three).
-- [ ] Multi-user isolation tests verify that pricing calculations and tally responses are strictly scoped to the authenticated trip owner.
+- [x] Airfare, stay, rental car, and grand totals are calculated on the server and returned in integer cents for all Draft, Planned, and Alternative responses.
+- [x] Trips with a defined budget return accurate `remainingBudgetCents`, `budgetOverageCents`, and `isOverBudget` indicators matching the server-calculated totals.
+- [x] Trips without a defined budget return `null` for remaining budget and overage, and omit budget-fit ranking inputs in component searches.
+- [x] Overall budgets of `0` cents are accepted, while negative values and values exceeding `100_000_000` cents are rejected with 400 `VALIDATION_FAILED`.
+- [x] Available budget in stay and rental car searches accurately deducts other selected components while excluding the component being searched or replaced.
+- [x] Unit and HTTP integration tests prove consistent tally calculations across all combinations of components (airfare only, stay only, rental only, airfare+stay, stay+car, airfare+car, and all three).
+- [x] Multi-user isolation tests verify that pricing calculations and tally responses are strictly scoped to the authenticated trip owner.
 
 ## Context
 
