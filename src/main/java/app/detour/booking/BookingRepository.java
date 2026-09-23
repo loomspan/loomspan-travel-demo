@@ -21,15 +21,29 @@ public interface BookingRepository {
 
     boolean decrementFlightSeats(long flightInstanceId, int seatsToDecrement);
 
+    boolean incrementFlightSeats(long flightInstanceId, int seatsToIncrement);
+
     boolean decrementStayInventory(long accommodationUnitId, LocalDate date, int unitsToDecrement);
+
+    boolean incrementStayInventory(long accommodationUnitId, LocalDate date, int unitsToIncrement);
 
     long insertRentalOccupancy(long rentalUnitId, OffsetDateTime pickupAt, OffsetDateTime returnAt);
 
+    void releaseRentalOccupancy(long rentalOccupancyId);
+
     long insertBooking(BookingRecord booking);
+
+    void updateBookingStatus(long bookingId, String status, OffsetDateTime canceledAt);
 
     void copySnapshotsFromPlanned(long bookingId, long plannedItineraryId);
 
     Optional<BookingRecord> findActiveBookingRecordByTripId(long tripId);
+
+    Optional<BookingRecord> findActiveBookingRecordByTripIdForUpdate(long tripId);
+
+    Optional<BookingRecord> findBookingRecordByTripIdAndPublicIdForUpdate(long tripId, java.util.UUID bookingPublicId);
+
+    Optional<BookingRecord> findPrimaryBookingRecordByTripId(long tripId);
 
     List<BookingRecord> findBookingRecordsByTripId(long tripId);
 
@@ -42,4 +56,6 @@ public interface BookingRepository {
     int activeBookingCount(long tripId);
 
     boolean hasBookingHistory(long tripId);
+
+    boolean isPlannedItineraryActivelyBooked(long plannedItineraryId);
 }

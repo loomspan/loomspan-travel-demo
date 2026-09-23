@@ -54,7 +54,7 @@ class JdbcTripRepository implements TripRepository {
     @Override public Optional<Trip> findByPublicIdAndOwnerUserId(UUID publicId, long ownerUserId) {
         return jdbc.query("""
                 SELECT trip.id, trip.public_id, trip.owner_user_id, destination.id AS destination_id, destination.catalog_key, destination.name AS destination_name,
-                       trip.start_date, trip.end_date, trip.traveler_count, trip.budget_cents, trip.display_label, trip.version
+                       trip.start_date, trip.end_date, trip.traveler_count, trip.budget_cents, trip.display_label, trip.status, trip.version
                 FROM detour_trip trip JOIN catalog_destination destination ON destination.id = trip.catalog_destination_id
                 WHERE trip.public_id = ? AND trip.owner_user_id = ?""", (r, n) -> loadTrip(r.getLong("id"), r, ownerUserId), publicId, ownerUserId).stream().findFirst();
     }
@@ -62,7 +62,7 @@ class JdbcTripRepository implements TripRepository {
     @Override public List<Trip> findAllByOwnerUserId(long ownerUserId) {
         return jdbc.query("""
                 SELECT trip.id, trip.public_id, trip.owner_user_id, destination.id AS destination_id, destination.catalog_key, destination.name AS destination_name,
-                       trip.start_date, trip.end_date, trip.traveler_count, trip.budget_cents, trip.display_label, trip.version
+                       trip.start_date, trip.end_date, trip.traveler_count, trip.budget_cents, trip.display_label, trip.status, trip.version
                 FROM detour_trip trip JOIN catalog_destination destination ON destination.id = trip.catalog_destination_id
                 WHERE trip.owner_user_id = ?
                 ORDER BY trip.start_date ASC, trip.id ASC""", (r, n) -> loadTrip(r.getLong("id"), r, ownerUserId), ownerUserId);
@@ -80,10 +80,11 @@ class JdbcTripRepository implements TripRepository {
             long plannedId = r.getLong("id"); return new PlannedItinerary(plannedId, r.getObject("public_id", UUID.class), loadPlannedSelections(plannedId));
         }, tripId);
         Long budget = (Long) row.getObject("budget_cents");
+        String status = row.getString("status");
         return new Trip(tripId, row.getObject("public_id", UUID.class), ownerUserId,
                 new Destination(row.getLong("destination_id"), row.getString("catalog_key"), row.getString("destination_name")),
                 startDate, endDate, row.getInt("traveler_count"), knownAges,
-                budget, row.getString("display_label"), row.getLong("version"), List.copyOf(drafts), List.copyOf(planned));
+                budget, row.getString("display_label"), status, row.getLong("version"), List.copyOf(drafts), List.copyOf(planned));
     }
 
     private DraftSelections loadDraftSelections(long draftId, LocalDate startDate, LocalDate endDate) {
@@ -252,6 +253,11 @@ class JdbcTripRepository implements TripRepository {
     @Override public void deleteDraft(long tripId, long draftId) { jdbc.update("DELETE FROM detour_trip_draft WHERE trip_id = ? AND id = ?", tripId, draftId); }
     @Override public void deletePlanned(long tripId, long plannedId) { jdbc.update("DELETE FROM detour_planned_itinerary WHERE trip_id = ? AND id = ?", tripId, plannedId); }
     @Override public void deleteTrip(long tripId, long ownerUserId) { jdbc.update("DELETE FROM detour_trip WHERE id = ? AND owner_user_id = ?", tripId, ownerUserId); }
+    @Override
+    public boolean cancelTrip(long tripId, long ownerUserId, long expectedVersion) {
+        return jdbc.update("UPDATE detour_trip SET status = 'CANCELED', version = version + 1 WHERE id = ? AND owner_user_id = ? AND version = ?",
+                tripId, ownerUserId, expectedVersion) == 1;
+    }
     @Override
     public boolean hasBookingHistory(long tripId) {
         Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM detour_booking WHERE trip_id = ?", Integer.class, tripId);

@@ -276,6 +276,32 @@ public class TripController {
         return bookingService.getBookingHistory(requirePrincipal(principal).userId(), tripId);
     }
 
+    @PostMapping("/{tripId}/bookings/{bookingId}/cancel")
+    TripResponse cancelBooking(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId,
+            @PathVariable String bookingId,
+            @RequestBody JsonNode request) {
+        return bookingService.cancelBooking(
+                requirePrincipal(principal).userId(),
+                tripId,
+                bookingId,
+                TripRequests.cancel(request)
+        );
+    }
+
+    @PostMapping("/{tripId}/cancel")
+    TripResponse cancelTrip(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId,
+            @RequestBody JsonNode request) {
+        return bookingService.cancelTrip(
+                requirePrincipal(principal).userId(),
+                tripId,
+                TripRequests.cancel(request)
+        );
+    }
+
     private static DetourUserPrincipal requirePrincipal(DetourUserPrincipal principal) {
         if (principal == null) throw new ApiException(401, "UNAUTHENTICATED", "Authentication is required.");
         return principal;

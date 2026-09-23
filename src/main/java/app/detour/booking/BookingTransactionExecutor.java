@@ -14,6 +14,7 @@ import app.detour.trip.StaySelection;
 import app.detour.trip.Trip;
 import app.detour.trip.TripRepository;
 import app.detour.trip.TripRequests;
+import app.detour.trip.TripResponse;
 import app.detour.trip.TripService;
 import java.time.Clock;
 import java.time.Instant;
@@ -23,6 +24,7 @@ import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
@@ -34,15 +36,18 @@ public class BookingTransactionExecutor {
     private final TripRepository tripRepository;
     private final ItineraryTallyEngine tallyEngine;
     private final Clock clock;
+    private final TripService tripService;
 
     public BookingTransactionExecutor(BookingRepository bookingRepository,
                                     TripRepository tripRepository,
                                     ItineraryTallyEngine tallyEngine,
-                                    Clock clock) {
+                                    Clock clock,
+                                    TripService tripService) {
         this.bookingRepository = bookingRepository;
         this.tripRepository = tripRepository;
         this.tallyEngine = tallyEngine;
         this.clock = clock;
+        this.tripService = tripService;
     }
 
     @Transactional
@@ -53,12 +58,17 @@ public class BookingTransactionExecutor {
             throw new ApiException(400, "TRIP_EXPIRED", "Cannot book an expired trip.");
         }
 
-        // 2. Expected version check
+        // 2. Trip canceled check
+        if ("CANCELED".equals(trip.status())) {
+            throw new ApiException(409, "TRIP_CANCELED", "This trip has been canceled and cannot be booked.");
+        }
+
+        // 3. Expected version check
         if (trip.version() != request.expectedVersion()) {
             throw new ApiException(409, "VERSION_CONFLICT", "The trip was modified by another operation. Please refresh and try again.");
         }
 
-        // 3. Active booking check
+        // 4. Active booking check
         if (bookingRepository.hasActiveBooking(trip.id())) {
             throw new ApiException(409, "ALREADY_BOOKED", "This trip already has an active booking.");
         }
@@ -190,6 +200,136 @@ public class BookingTransactionExecutor {
                 selectionResponse,
                 tally
         );
+    }
+
+    @Transactional
+    public TripResponse executeCancelBookingTransaction(long ownerUserId, Trip trip, UUID bookingPublicId, TripRequests.Cancel request) {
+        if (request == null) {
+            throw new ApiException(400, "VALIDATION_FAILED", "A request body is required.", Map.of("request", "A request body is required."));
+        }
+
+        // 1. Expiration check: booking cannot be canceled if the trip is Expired (isExpired(startDate) in America/Los_Angeles). Reject with HTTP 400.
+        Instant departureMidnight = trip.startDate().atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant();
+        if (!clock.instant().isBefore(departureMidnight)) {
+            throw new ApiException(400, "TRIP_EXPIRED", "Cannot cancel a booking on an expired trip.");
+        }
+
+        // 2. Trip canceled check
+        if ("CANCELED".equals(trip.status())) {
+            throw new ApiException(409, "TRIP_CANCELED", "This trip has been canceled.");
+        }
+
+        // 3. Expected version check
+        if (trip.version() != request.expectedVersion()) {
+            throw new ApiException(409, "VERSION_CONFLICT", "The trip was modified by another operation. Please refresh and try again.");
+        }
+
+        // 4. Lock and retrieve the booking row for the trip
+        BookingRecord record = bookingRepository.findBookingRecordByTripIdAndPublicIdForUpdate(trip.id(), bookingPublicId)
+                .orElseThrow(this::notFound);
+
+        // 5. Verify status = 'ACTIVE'
+        if (!"ACTIVE".equals(record.status())) {
+            throw new ApiException(409, "BOOKING_NOT_ACTIVE", "Only active bookings can be canceled.");
+        }
+
+        // 6. Restore reserved inventory
+        restoreInventory(record, trip);
+
+        // 7. Update detour_booking: set status = 'CANCELED' and canceled_at = CURRENT_TIMESTAMP
+        OffsetDateTime now = OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+        bookingRepository.updateBookingStatus(record.id(), "CANCELED", now);
+
+        // 8. Advance detour_trip.version
+        boolean advanced = tripRepository.advanceVersion(trip.id(), ownerUserId, request.expectedVersion());
+        if (!advanced) {
+            throw new ApiException(409, "VERSION_CONFLICT", "The trip was modified by another operation. Please refresh and try again.");
+        }
+
+        // 9. Return updated TripResponse showing trip ACTIVE and booking CANCELED
+        Trip updatedTrip = tripRepository.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId)
+                .orElseThrow(this::notFound);
+        return tripService.toResponse(updatedTrip);
+    }
+
+    @Transactional
+    public TripResponse executeCancelTripTransaction(long ownerUserId, Trip trip, TripRequests.Cancel request) {
+        if (request == null) {
+            throw new ApiException(400, "VALIDATION_FAILED", "A request body is required.", Map.of("request", "A request body is required."));
+        }
+
+        // 1. Expiration check: Allowed only before the trip becomes Expired (!isExpired(startDate)).
+        Instant departureMidnight = trip.startDate().atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant();
+        if (!clock.instant().isBefore(departureMidnight)) {
+            throw new ApiException(400, "TRIP_EXPIRED", "Cannot cancel an expired trip.");
+        }
+
+        // 2. Check if trip already canceled
+        if ("CANCELED".equals(trip.status())) {
+            throw new ApiException(409, "TRIP_ALREADY_CANCELED", "This trip has already been canceled.");
+        }
+
+        // 3. Expected version check
+        if (trip.version() != request.expectedVersion()) {
+            throw new ApiException(409, "VERSION_CONFLICT", "The trip was modified by another operation. Please refresh and try again.");
+        }
+
+        // 4. Allowed when the trip has booking history (one or more active or canceled bookings in detour_booking)
+        if (!bookingRepository.hasBookingHistory(trip.id())) {
+            throw new ApiException(400, "NO_BOOKING_HISTORY", "Trips without booking history cannot be canceled. Use Delete Trip instead.");
+        }
+
+        // 5. If the trip has an ACTIVE booking:
+        Optional<BookingRecord> activeBooking = bookingRepository.findActiveBookingRecordByTripIdForUpdate(trip.id());
+        if (activeBooking.isPresent()) {
+            BookingRecord record = activeBooking.get();
+            restoreInventory(record, trip);
+            OffsetDateTime now = OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+            bookingRepository.updateBookingStatus(record.id(), "CANCELED", now);
+        }
+
+        // 6. Set detour_trip.status = 'CANCELED' and advance version
+        boolean canceled = tripRepository.cancelTrip(trip.id(), ownerUserId, request.expectedVersion());
+        if (!canceled) {
+            throw new ApiException(409, "VERSION_CONFLICT", "The trip was modified by another operation. Please refresh and try again.");
+        }
+
+        // 7. Return updated TripResponse showing trip status CANCELED
+        Trip updatedTrip = tripRepository.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId)
+                .orElseThrow(this::notFound);
+        return tripService.toResponse(updatedTrip);
+    }
+
+    private void restoreInventory(BookingRecord record, Trip trip) {
+        DraftSelections selections = bookingRepository.loadBookingSelections(record.id());
+        if (selections == null) {
+            return;
+        }
+
+        // Flights: increment available_seats = available_seats + traveler_count for outbound and return flight_instance rows
+        if (selections.airfare() != null) {
+            AirfareSelection airfare = selections.airfare();
+            List<Long> flightInstanceIds = List.of(airfare.outboundFlightInstanceId(), airfare.returnFlightInstanceId());
+            bookingRepository.lockFlightInstances(flightInstanceIds);
+            bookingRepository.incrementFlightSeats(airfare.outboundFlightInstanceId(), trip.travelerCount());
+            bookingRepository.incrementFlightSeats(airfare.returnFlightInstanceId(), trip.travelerCount());
+        }
+
+        // Stay: increment available_inventory = available_inventory + unit_count for every reserved night in accommodation_nightly_inventory
+        if (selections.stay() != null) {
+            StaySelection stay = selections.stay();
+            LocalDate minDate = stay.nights().stream().map(StayNight::date).min(LocalDate::compareTo).orElse(trip.startDate());
+            LocalDate maxDate = stay.nights().stream().map(StayNight::date).max(LocalDate::compareTo).map(d -> d.plusDays(1)).orElse(trip.endDate());
+            bookingRepository.lockStayNightlyInventory(stay.accommodationUnitId(), minDate, maxDate);
+            for (StayNight night : stay.nights()) {
+                bookingRepository.incrementStayInventory(stay.accommodationUnitId(), night.date(), stay.unitCount());
+            }
+        }
+
+        // Rental car: update the corresponding rental_unit_occupancy row from occupancy_status = 'ACTIVE' to occupancy_status = 'RELEASED'
+        if (record.rentalOccupancyId() != null) {
+            bookingRepository.releaseRentalOccupancy(record.rentalOccupancyId());
+        }
     }
 
     private ApiException notFound() {

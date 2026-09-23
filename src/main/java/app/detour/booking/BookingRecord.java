@@ -7,7 +7,7 @@ public record BookingRecord(
         long id,
         UUID publicId,
         long tripId,
-        long plannedItineraryId,
+        Long plannedItineraryId,
         String bookingReference,
         String status,
         long grandTotalCents,

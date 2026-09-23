@@ -43,6 +43,7 @@ public final class TripRequests {
     public record AlternativeDelete(long expectedVersion, Long expectedDraftVersion, Boolean confirmed) { }
     public record TripDelete(long expectedVersion, int expectedDraftCount, int expectedPlannedCount, Boolean confirmed) { }
     public record BookingCreate(UUID plannedItineraryId, long expectedVersion, String idempotencyKey) { }
+    public record Cancel(long expectedVersion) { }
 
     static Create from(JsonNode body) {
         requireObject(body, Set.of("destinationKey", "startDate", "endDate", "travelerCount", "travelerAges", "budgetCents"));
@@ -143,6 +144,11 @@ public final class TripRequests {
             throw invalid("idempotencyKey", "An idempotency key is required.");
         }
         return new BookingCreate(plannedItineraryId, expectedVersion, idempotencyKey);
+    }
+
+    public static Cancel cancel(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion"));
+        return new Cancel(version(body.get("expectedVersion"), "expectedVersion"));
     }
 
     private static void requireObject(JsonNode body, Set<String> allowed) {

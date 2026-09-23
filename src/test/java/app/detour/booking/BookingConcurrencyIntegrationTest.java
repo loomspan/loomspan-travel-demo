@@ -293,6 +293,151 @@ class BookingConcurrencyIntegrationTest {
         assertEquals(initialSeats - 2, finalSeats, "Seats should be decremented by travelerCount (2), not double-decremented");
     }
 
+    @Test
+    void concurrentDuplicateCancellationRequestsSucceedsExactlyOnce() throws Exception {
+        Client user = register("concurr-dup-cancel@example.test");
+
+        MvcResult tripRes = user.unsafe(post("/api/trips"),
+                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                .andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(tripRes, "id");
+        String draftId = getDraftId(tripRes, 0);
+        insertSfoAirfareSelection(draftId);
+        insertSfoStaySelection(draftId);
+        insertSfoRentalSelection(draftId);
+
+        MvcResult planRes = user.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated()).andReturn();
+        String plannedId = getPlannedId(planRes, 0);
+
+        MvcResult bookRes = user.unsafe(post("/api/trips/{tripId}/bookings", tripId),
+                "{\"plannedItineraryId\":\"" + plannedId + "\",\"expectedVersion\":1,\"idempotencyKey\":\"concurr-dup-cancel-book\"}")
+                .andExpect(status().isCreated()).andReturn();
+        String bookingId = jsonField(bookRes, "id");
+
+        int initialSeats = jdbc.queryForObject(
+                "SELECT seat_capacity FROM flight_instance WHERE service_date = DATE '2027-03-10' AND flight_schedule_id = (SELECT id FROM flight_schedule WHERE catalog_key = 'airfare-out-sfo-d1')",
+                Integer.class);
+        int initialStay = jdbc.queryForObject(
+                "SELECT inventory_capacity FROM accommodation_nightly_inventory WHERE accommodation_unit_id = (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit') AND night_date = DATE '2027-03-10'",
+                Integer.class);
+
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<Integer> f1 = executor.submit(() -> {
+                barrier.await();
+                return user.unsafe(post("/api/trips/{tripId}/bookings/{bookingId}/cancel", tripId, bookingId),
+                        "{\"expectedVersion\":2}")
+                        .andReturn().getResponse().getStatus();
+            });
+            Future<Integer> f2 = executor.submit(() -> {
+                barrier.await();
+                return user.unsafe(post("/api/trips/{tripId}/bookings/{bookingId}/cancel", tripId, bookingId),
+                        "{\"expectedVersion\":2}")
+                        .andReturn().getResponse().getStatus();
+            });
+
+            int s1 = f1.get();
+            int s2 = f2.get();
+
+            assertEquals(1, List.of(s1, s2).stream().filter(s -> s == 200).count(), "Exactly one cancel request should succeed (200)");
+            assertEquals(1, List.of(s1, s2).stream().filter(s -> s == 409).count(), "Exactly one cancel request should conflict (409)");
+        }
+
+        // Seats restored to initial capacity, NOT double-restored
+        int finalSeats = jdbc.queryForObject(
+                "SELECT available_seats FROM flight_instance WHERE service_date = DATE '2027-03-10' AND flight_schedule_id = (SELECT id FROM flight_schedule WHERE catalog_key = 'airfare-out-sfo-d1')",
+                Integer.class);
+        assertEquals(initialSeats, finalSeats, "Seats should be restored to initial capacity exactly once");
+
+        int finalStay = jdbc.queryForObject(
+                "SELECT available_inventory FROM accommodation_nightly_inventory WHERE accommodation_unit_id = (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit') AND night_date = DATE '2027-03-10'",
+                Integer.class);
+        assertEquals(initialStay, finalStay, "Stay inventory should be restored to initial capacity exactly once");
+
+        int activeOccupancies = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM rental_unit_occupancy WHERE rental_unit_id = (SELECT id FROM rental_unit WHERE catalog_key = 'rental-unit-sfo-economy-01') AND occupancy_status = 'ACTIVE'",
+                Integer.class);
+        assertEquals(0, activeOccupancies, "Rental occupancy should be RELEASED");
+
+        int totalBookings = jdbc.queryForObject("SELECT COUNT(*) FROM detour_booking WHERE trip_id = (SELECT id FROM detour_trip WHERE public_id = ?)", Integer.class, UUID.fromString(tripId));
+        assertEquals(1, totalBookings);
+
+        String bookingStatus = jdbc.queryForObject("SELECT status FROM detour_booking WHERE public_id = ?", String.class, UUID.fromString(bookingId));
+        assertEquals("CANCELED", bookingStatus);
+
+        int tripVersion = jdbc.queryForObject("SELECT version FROM detour_trip WHERE public_id = ?", Integer.class, UUID.fromString(tripId));
+        assertEquals(3, tripVersion, "Trip version should advance from 2 to 3 exactly once");
+    }
+
+    @Test
+    void concurrentCancellationAndRebookingMaintainsExactInventoryConsistency() throws Exception {
+        Client user = register("concurr-cancel-rebook@example.test");
+
+        MvcResult tripRes = user.unsafe(post("/api/trips"),
+                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                .andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(tripRes, "id");
+        String draftId = getDraftId(tripRes, 0);
+        insertSfoAirfareSelection(draftId);
+        insertSfoStaySelection(draftId);
+        insertSfoRentalSelection(draftId);
+
+        MvcResult planRes = user.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated()).andReturn();
+        String plannedId = getPlannedId(planRes, 0);
+
+        MvcResult bookRes = user.unsafe(post("/api/trips/{tripId}/bookings", tripId),
+                "{\"plannedItineraryId\":\"" + plannedId + "\",\"expectedVersion\":1,\"idempotencyKey\":\"concurr-rebook-orig\"}")
+                .andExpect(status().isCreated()).andReturn();
+        String bookingId = jsonField(bookRes, "id");
+
+        int initialSeats = jdbc.queryForObject(
+                "SELECT seat_capacity FROM flight_instance WHERE service_date = DATE '2027-03-10' AND flight_schedule_id = (SELECT id FROM flight_schedule WHERE catalog_key = 'airfare-out-sfo-d1')",
+                Integer.class);
+
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            // Thread 1: cancel active booking
+            Future<Integer> fCancel = executor.submit(() -> {
+                barrier.await();
+                return user.unsafe(post("/api/trips/{tripId}/bookings/{bookingId}/cancel", tripId, bookingId),
+                        "{\"expectedVersion\":2}")
+                        .andReturn().getResponse().getStatus();
+            });
+            // Thread 2: attempt to book concurrently with expectedVersion 2
+            Future<Integer> fRebook = executor.submit(() -> {
+                barrier.await();
+                return user.unsafe(post("/api/trips/{tripId}/bookings", tripId),
+                        "{\"plannedItineraryId\":\"" + plannedId + "\",\"expectedVersion\":2,\"idempotencyKey\":\"concurr-racing-rebook\"}")
+                        .andReturn().getResponse().getStatus();
+            });
+
+            int cancelStatus = fCancel.get();
+            int rebookStatus = fRebook.get();
+
+            assertEquals(200, cancelStatus, "Cancellation should succeed with 200");
+            assertEquals(409, rebookStatus, "Concurrent rebooking with expectedVersion 2 must conflict with 409 (ALREADY_BOOKED or VERSION_CONFLICT)");
+        }
+
+        int finalSeats = jdbc.queryForObject(
+                "SELECT available_seats FROM flight_instance WHERE service_date = DATE '2027-03-10' AND flight_schedule_id = (SELECT id FROM flight_schedule WHERE catalog_key = 'airfare-out-sfo-d1')",
+                Integer.class);
+        assertEquals(initialSeats, finalSeats, "Inventory must be fully restored and never leaked");
+
+        int activeBookings = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM detour_booking WHERE trip_id = (SELECT id FROM detour_trip WHERE public_id = ?) AND status = 'ACTIVE'",
+                Integer.class, UUID.fromString(tripId));
+        assertEquals(0, activeBookings, "Zero active bookings should exist");
+
+        int activeOccupancies = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM rental_unit_occupancy WHERE rental_unit_id = (SELECT id FROM rental_unit WHERE catalog_key = 'rental-unit-sfo-economy-01') AND occupancy_status = 'ACTIVE'",
+                Integer.class);
+        assertEquals(0, activeOccupancies, "Zero active rental occupancies should exist");
+    }
+
     private void insertSfoAirfareSelection(String draftId) {
         jdbc.update("""
                 INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id)

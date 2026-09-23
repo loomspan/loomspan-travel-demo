@@ -19,6 +19,8 @@ public interface TripRepository {
 
     void deleteTrip(long tripId, long ownerUserId);
 
+    boolean cancelTrip(long tripId, long ownerUserId, long expectedVersion);
+
     boolean hasBookingHistory(long tripId);
 
     int activeBookingCount(long tripId);

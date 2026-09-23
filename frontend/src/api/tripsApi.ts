@@ -16,6 +16,7 @@ export type TripProfileSummary = {
   endDate: string;
   label: string;
   version: number;
+  status?: string;
   temporalStatus: 'UPCOMING' | 'PAST' | string;
   draftCount: number;
   plannedCount: number;
@@ -400,12 +401,14 @@ export type TripResponse = {
   travelerAges: number[] | null;
   budgetCents: number | null;
   label: string;
+  status?: string;
   version: number;
   drafts: DraftResponse[];
   planned: PlannedResponse[];
   alternatives: AlternativeResponse[];
   revisionSummary: RevisionSummaryResponse | null;
   tally?: ItineraryTallyResponse;
+  booking?: BookingResponse | null;
 };
 
 export type CreateTripRequest = {
@@ -477,10 +480,14 @@ export type CreateBookingRequest = {
   idempotencyKey?: string;
 };
 
+export type CancelRequest = {
+  expectedVersion: number;
+};
+
 export type BookingResponse = {
   id: string;
   tripId: string;
-  plannedItineraryId: string;
+  plannedItineraryId?: string | null;
   bookingReference: string;
   status: 'ACTIVE' | 'CANCELED' | string;
   grandTotalCents: number;
@@ -712,4 +719,10 @@ export const tripsApi = {
 
   getBookingHistory: (tripId: string): Promise<BookingResponse[]> =>
     request<BookingResponse[]>(`/api/trips/${tripId}/bookings`, 'GET'),
+
+  cancelBooking: (tripId: string, bookingId: string, payload: CancelRequest): Promise<TripResponse> =>
+    request<TripResponse>(`/api/trips/${tripId}/bookings/${bookingId}/cancel`, 'POST', payload),
+
+  cancelTrip: (tripId: string, payload: CancelRequest): Promise<TripResponse> =>
+    request<TripResponse>(`/api/trips/${tripId}/cancel`, 'POST', payload),
 };

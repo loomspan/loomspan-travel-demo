@@ -5,6 +5,9 @@ import app.detour.airfare.AirfareSearchResponses.AirfareSearchResponse;
 import app.detour.airfare.AirfareSearchService;
 import app.detour.airfare.AirfareSort;
 import app.detour.api.ApiException;
+import app.detour.booking.BookingRecord;
+import app.detour.booking.BookingRepository;
+import app.detour.booking.BookingResponse;
 import app.detour.common.ClockConfiguration;
 import app.detour.rental.RentalSearchRepository;
 import app.detour.rental.RentalSearchResponses.RentalSearchResponse;
@@ -47,6 +50,7 @@ public class TripService {
     private final RentalSearchRepository rentalSearchRepository;
     private final ItineraryTallyEngine tallyEngine;
     private final Clock clock;
+    private final BookingRepository bookingRepository;
 
     TripService(
             TripRepository trips,
@@ -57,7 +61,8 @@ public class TripService {
             RentalSearchService rentalSearchService,
             RentalSearchRepository rentalSearchRepository,
             ItineraryTallyEngine tallyEngine,
-            Clock clock) {
+            Clock clock,
+            BookingRepository bookingRepository) {
         this.trips = trips;
         this.airfareSearchService = airfareSearchService;
         this.airfareSearchRepository = airfareSearchRepository;
@@ -67,6 +72,7 @@ public class TripService {
         this.rentalSearchRepository = rentalSearchRepository;
         this.tallyEngine = tallyEngine;
         this.clock = clock;
+        this.bookingRepository = bookingRepository;
     }
 
     @Transactional
@@ -109,6 +115,12 @@ public class TripService {
         return !clock.instant().isBefore(departureMidnight);
     }
 
+    private void requireActiveTrip(Trip trip) {
+        if ("CANCELED".equals(trip.status())) {
+            throw new ApiException(409, "TRIP_CANCELED", "This trip has been canceled and cannot be modified.");
+        }
+    }
+
     public TripsProfileResponse tripsProfile(long ownerUserId) {
         List<Trip> allTrips = trips.findAllByOwnerUserId(ownerUserId);
         List<TripProfileSummary> upcoming = new ArrayList<>();
@@ -149,6 +161,7 @@ public class TripService {
                     trip.endDate(),
                     trip.label(),
                     trip.version(),
+                    trip.status(),
                     temporalStatus,
                     draftCount,
                     plannedCount,
@@ -173,6 +186,7 @@ public class TripService {
     public TripResponse replaceSharedDetails(long ownerUserId, String tripId, TripRequests.SharedDetailsUpdate request) {
         if (request == null) throw validation("request", "A request body is required.");
         Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
         String destinationKey = required(request.destinationKey(), "destinationKey");
         Destination destination = trips.findSupportedDestination(destinationKey).orElseThrow(() -> validation("destinationKey", "Choose a supported destination."));
         LocalDate startDate = required(request.startDate(), "startDate");
@@ -248,6 +262,7 @@ public class TripService {
     public TripResponse createDraft(long ownerUserId, String tripId, TripRequests.DraftCreate request) {
         if (request == null) throw validation("request", "A request body is required.");
         Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
         if (!trips.advanceVersion(trip.id(), ownerUserId, request.expectedVersion())) throw parentConflict(ownerUserId, trip.publicId());
         trips.insertDraft(trip.id(), UUID.randomUUID());
         return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
@@ -257,6 +272,7 @@ public class TripService {
     public TripResponse duplicateDraft(long ownerUserId, String tripId, String draftId, TripRequests.DraftMutation request) {
         if (request == null) throw validation("request", "A request body is required.");
         Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
         TripDraft draft = ownedDraft(trip, draftId);
         if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
             throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
@@ -269,6 +285,7 @@ public class TripService {
     public TripResponse deleteDraft(long ownerUserId, String tripId, String draftId, TripRequests.DraftMutation request) {
         if (request == null) throw validation("request", "A request body is required.");
         Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
         TripDraft draft = ownedDraft(trip, draftId);
         if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
             throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
@@ -281,6 +298,7 @@ public class TripService {
     public TripResponse promoteDraft(long ownerUserId, String tripId, String draftId, TripRequests.Promotion request) {
         if (request == null) throw validation("request", "A request body is required.");
         Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
         TripDraft draft = ownedDraft(trip, draftId);
         if (isExpired(trip.startDate())) {
             throw new ApiException(400, "ALTERNATIVE_EXPIRED", "Expired alternatives cannot be promoted.");
@@ -313,6 +331,7 @@ public class TripService {
     public TripResponse duplicateAlternative(long ownerUserId, String tripId, String alternativeId, TripRequests.AlternativeDuplicate request) {
         if (request == null) throw validation("request", "A request body is required.");
         Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
         TripAlternative source = ownedAlternative(trip, alternativeId);
         if (source instanceof TripDraft draft) {
             if (request.expectedDraftVersion() == null) throw validation("expectedDraftVersion", "This field is required for a Draft source.");
@@ -332,12 +351,16 @@ public class TripService {
     public TripResponse deleteAlternative(long ownerUserId, String tripId, String alternativeId, TripRequests.AlternativeDelete request) {
         if (request == null) throw validation("request", "A request body is required.");
         Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
         TripAlternative source = ownedAlternative(trip, alternativeId);
         if (source instanceof TripDraft draft) {
             if (request.expectedDraftVersion() == null) throw validation("expectedDraftVersion", "This field is required for a Draft source.");
             if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
             trips.deleteDraft(trip.id(), draft.id());
         } else {
+            if (bookingRepository.isPlannedItineraryActivelyBooked(source.id())) {
+                throw new ApiException(409, "CANNOT_DELETE_ACTIVE_BOOKED_ALTERNATIVE", "Cannot delete a planned alternative that is actively booked.");
+            }
             if (!Boolean.TRUE.equals(request.confirmed())) throw validation("confirmed", "Set confirmed to true before deleting a Planned alternative.");
             if (request.expectedDraftVersion() != null) throw validation("expectedDraftVersion", "Planned alternatives do not have a Draft version.");
             if (!trips.advanceVersion(trip.id(), ownerUserId, request.expectedVersion())) throw parentConflict(ownerUserId, trip.publicId());
@@ -535,6 +558,40 @@ public class TripService {
                 + " " + startDate.getDayOfMonth() + "\u2013" + endDate.getDayOfMonth() + ", " + startDate.getYear();
     }
 
+    public TripResponse toResponse(Trip trip) {
+        return response(trip, null);
+    }
+
+    public BookingResponse toBookingResponse(BookingRecord record, Trip trip) {
+        DraftSelections selections = bookingRepository.loadBookingSelections(record.id());
+        ItineraryTallyResponse tally = tallyEngine.calculateTally(selections, trip.travelerCount(), trip.budgetCents());
+        DraftSelectionResponse selectionResponse = selectionResponse(selections);
+        UUID plannedPublicId = record.plannedItineraryId() != null
+                ? trip.planned().stream()
+                        .filter(p -> p.id() == record.plannedItineraryId().longValue())
+                        .map(PlannedItinerary::publicId)
+                        .findFirst()
+                        .orElse(null)
+                : null;
+
+        return new BookingResponse(
+                record.publicId(),
+                trip.publicId(),
+                plannedPublicId,
+                record.bookingReference(),
+                record.status(),
+                record.grandTotalCents(),
+                record.idempotencyKey(),
+                record.createdAt(),
+                record.canceledAt(),
+                record.airfareReference(),
+                record.stayReference(),
+                record.rentalReference(),
+                selectionResponse,
+                tally
+        );
+    }
+
     private TripResponse response(Trip trip) {
         return response(trip, null);
     }
@@ -569,9 +626,13 @@ public class TripService {
             tripTally = tallyEngine.calculateTally(null, trip.travelerCount(), trip.budgetCents());
         }
 
+        BookingResponse booking = bookingRepository.findPrimaryBookingRecordByTripId(trip.id())
+                .map(r -> toBookingResponse(r, trip))
+                .orElse(null);
+
         return new TripResponse(trip.publicId(), trip.destination().key(), trip.destination().name(), "PDX", trip.startDate(),
-                trip.endDate(), trip.travelerCount(), trip.travelerAges(), trip.budgetCents(), trip.label(), trip.version(),
-                drafts, planned, List.copyOf(alternatives), revisionSummary, tripTally);
+                trip.endDate(), trip.travelerCount(), trip.travelerAges(), trip.budgetCents(), trip.label(), trip.status(), trip.version(),
+                drafts, planned, List.copyOf(alternatives), revisionSummary, tripTally, booking);
     }
 
     public static DraftSelectionResponse selectionResponse(DraftSelections selections) {
@@ -751,6 +812,7 @@ public class TripService {
     public TripResponse selectDraftAirfare(long ownerUserId, String tripId, String draftId, TripRequests.AirfareSelectionRequest request) {
         if (request == null) throw validation("request", "A request body is required.");
         Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
         TripDraft draft = ownedDraft(trip, draftId);
 
         if (request.outboundFlightInstanceId() == request.returnFlightInstanceId()) {
@@ -802,6 +864,7 @@ public class TripService {
     public TripResponse removeDraftAirfare(long ownerUserId, String tripId, String draftId, TripRequests.DraftMutation request) {
         if (request == null) throw validation("request", "A request body is required.");
         Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
         TripDraft draft = ownedDraft(trip, draftId);
 
         if (!trips.advanceVersionForDraftMutation(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
@@ -845,6 +908,7 @@ public class TripService {
     public TripResponse selectDraftStay(long ownerUserId, String tripId, String draftId, TripRequests.StaySelectionRequest request) {
         if (request == null) throw validation("request", "A request body is required.");
         Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
         TripDraft draft = ownedDraft(trip, draftId);
 
         var candidateOpt = staySearchRepository.findCandidateById(request.accommodationUnitId(), trip.startDate(), trip.endDate());
@@ -893,6 +957,7 @@ public class TripService {
     public TripResponse removeDraftStay(long ownerUserId, String tripId, String draftId, TripRequests.DraftMutation request) {
         if (request == null) throw validation("request", "A request body is required.");
         Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
         TripDraft draft = ownedDraft(trip, draftId);
 
         if (!trips.advanceVersionForDraftMutation(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
@@ -966,6 +1031,7 @@ public class TripService {
     public TripResponse selectDraftRental(long ownerUserId, String tripId, String draftId, TripRequests.RentalSelectionRequest request) {
         if (request == null) throw validation("request", "A request body is required.");
         Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
         TripDraft draft = ownedDraft(trip, draftId);
 
         if (!rentalSearchService.isDriverEligible(trip.travelerAges())) {
@@ -999,6 +1065,7 @@ public class TripService {
     public TripResponse removeDraftRental(long ownerUserId, String tripId, String draftId, TripRequests.DraftMutation request) {
         if (request == null) throw validation("request", "A request body is required.");
         Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
         TripDraft draft = ownedDraft(trip, draftId);
 
         if (!trips.advanceVersionForDraftMutation(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {

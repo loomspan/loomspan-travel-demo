@@ -51,15 +51,15 @@ The backend system provides atomic, fee-free cancellation of active bookings wit
 
 ## Acceptance criteria
 
-- [ ] Canceling an active booking restores flight seats, nightly room inventory, and updates rental car occupancy to `RELEASED` in a single atomic transaction.
-- [ ] Following Cancel Booking, the booking record is retained with `status = 'CANCELED'` and `canceled_at` timestamp, and the trip remains active.
-- [ ] Attempting to cancel a booking on an Expired trip (evaluated at start of departure date in `America/Los_Angeles`) is rejected with HTTP 400.
-- [ ] `hasBookingHistory` returns true whenever any active or canceled booking exists for the trip, permanently preventing `DELETE /api/trips/{tripId}` with HTTP 409.
-- [ ] Canceling a trip with an active booking atomically releases all inventory and sets the trip status to `CANCELED`.
-- [ ] On a `CANCELED` trip, all mutations (creating/editing/deleting drafts, promotions) are rejected with HTTP 409.
-- [ ] Attempting to delete a Planned alternative that is actively booked is rejected with HTTP 409.
-- [ ] Concurrent cancellation and rebooking requests are concurrency-safe and cannot create phantom inventory or leak capacity.
-- [ ] Multi-user isolation tests verify users cannot cancel bookings or trips belonging to other accounts.
+- [x] Canceling an active booking restores flight seats, nightly room inventory, and updates rental car occupancy to `RELEASED` in a single atomic transaction.
+- [x] Following Cancel Booking, the booking record is retained with `status = 'CANCELED'` and `canceled_at` timestamp, and the trip remains active.
+- [x] Attempting to cancel a booking on an Expired trip (evaluated at start of departure date in `America/Los_Angeles`) is rejected with HTTP 400.
+- [x] `hasBookingHistory` returns true whenever any active or canceled booking exists for the trip, permanently preventing `DELETE /api/trips/{tripId}` with HTTP 409.
+- [x] Canceling a trip with an active booking atomically releases all inventory and sets the trip status to `CANCELED`.
+- [x] On a `CANCELED` trip, all mutations (creating/editing/deleting drafts, promotions) are rejected with HTTP 409.
+- [x] Attempting to delete a Planned alternative that is actively booked is rejected with HTTP 409.
+- [x] Concurrent cancellation and rebooking requests are concurrency-safe and cannot create phantom inventory or leak capacity.
+- [x] Multi-user isolation tests verify users cannot cancel bookings or trips belonging to other accounts.
 
 ## Context
 

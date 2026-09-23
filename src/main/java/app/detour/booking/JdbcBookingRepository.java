@@ -81,10 +81,26 @@ public class JdbcBookingRepository implements BookingRepository {
     }
 
     @Override
+    public boolean incrementFlightSeats(long flightInstanceId, int seatsToIncrement) {
+        int rows = jdbc.update(
+                "UPDATE flight_instance SET available_seats = available_seats + ? WHERE id = ?",
+                seatsToIncrement, flightInstanceId);
+        return rows == 1;
+    }
+
+    @Override
     public boolean decrementStayInventory(long accommodationUnitId, LocalDate date, int unitsToDecrement) {
         int rows = jdbc.update(
                 "UPDATE accommodation_nightly_inventory SET available_inventory = available_inventory - ? WHERE accommodation_unit_id = ? AND night_date = ? AND available_inventory >= ?",
                 unitsToDecrement, accommodationUnitId, date, unitsToDecrement);
+        return rows == 1;
+    }
+
+    @Override
+    public boolean incrementStayInventory(long accommodationUnitId, LocalDate date, int unitsToIncrement) {
+        int rows = jdbc.update(
+                "UPDATE accommodation_nightly_inventory SET available_inventory = available_inventory + ? WHERE accommodation_unit_id = ? AND night_date = ?",
+                unitsToIncrement, accommodationUnitId, date);
         return rows == 1;
     }
 
@@ -106,6 +122,11 @@ public class JdbcBookingRepository implements BookingRepository {
     }
 
     @Override
+    public void releaseRentalOccupancy(long rentalOccupancyId) {
+        jdbc.update("UPDATE rental_unit_occupancy SET occupancy_status = 'RELEASED' WHERE id = ?", rentalOccupancyId);
+    }
+
+    @Override
     public long insertBooking(BookingRecord booking) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbc.update(connection -> {
@@ -118,7 +139,11 @@ public class JdbcBookingRepository implements BookingRepository {
                     """, Statement.RETURN_GENERATED_KEYS);
             ps.setObject(1, booking.publicId());
             ps.setLong(2, booking.tripId());
-            ps.setLong(3, booking.plannedItineraryId());
+            if (booking.plannedItineraryId() != null) {
+                ps.setLong(3, booking.plannedItineraryId());
+            } else {
+                ps.setNull(3, java.sql.Types.BIGINT);
+            }
             ps.setString(4, booking.bookingReference());
             ps.setString(5, booking.status());
             ps.setLong(6, booking.grandTotalCents());
@@ -138,6 +163,11 @@ public class JdbcBookingRepository implements BookingRepository {
         Number key = (Number) (keyHolder.getKeys() != null ? keyHolder.getKeys().get("ID") : keyHolder.getKey());
         if (key == null) throw new IllegalStateException("Failed to insert booking");
         return key.longValue();
+    }
+
+    @Override
+    public void updateBookingStatus(long bookingId, String status, OffsetDateTime canceledAt) {
+        jdbc.update("UPDATE detour_booking SET status = ?, canceled_at = ? WHERE id = ?", status, canceledAt, bookingId);
     }
 
     @Override
@@ -219,6 +249,41 @@ public class JdbcBookingRepository implements BookingRepository {
                        airfare_reference, stay_reference, rental_reference, rental_occupancy_id
                 FROM detour_booking
                 WHERE trip_id = ? AND status = 'ACTIVE'
+                """, (rs, rowNum) -> mapBookingRecord(rs), tripId).stream().findFirst();
+    }
+
+    @Override
+    public Optional<BookingRecord> findActiveBookingRecordByTripIdForUpdate(long tripId) {
+        return jdbc.query("""
+                SELECT id, public_id, trip_id, planned_itinerary_id, booking_reference, status,
+                       grand_total_cents, idempotency_key, created_at, canceled_at,
+                       airfare_reference, stay_reference, rental_reference, rental_occupancy_id
+                FROM detour_booking
+                WHERE trip_id = ? AND status = 'ACTIVE' FOR UPDATE
+                """, (rs, rowNum) -> mapBookingRecord(rs), tripId).stream().findFirst();
+    }
+
+    @Override
+    public Optional<BookingRecord> findBookingRecordByTripIdAndPublicIdForUpdate(long tripId, UUID bookingPublicId) {
+        return jdbc.query("""
+                SELECT id, public_id, trip_id, planned_itinerary_id, booking_reference, status,
+                       grand_total_cents, idempotency_key, created_at, canceled_at,
+                       airfare_reference, stay_reference, rental_reference, rental_occupancy_id
+                FROM detour_booking
+                WHERE trip_id = ? AND public_id = ? FOR UPDATE
+                """, (rs, rowNum) -> mapBookingRecord(rs), tripId, bookingPublicId).stream().findFirst();
+    }
+
+    @Override
+    public Optional<BookingRecord> findPrimaryBookingRecordByTripId(long tripId) {
+        return jdbc.query("""
+                SELECT id, public_id, trip_id, planned_itinerary_id, booking_reference, status,
+                       grand_total_cents, idempotency_key, created_at, canceled_at,
+                       airfare_reference, stay_reference, rental_reference, rental_occupancy_id
+                FROM detour_booking
+                WHERE trip_id = ?
+                ORDER BY CASE WHEN status = 'ACTIVE' THEN 0 ELSE 1 END, created_at DESC
+                LIMIT 1
                 """, (rs, rowNum) -> mapBookingRecord(rs), tripId).stream().findFirst();
     }
 
@@ -323,13 +388,22 @@ public class JdbcBookingRepository implements BookingRepository {
         return count != null && count > 0;
     }
 
+    @Override
+    public boolean isPlannedItineraryActivelyBooked(long plannedItineraryId) {
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM detour_booking WHERE planned_itinerary_id = ? AND status = 'ACTIVE'",
+                Integer.class, plannedItineraryId);
+        return count != null && count > 0;
+    }
+
     private static BookingRecord mapBookingRecord(ResultSet rs) throws SQLException {
         Long rentalOccupancyId = rs.getObject("rental_occupancy_id") != null ? rs.getLong("rental_occupancy_id") : null;
+        Long plannedItineraryId = rs.getObject("planned_itinerary_id") != null ? rs.getLong("planned_itinerary_id") : null;
         return new BookingRecord(
                 rs.getLong("id"),
                 rs.getObject("public_id", UUID.class),
                 rs.getLong("trip_id"),
-                rs.getLong("planned_itinerary_id"),
+                plannedItineraryId,
                 rs.getString("booking_reference"),
                 rs.getString("status"),
                 rs.getLong("grand_total_cents"),

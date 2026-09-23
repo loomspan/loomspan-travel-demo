@@ -14,6 +14,7 @@ import app.detour.trip.StaySelection;
 import app.detour.trip.Trip;
 import app.detour.trip.TripRepository;
 import app.detour.trip.TripRequests;
+import app.detour.trip.TripResponse;
 import app.detour.trip.TripService;
 import java.time.Clock;
 import java.time.Instant;
@@ -91,15 +92,33 @@ public class BookingService {
         return records.stream().map(r -> toBookingResponse(r, trip)).toList();
     }
 
+    public TripResponse cancelBooking(long ownerUserId, String tripPublicId, String bookingPublicId, TripRequests.Cancel request) {
+        Trip trip = ownedTrip(ownerUserId, tripPublicId);
+        UUID bookingUuid;
+        try {
+            bookingUuid = UUID.fromString(bookingPublicId);
+        } catch (IllegalArgumentException ex) {
+            throw notFound();
+        }
+        return transactionExecutor.executeCancelBookingTransaction(ownerUserId, trip, bookingUuid, request);
+    }
+
+    public TripResponse cancelTrip(long ownerUserId, String tripPublicId, TripRequests.Cancel request) {
+        Trip trip = ownedTrip(ownerUserId, tripPublicId);
+        return transactionExecutor.executeCancelTripTransaction(ownerUserId, trip, request);
+    }
+
     private BookingResponse toBookingResponse(BookingRecord record, Trip trip) {
         DraftSelections selections = bookingRepository.loadBookingSelections(record.id());
         ItineraryTallyResponse tally = tallyEngine.calculateTally(selections, trip.travelerCount(), trip.budgetCents());
         DraftSelectionResponse selectionResponse = TripService.selectionResponse(selections);
-        UUID plannedPublicId = trip.planned().stream()
-                .filter(p -> p.id() == record.plannedItineraryId())
-                .map(PlannedItinerary::publicId)
-                .findFirst()
-                .orElse(null);
+        UUID plannedPublicId = record.plannedItineraryId() != null
+                ? trip.planned().stream()
+                        .filter(p -> p.id() == record.plannedItineraryId().longValue())
+                        .map(PlannedItinerary::publicId)
+                        .findFirst()
+                        .orElse(null)
+                : null;
 
         return new BookingResponse(
                 record.publicId(),

@@ -30,7 +30,7 @@ class PhaseOneCatalogForwardMigrationIntegrationTest {
         }
         Flyway fullLineage = Flyway.configure().dataSource(url, "sa", "").locations("classpath:db/migration").load();
         fullLineage.migrate();
-        assertEquals("17", fullLineage.info().current().getVersion().getVersion());
+        assertEquals("18", fullLineage.info().current().getVersion().getVersion());
         try (var connection = DriverManager.getConnection(url, "sa", "");
              var query = connection.prepareStatement("SELECT password_hash, created_at FROM detour_user WHERE canonical_email = ?")) {
             query.setString(1, "phase-one@example.test");

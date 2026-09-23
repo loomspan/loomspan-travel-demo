@@ -135,6 +135,35 @@ class BookingSchemaIntegrationTest {
         assertEquals(0, nightCount);
     }
 
+    @Test
+    void tripStatusDefaultsToActiveAndEnforcesCheckConstraint() {
+        String status = jdbc.queryForObject("SELECT status FROM detour_trip WHERE id = ?", String.class, tripId);
+        assertEquals("ACTIVE", status);
+
+        // Can update to CANCELED
+        jdbc.update("UPDATE detour_trip SET status = 'CANCELED' WHERE id = ?", tripId);
+        assertEquals("CANCELED", jdbc.queryForObject("SELECT status FROM detour_trip WHERE id = ?", String.class, tripId));
+
+        // Rejects invalid status
+        assertThrows(DataIntegrityViolationException.class, () ->
+                jdbc.update("UPDATE detour_trip SET status = 'INVALID' WHERE id = ?", tripId));
+    }
+
+    @Test
+    void deletingPlannedItinerarySetsNullOnBookingWithoutDeletingBooking() {
+        long bookingId = insertBooking(tripId, plannedId, "DT-NULL01", "CANCELED", 10000L, "null-planned-key");
+
+        // Delete planned itinerary
+        jdbc.update("DELETE FROM detour_planned_itinerary WHERE id = ?", plannedId);
+
+        // Booking should still exist with planned_itinerary_id = NULL
+        int bookingCount = jdbc.queryForObject("SELECT COUNT(*) FROM detour_booking WHERE id = ?", Integer.class, bookingId);
+        assertEquals(1, bookingCount);
+
+        Long currentPlannedId = jdbc.queryForObject("SELECT planned_itinerary_id FROM detour_booking WHERE id = ?", Long.class, bookingId);
+        assertEquals(null, currentPlannedId);
+    }
+
     private long insertBooking(long tripId, long plannedItineraryId, String reference, String status, long totalCents, String idempotencyKey) {
         UUID publicId = UUID.randomUUID();
         jdbc.update(
