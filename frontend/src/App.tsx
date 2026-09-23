@@ -96,7 +96,15 @@ export default function App() {
   };
 
   return <main className="shell">
-    {notice?.kind === 'error' && <div className="error-summary" role="alert" tabIndex={-1} ref={errorRef}><strong>We need your attention.</strong><p>{notice.message}</p></div>}
+    {notice?.kind === 'error' && <div className="error-summary" role="alert" tabIndex={-1} ref={errorRef}>
+      <strong>We need your attention.</strong><p>{notice.message}</p>
+      {notice.fields && Object.keys(notice.fields).length > 0 && <ul>
+        {Object.entries(notice.fields).map(([field, message]) => {
+          const id = {currentPassword: 'current-password', newPassword: 'new-password'}[field as 'currentPassword' | 'newPassword'] ?? field;
+          return <li key={field}><a href={`#${id}`}>{message}</a></li>;
+        })}
+      </ul>}
+    </div>}
     <StatusRegion message={notice?.kind === 'status' ? notice.message : undefined} />
     <AboutDemoTab />
     {screen.kind === 'loading' ? <p className="loading">Checking your account…</p> : screen.kind === 'profile'

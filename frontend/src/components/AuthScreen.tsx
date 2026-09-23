@@ -1,4 +1,4 @@
-import {FormEvent, useState} from 'react';
+import {FormEvent, useEffect, useState} from 'react';
 import {PasswordField, passwordRangeError} from './PasswordField';
 
 export type FormFailure = {message: string; fields?: Record<string, string>};
@@ -14,6 +14,7 @@ export function AuthScreen({onRegister, onLogin, onFailure}: AuthScreenProps) {
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  useEffect(() => { document.getElementById('auth-heading')?.focus(); }, [mode]);
   const switchMode = (nextMode: 'login' | 'register') => {
     setMode(nextMode);
     setPassword('');
@@ -46,7 +47,7 @@ export function AuthScreen({onRegister, onLogin, onFailure}: AuthScreenProps) {
       <button type="button" aria-pressed={mode === 'register'} disabled={pending} onClick={() => switchMode('register')}>Register</button>
     </div>
     <form onSubmit={submit} noValidate>
-      <div className="field"><label htmlFor="email">Email address</label><input id="email" name="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} aria-describedby={fieldErrors.email ? 'email-error' : undefined} required />{fieldErrors.email && <p id="email-error" className="field-error">{fieldErrors.email}</p>}</div>
+      <div className="field"><label htmlFor="email">Email address</label><input id="email" name="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} aria-invalid={Boolean(fieldErrors.email)} aria-describedby={fieldErrors.email ? 'email-error' : undefined} required />{fieldErrors.email && <p id="email-error" className="field-error">{fieldErrors.email}</p>}</div>
       <PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} error={fieldErrors.password} />
       <button className="primary" type="submit" disabled={pending}>{pending ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account'}</button>
     </form>

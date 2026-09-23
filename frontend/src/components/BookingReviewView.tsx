@@ -2,8 +2,9 @@ import {useState} from 'react';
 import type {TripResponse, AlternativeResponse, BookingResponse} from '../api/tripsApi';
 import {tripsApi} from '../api/tripsApi';
 import {IdentityApiError} from '../api/identityApi';
-import {formatCents, computeRentalTotalCents} from './ItinerarySummaryTally';
-import {formatMinutes, formatTime} from './AirfareSearchSection';
+import {formatCents, formatTallyCents} from './ItinerarySummaryTally';
+import {formatMinutes} from './AirfareSearchSection';
+import {FlightSchedule} from './FlightSchedule';
 
 export type BookingReviewViewProps = {
   trip: TripResponse;
@@ -29,7 +30,7 @@ export function BookingReviewView({
   const tally = alternative.tally;
 
   const handleConfirmBooking = async () => {
-    if (isSubmitting) return;
+    if (isSubmitting || !tally) return;
     setIsSubmitting(true);
     setErrorMessage(null);
     setErrorFields(null);
@@ -94,7 +95,7 @@ export function BookingReviewView({
 
       <header className="booking-review-header">
         <p className="eyebrow">BOOKING REVIEW</p>
-        <h2 id="booking-review-heading">Review Itinerary &amp; Component Snapshots</h2>
+        <h2 id="booking-review-heading" tabIndex={-1}>Review Itinerary &amp; Component Snapshots</h2>
         <span className="alternative-id">Itinerary Snapshot ID: {alternative.id}</span>
       </header>
 
@@ -132,7 +133,7 @@ export function BookingReviewView({
             <h3 id="review-airfare-heading">Airfare Snapshot</h3>
             {selections.airfare && (
               <span className="component-price">
-                {formatCents(tally?.airfareTotalCents ?? 0)}
+                {formatTallyCents(tally?.airfareTotalCents)}
               </span>
             )}
           </div>
@@ -146,9 +147,7 @@ export function BookingReviewView({
                     ? 'Nonstop'
                     : `${selections.airfare.outboundStopCount} stop (${selections.airfare.outboundLayoverAirportCode || ''}${selections.airfare.outboundLayoverDurationMinutes ? `, ${selections.airfare.outboundLayoverDurationMinutes}m` : ''})`}
                 </p>
-                <p>
-                  {formatTime(selections.airfare.outboundDepartureTime || '', selections.airfare.outboundDepartureTimeZone || undefined)} ({selections.airfare.outboundDepartureTimeZone || 'Local'}) → {formatTime(selections.airfare.outboundArrivalTime || '', selections.airfare.outboundArrivalTimeZone || undefined)} ({selections.airfare.outboundArrivalTimeZone || 'Local'})
-                </p>
+                <FlightSchedule departureAirport={trip.originAirportCode} departureTime={selections.airfare.outboundDepartureTime} departureTimeZone={selections.airfare.outboundDepartureTimeZone} arrivalAirport={trip.destinationKey.replace('destination-', '').toUpperCase()} arrivalTime={selections.airfare.outboundArrivalTime} arrivalTimeZone={selections.airfare.outboundArrivalTimeZone} />
                 <p className="hint">
                   Duration: {formatMinutes(selections.airfare.outboundDurationMinutes || 0)}
                 </p>
@@ -162,9 +161,7 @@ export function BookingReviewView({
                     ? 'Nonstop'
                     : `${selections.airfare.returnStopCount} stop (${selections.airfare.returnLayoverAirportCode || ''}${selections.airfare.returnLayoverDurationMinutes ? `, ${selections.airfare.returnLayoverDurationMinutes}m` : ''})`}
                 </p>
-                <p>
-                  {formatTime(selections.airfare.returnDepartureTime || '', selections.airfare.returnDepartureTimeZone || undefined)} ({selections.airfare.returnDepartureTimeZone || 'Local'}) → {formatTime(selections.airfare.returnArrivalTime || '', selections.airfare.returnArrivalTimeZone || undefined)} ({selections.airfare.returnArrivalTimeZone || 'Local'})
-                </p>
+                <FlightSchedule departureAirport={trip.destinationKey.replace('destination-', '').toUpperCase()} departureTime={selections.airfare.returnDepartureTime} departureTimeZone={selections.airfare.returnDepartureTimeZone} arrivalAirport={trip.originAirportCode} arrivalTime={selections.airfare.returnArrivalTime} arrivalTimeZone={selections.airfare.returnArrivalTimeZone} />
                 <p className="hint">
                   Duration: {formatMinutes(selections.airfare.returnDurationMinutes || 0)}
                 </p>
@@ -185,7 +182,7 @@ export function BookingReviewView({
             <h3 id="review-stay-heading">Stay Snapshot</h3>
             {selections.stay && (
               <span className="component-price">
-                {formatCents(tally?.stayTotalCents ?? 0)}
+                {formatTallyCents(tally?.stayTotalCents)}
               </span>
             )}
           </div>
@@ -226,7 +223,7 @@ export function BookingReviewView({
             <h3 id="review-rental-heading">Rental Car Snapshot</h3>
             {selections.rental && (
               <span className="component-price">
-                {formatCents(tally?.rentalTotalCents ?? computeRentalTotalCents(selections))}
+                {formatTallyCents(tally?.rentalTotalCents)}
               </span>
             )}
           </div>
@@ -262,21 +259,21 @@ export function BookingReviewView({
         <div className="totals-breakdown-list">
           <div className="total-row">
             <span>Airfare total:</span>
-            <span>{selections.airfare ? formatCents(tally?.airfareTotalCents ?? 0) : renderMissing('airfare')}</span>
+            <span>{selections.airfare ? formatTallyCents(tally?.airfareTotalCents) : renderMissing('airfare')}</span>
           </div>
           <div className="total-row">
             <span>Stay total:</span>
-            <span>{selections.stay ? formatCents(tally?.stayTotalCents ?? 0) : renderMissing('stay')}</span>
+            <span>{selections.stay ? formatTallyCents(tally?.stayTotalCents) : renderMissing('stay')}</span>
           </div>
           <div className="total-row">
             <span>Rental Car total:</span>
-            <span>{selections.rental ? formatCents(tally?.rentalTotalCents ?? 0) : renderMissing('rental')}</span>
+            <span>{selections.rental ? formatTallyCents(tally?.rentalTotalCents) : renderMissing('rental')}</span>
           </div>
           <hr className="tally-divider" />
           <div className="total-row grand-total-row">
             <span>Grand total:</span>
             <span className="grand-total-highlight">
-              {formatCents(tally?.grandTotalCents ?? 0)}
+              {formatTallyCents(tally?.grandTotalCents)}
             </span>
           </div>
           {tally && (tally.isOverBudget || tally.remainingBudgetCents !== null) && (
@@ -285,16 +282,17 @@ export function BookingReviewView({
               <span>
                 {tally.isOverBudget ? (
                   <span className="badge badge-warning" role="alert">
-                    Over Budget by {formatCents(tally.budgetOverageCents ?? 0)}
+                    Over Budget by {formatTallyCents(tally.budgetOverageCents)}
                   </span>
                 ) : (
                   <span className="badge badge-success">
-                    Within Budget ({formatCents(tally.remainingBudgetCents ?? 0)} remaining)
+                    Within Budget ({formatTallyCents(tally.remainingBudgetCents)} remaining)
                   </span>
                 )}
               </span>
             </div>
           )}
+          {!tally && <p className="hint" id="booking-tally-unavailable">Budget position and total unavailable. Return to the Trip and refresh prices before booking.</p>}
         </div>
       </div>
 
@@ -345,8 +343,9 @@ export function BookingReviewView({
         <button
           type="button"
           className="primary-button confirm-booking-btn"
-          disabled={isSubmitting}
-          aria-disabled={isSubmitting}
+          disabled={isSubmitting || !tally}
+          aria-disabled={isSubmitting || !tally}
+          aria-describedby={!tally ? 'booking-tally-unavailable' : undefined}
           onClick={() => void handleConfirmBooking()}
         >
           {isSubmitting ? 'Reserving inventory…' : 'Confirm Booking'}

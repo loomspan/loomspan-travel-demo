@@ -166,6 +166,8 @@ export function RentalSearchSection({
             type="datetime-local"
             id="rental-pickup-at"
             value={pickupAt}
+            aria-invalid={Boolean(dateError)}
+            aria-describedby={dateError ? 'rental-date-error' : undefined}
             onChange={(e) => setPickupAt(e.target.value)}
           />
         </div>
@@ -176,6 +178,8 @@ export function RentalSearchSection({
             type="datetime-local"
             id="rental-return-at"
             value={returnAt}
+            aria-invalid={Boolean(dateError)}
+            aria-describedby={dateError ? 'rental-date-error' : undefined}
             onChange={(e) => setReturnAt(e.target.value)}
           />
         </div>
@@ -193,12 +197,12 @@ export function RentalSearchSection({
         </div>
       </div>
 
-      {dateError && <p className="field-error" role="alert">{dateError}</p>}
+      {dateError && <p id="rental-date-error" className="field-error" role="alert">{dateError} Adjust the pickup and return fields.</p>}
       {loading && <p className="hint" role="status">Searching cars…</p>}
       {error && <div role="alert"><p className="field-error">{error}</p><button type="button" onClick={() => setRetryKey((value) => value + 1)}>Retry rental search</button></div>}
 
       {!loading && !error && !dateError && options.length === 0 && (
-        <p className="hint">No rental cars found matching your criteria.</p>
+        <p className="hint" role="status">No rental cars found matching your criteria. Change the dates or sort and search again.</p>
       )}
 
       {!loading && !error && !dateError && options.length > 0 && (

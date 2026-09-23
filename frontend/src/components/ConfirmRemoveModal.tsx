@@ -30,37 +30,41 @@ export function ConfirmRemoveModal({
       firstBtn?.focus();
     }
     return () => {
-      if (previousActiveElement.current) {
-        if (document.body.contains(previousActiveElement.current)) {
-          previousActiveElement.current.focus();
-        } else {
-          const fallback = document.querySelector<HTMLElement>(
-            '#workspace-heading, #builder-heading, h1, h2'
-          );
-          fallback?.focus();
-        }
-        previousActiveElement.current = null;
-      }
+      const previous = previousActiveElement.current;
+      if (!previous) return;
+      if (document.body.contains(previous)) previous.focus();
+      else document.querySelector<HTMLElement>('#workspace-heading, #profile-heading, #home-heading, h1, h2')?.focus();
+      previousActiveElement.current = null;
     };
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (pending) modalRef.current?.focus();
+    else if (document.activeElement === modalRef.current) modalRef.current?.querySelector<HTMLElement>('button:not(:disabled)')?.focus();
+  }, [isOpen, pending]);
 
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (pending) return;
         e.preventDefault();
         onClose();
         return;
       }
       if (e.key === 'Tab' && modalRef.current) {
         const focusable = modalRef.current.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"]):not(:disabled)'
         );
-        if (!focusable.length) return;
+        if (!focusable.length) { e.preventDefault(); return; }
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
+        if (!Array.from(focusable).includes(document.activeElement as HTMLElement)) {
+          e.preventDefault();
+          (e.shiftKey ? last : first).focus();
+        } else if (e.shiftKey && document.activeElement === first) {
           e.preventDefault();
           last.focus();
         } else if (!e.shiftKey && document.activeElement === last) {
@@ -72,7 +76,7 @@ export function ConfirmRemoveModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, pending, onClose]);
 
   if (!isOpen) return null;
 
@@ -88,6 +92,7 @@ export function ConfirmRemoveModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-remove-heading"
+        tabIndex={-1}
         ref={modalRef}
       >
         <div className="modal-header">

@@ -74,6 +74,7 @@ describe('Draft Promotion and Readiness Experience', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
     document.cookie = 'XSRF-TOKEN=; max-age=0; path=/';
     fetchMock.mockReset();
   });
@@ -131,6 +132,9 @@ describe('Draft Promotion and Readiness Experience', () => {
 
   // AC 2: Incomplete Drafts display actionable blocking issues and clicking moves focus directly
   it('displays actionable blocking issues on unready draft and moves focus directly to missing field or slot when clicked', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({matches: true})));
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {configurable: true, value: scrollIntoView});
     const user = userEvent.setup();
     const trip = createMockTrip({travelerAges: null});
 
@@ -172,6 +176,7 @@ describe('Draft Promotion and Readiness Experience', () => {
     const fixAgesBtn = screen.getByRole('button', {name: /fix issue for traveler ages/i});
     await user.click(fixAgesBtn);
     expect(document.activeElement).toBe(document.getElementById('traveler-age-0'));
+    expect(scrollIntoView).toHaveBeenCalledWith({behavior: 'instant', block: 'center'});
 
     // Test adult jump -> first age input
     const fixAdultBtn = screen.getByRole('button', {name: /fix issue for adult traveler requirement/i});

@@ -8,7 +8,7 @@ export function PasswordField({id, label, value, onChange, autoComplete, error}:
     <label htmlFor={id}>{label}</label>
     <div className="password-input">
       <input id={id} name={id} type={visible ? 'text' : 'password'} value={value} autoComplete={autoComplete}
-        aria-describedby={`${id}-rule${error ? ` ${id}-error` : ''}`} onChange={(event) => onChange(event.target.value)} required />
+        aria-invalid={Boolean(error)} aria-describedby={`${id}-rule${error ? ` ${id}-error` : ''}`} onChange={(event) => onChange(event.target.value)} required />
       <button type="button" className="text-button" aria-pressed={visible} onClick={() => setVisible((current) => !current)}>
         {visible ? 'Hide password' : 'Show password'}
       </button>

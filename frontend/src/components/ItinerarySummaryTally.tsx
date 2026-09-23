@@ -12,6 +12,11 @@ export function formatCents(cents: number): string {
   })}`;
 }
 
+/** A missing server tally is unknown, while an actual zero remains $0.00. */
+export function formatTallyCents(cents?: number | null): string {
+  return cents === null || cents === undefined ? 'Total unavailable' : formatCents(cents);
+}
+
 export function computeAirfareTotalCents(
   selections: DraftSelectionResponse,
   travelerCount: number

@@ -681,3 +681,32 @@ a:focus-visible, summary:focus-visible { outline: 3px solid #d26521; outline-off
   .readiness-jump-button { width: 100%; text-align: center; }
   .budget-overage-modal { width: 100%; }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.flight-schedule { display: grid; gap: .2rem; overflow-wrap: anywhere; }
+
+/* Keep notices and About in document flow where zoom leaves little room. */
+@media (max-width: 720px) {
+  .error-summary, .status {
+    position: static;
+    transform: none;
+    width: min(100%, 35rem);
+  }
+  .about-tab, .about-tab.open {
+    position: static;
+    inset: auto;
+    justify-self: end;
+    max-width: 100%;
+    max-height: none;
+  }
+  .about-tab.open { justify-self: stretch; }
+}

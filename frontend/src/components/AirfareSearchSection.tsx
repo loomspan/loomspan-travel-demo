@@ -6,6 +6,7 @@ import {
   type AirfareSort,
 } from '../api/tripsApi';
 import {formatCents} from './ItinerarySummaryTally';
+import {FlightSchedule} from './FlightSchedule';
 
 type AirfareSearchSectionProps = {
   trip: TripResponse;
@@ -19,20 +20,6 @@ export function formatMinutes(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return `${h}h ${m}m`;
-}
-
-export function formatTime(isoString: string, timeZone?: string): string {
-  try {
-    const d = new Date(isoString);
-    return d.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-      timeZone: timeZone || undefined,
-    });
-  } catch {
-    return isoString;
-  }
 }
 
 export function AirfareSearchSection({
@@ -118,10 +105,10 @@ export function AirfareSearchSection({
       </div>
 
       {loading && <p className="hint" role="status">Searching flights…</p>}
-      {error && <div role="alert"><p className="field-error">{error}</p><button type="button" onClick={() => setRetryKey((value) => value + 1)}>Retry flight search</button></div>}
+      {error && <div role="alert"><p className="field-error">{error} Retry the flight search.</p><button type="button" onClick={() => setRetryKey((value) => value + 1)}>Retry flight search</button></div>}
 
       {!loading && !error && options.length === 0 && (
-        <p className="hint">No flights found matching your criteria.</p>
+        <p className="hint" role="status">No flights found matching your criteria. Change the filters and search again.</p>
       )}
 
       {!loading && !error && options.length > 0 && (
@@ -135,10 +122,7 @@ export function AirfareSearchSection({
                     <p className="flight-carrier">
                       {opt.outbound.carrier} • #{opt.outbound.flightNumber}
                     </p>
-                    <p className="flight-times">
-                      {opt.outbound.originAirportCode} ({formatTime(opt.outbound.departureTime, opt.outbound.departureTimeZone)} {opt.outbound.departureTimeZone}) →{' '}
-                      {opt.outbound.destinationAirportCode} ({formatTime(opt.outbound.arrivalTime, opt.outbound.arrivalTimeZone)} {opt.outbound.arrivalTimeZone})
-                    </p>
+                    <FlightSchedule departureAirport={opt.outbound.originAirportCode} departureTime={opt.outbound.departureTime} departureTimeZone={opt.outbound.departureTimeZone} arrivalAirport={opt.outbound.destinationAirportCode} arrivalTime={opt.outbound.arrivalTime} arrivalTimeZone={opt.outbound.arrivalTimeZone} />
                     <p className="flight-subtext">
                       {formatMinutes(opt.outbound.durationMinutes)} •{' '}
                       {opt.outbound.stopCount === 0
@@ -154,10 +138,7 @@ export function AirfareSearchSection({
                     <p className="flight-carrier">
                       {opt.returnFlight.carrier} • #{opt.returnFlight.flightNumber}
                     </p>
-                    <p className="flight-times">
-                      {opt.returnFlight.originAirportCode} ({formatTime(opt.returnFlight.departureTime, opt.returnFlight.departureTimeZone)} {opt.returnFlight.departureTimeZone}) →{' '}
-                      {opt.returnFlight.destinationAirportCode} ({formatTime(opt.returnFlight.arrivalTime, opt.returnFlight.arrivalTimeZone)} {opt.returnFlight.arrivalTimeZone})
-                    </p>
+                    <FlightSchedule departureAirport={opt.returnFlight.originAirportCode} departureTime={opt.returnFlight.departureTime} departureTimeZone={opt.returnFlight.departureTimeZone} arrivalAirport={opt.returnFlight.destinationAirportCode} arrivalTime={opt.returnFlight.arrivalTime} arrivalTimeZone={opt.returnFlight.arrivalTimeZone} />
                     <p className="flight-subtext">
                       {formatMinutes(opt.returnFlight.durationMinutes)} •{' '}
                       {opt.returnFlight.stopCount === 0

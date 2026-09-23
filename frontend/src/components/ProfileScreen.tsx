@@ -41,6 +41,16 @@ export function ProfileScreen({
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error' | 'conflict'>('idle');
   const [tripDirty, setTripDirty] = useState(false);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const heading = viewMode === 'workspace'
+        ? document.querySelector<HTMLElement>('#workspace-heading, #comparison-heading, #booking-review-heading, #confirmation-heading')
+        : document.getElementById(viewMode === 'home' ? 'home-heading' : 'profile-heading');
+      heading?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [viewMode, activeTrip?.id]);
+
   // Modals state
   const [createModalMode, setCreateModalMode] = useState<'PLAN_TRIP' | 'AIRFARE' | 'STAY' | null>(null);
   const [entryContext, setEntryContext] = useState<{
@@ -244,7 +254,7 @@ export function ProfileScreen({
         if (workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and log out?')) return;
         void onLogout();
       }}>{logoutPending ? 'Logging out…' : 'Log out'}</button>
-      {activeTrip && <span className={`navigation-save-status status-${saveState}`} role="status">{tripDirty ? saveState === 'conflict' ? 'Trip has a save conflict' : saveState === 'error' ? 'Trip changes not saved' : 'Trip changes pending' : saveState === 'saved' ? 'Trip saved' : ''}</span>}
+      {activeTrip && <span className={`navigation-save-status status-${saveState}`}>{tripDirty ? saveState === 'conflict' ? 'Trip has a save conflict' : saveState === 'error' ? 'Trip changes not saved' : 'Trip changes pending' : saveState === 'saved' ? 'Trip saved' : ''}</span>}
     </nav>
     {openingTripId && <p className="card" role="status">Opening Trip…</p>}
     {openError && <div className="card" role="alert"><p>{openError.message}</p><button type="button" onClick={() => void handleOpenTrip(openError.tripId)}>Retry opening Trip</button></div>}
@@ -277,7 +287,7 @@ export function ProfileScreen({
     </div>}
     {viewMode === 'home' && <section className="card profile-card" aria-labelledby="home-heading">
       <p className="eyebrow wordmark">DeTour</p>
-      <h1 id="home-heading">Home</h1>
+      <h1 id="home-heading" tabIndex={-1}>Home</h1>
       <p>Start a Trip from airfare, stay, or a full plan.</p>
       <EmptyProfileState onStartPlanTrip={() => startCreateTrip('PLAN_TRIP')} onStartAirfare={() => startCreateTrip('AIRFARE')} onStartStay={() => startCreateTrip('STAY')} />
       {activeTrip && <button type="button" className="primary" onClick={() => void handleOpenTrip(activeTrip.id)}>Return to {activeTrip.label}</button>}

@@ -52,6 +52,13 @@ export function TripCreateModal({isOpen, mode = 'PLAN_TRIP', onClose, onSuccess}
       }
       previousActiveElement.current = null;
     }
+    return () => {
+      const previous = previousActiveElement.current;
+      if (!previous) return;
+      if (document.body.contains(previous)) previous.focus();
+      else document.querySelector<HTMLElement>('#workspace-heading, #profile-heading, #home-heading, h1, h2')?.focus();
+      previousActiveElement.current = null;
+    };
   }, [isOpen]);
 
   useEffect(() => {

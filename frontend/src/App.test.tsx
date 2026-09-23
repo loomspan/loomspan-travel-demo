@@ -22,6 +22,16 @@ describe('App identity experience', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/profile', expect.objectContaining({credentials: 'same-origin'}));
   });
 
+  it('moves focus to Home and Profile headings when primary navigation changes views', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(json(200, {email: 'ada@example.test', upcoming: [], past: []})));
+    const user = userEvent.setup(); render(<App />);
+    await screen.findByRole('heading', {name: 'Your profile'});
+    await user.click(screen.getByRole('button', {name: 'Home'}));
+    await waitFor(() => expect(screen.getByRole('heading', {name: 'Home'})).toHaveFocus());
+    await user.click(screen.getByRole('button', {name: 'Profile'}));
+    await waitFor(() => expect(screen.getByRole('heading', {name: 'Your profile'})).toHaveFocus());
+  });
+
   it('registers, logs out, and logs in again without browser persistence', async () => {
     fetchMock.mockResolvedValueOnce(json(401, {code: 'UNAUTHENTICATED'}))
       .mockResolvedValueOnce(json(201, {email: 'ada@example.test'}))
@@ -52,10 +62,23 @@ describe('App identity experience', () => {
     await screen.findByRole('heading', {name: 'Welcome back'});
     await user.type(screen.getByLabelText('Password'), 'aaaaaaaaaaaa');
     await user.click(screen.getByRole('button', {name: 'Register'}));
+    expect(screen.getByRole('heading', {name: 'Create your account'})).toHaveFocus();
     expect(screen.getByLabelText('Password')).toHaveValue('');
     await user.type(screen.getByLabelText('Password'), 'bbbbbbbbbbbb');
     await user.click(screen.getByRole('button', {name: 'Log in form'}));
     expect(screen.getByLabelText('Password')).toHaveValue('');
+  });
+
+  it('focuses an actionable validation summary with links to invalid registration fields', async () => {
+    fetchMock.mockResolvedValueOnce(json(401, {code: 'UNAUTHENTICATED'}));
+    const user = userEvent.setup(); render(<App />);
+    await user.click(await screen.findByRole('button', {name: 'Register'}));
+    await user.click(screen.getByRole('button', {name: 'Create account'}));
+    const summary = await screen.findByRole('alert');
+    expect(summary).toHaveFocus();
+    expect(within(summary).getByRole('link', {name: /enter your email address/i})).toHaveAttribute('href', '#email');
+    expect(screen.getByLabelText('Email address')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Password')).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('introduces DeTour on both public account forms and keeps clear actions', async () => {

@@ -1300,6 +1300,9 @@ describe('Progressive Trip Builder Experience', () => {
 
     await user.click(screen.getByRole('button', {name: 'Change flight'}));
     expect(await screen.findByText('SkyWays • #SK101')).toBeInTheDocument();
+    expect(screen.getByText(/Departure: PDX.*March 10, 2027.*America\/Los_Angeles/)).toBeInTheDocument();
+    expect(screen.getByText(/Arrival: SFO.*March 10, 2027.*America\/Los_Angeles/)).toBeInTheDocument();
+    expect(screen.getByText(/Departure: SFO.*March 14, 2027.*America\/Los_Angeles/)).toBeInTheDocument();
 
     // Trigger conflict by failing a mutation, which reveals Reload from server
     fetchMock.mockResolvedValueOnce(

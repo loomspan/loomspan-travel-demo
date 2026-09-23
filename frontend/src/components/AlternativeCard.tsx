@@ -126,6 +126,9 @@ export function AlternativeCard({
             {!alternative.tally.isOverBudget && alternative.tally.remainingBudgetCents !== null && <div><span>Budget remaining</span><strong>{formatCents(alternative.tally.remainingBudgetCents)} USD</strong></div>}
           </div>
         )}
+        {!alternative.tally && hasSelections && (
+          <p className="hint" role="status">Itinerary totals unavailable. Reopen this Trip to refresh prices before booking.</p>
+        )}
       </div>
 
       <div className="alternative-card-actions">

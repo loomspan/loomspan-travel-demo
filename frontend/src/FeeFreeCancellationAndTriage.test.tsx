@@ -423,11 +423,13 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
 
     const triageDialog = await screen.findByRole('dialog', {name: /reservation canceled/i});
     const doneBtn = within(triageDialog).getByRole('button', {name: /done for now/i});
+    expect(triageDialog).toContainElement(document.activeElement as HTMLElement);
     await user.click(doneBtn);
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog', {name: /reservation canceled/i})).not.toBeInTheDocument();
     });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', {name: trip.label})));
   });
 
   // Test 6: Trip deletion vs trip cancellation gating based on hasBookingHistory

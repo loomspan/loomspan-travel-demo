@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import type {TripResponse, BookingResponse} from '../api/tripsApi';
-import {formatCents} from './ItinerarySummaryTally';
+import {formatCents, formatTallyCents} from './ItinerarySummaryTally';
 
 export type BookingConfirmationViewProps = {
   trip: TripResponse;
@@ -46,7 +46,7 @@ export function BookingConfirmationView({
           <span className="success-icon" aria-hidden="true">✓</span>
           <div>
             <p className="eyebrow">RESERVATION COMPLETE</p>
-            <h2 id="confirmation-heading" className="confirmation-title">Booking Confirmed!</h2>
+            <h2 id="confirmation-heading" className="confirmation-title" tabIndex={-1}>Booking Confirmed!</h2>
             <p className="confirmation-booking-ref">
               Booking Reference: <strong className="ref-code">{booking.bookingReference}</strong>
             </p>
@@ -140,9 +140,9 @@ export function BookingConfirmationView({
         <div className="confirmation-financial-summary">
           <h4 className="financial-heading">Cost breakdown <span className="currency-note">(USD)</span></h4>
           <div className="financial-rows">
-            <div className="financial-row"><span>Airfare Total</span><span>{selections?.airfare ? formatCents(tally?.airfareTotalCents ?? 0) : 'Not selected'}</span></div>
-            <div className="financial-row"><span>Stay Total</span><span>{selections?.stay ? formatCents(tally?.stayTotalCents ?? 0) : 'Not selected'}</span></div>
-            <div className="financial-row"><span>Rental Car Total</span><span>{selections?.rental ? formatCents(tally?.rentalTotalCents ?? 0) : 'Not selected'}</span></div>
+            <div className="financial-row"><span>Airfare Total</span><span>{selections?.airfare ? formatTallyCents(tally?.airfareTotalCents) : 'Not selected'}</span></div>
+            <div className="financial-row"><span>Stay Total</span><span>{selections?.stay ? formatTallyCents(tally?.stayTotalCents) : 'Not selected'}</span></div>
+            <div className="financial-row"><span>Rental Car Total</span><span>{selections?.rental ? formatTallyCents(tally?.rentalTotalCents) : 'Not selected'}</span></div>
             <div className="financial-row total-row">
               <strong>Grand Total</strong>
               <strong className="grand-total-value">{formatCents(booking.grandTotalCents)}</strong>

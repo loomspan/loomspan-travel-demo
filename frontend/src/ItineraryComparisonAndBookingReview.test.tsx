@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import {TripWorkspace} from './components/TripWorkspace';
 import {ItineraryComparisonView} from './components/ItineraryComparisonView';
 import {BookingReviewView} from './components/BookingReviewView';
+import {ProfileScreen} from './components/ProfileScreen';
 import {tripsApi, type TripResponse, type AlternativeResponse, type BookingResponse} from './api/tripsApi';
 import {IdentityApiError} from './api/identityApi';
 
@@ -222,6 +223,33 @@ describe('Itinerary Comparison and Booking Selection', () => {
     document.cookie = 'detour_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
   });
 
+  it('focuses a retained comparison view when returning from Home', async () => {
+    const trip = createMockTripWithPlanned(2);
+    vi.spyOn(tripsApi, 'getTrip').mockResolvedValue(trip);
+    const user = userEvent.setup();
+    render(<ProfileScreen
+      email="ada@example.test"
+      upcoming={[{id: trip.id, label: trip.label, destinationKey: trip.destinationKey,
+        destinationName: trip.destinationName, startDate: trip.startDate, endDate: trip.endDate,
+        version: trip.version, temporalStatus: 'UPCOMING', draftCount: 0, plannedCount: 2,
+        expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: []}]}
+      onLogout={async () => {}}
+      logoutPending={false}
+      onPasswordChange={async () => {}}
+      onFailure={() => {}}
+    />);
+    await user.click(screen.getByRole('button', {name: `Open trip ${trip.label}`}));
+    const choices = screen.getAllByRole('checkbox', {name: /select for comparison/i});
+    await user.click(choices[0]);
+    await user.click(choices[1]);
+    await user.click(screen.getByRole('button', {name: /compare selected itineraries/i}));
+    await waitFor(() => expect(screen.getByRole('heading', {name: 'Comparing 2 Planned itineraries'})).toHaveFocus());
+    await user.click(screen.getByRole('button', {name: 'Home'}));
+    await waitFor(() => expect(screen.getByRole('heading', {name: 'Home'})).toHaveFocus());
+    await user.click(screen.getByRole('button', {name: `Trip: ${trip.label}`}));
+    await waitFor(() => expect(screen.getByRole('heading', {name: 'Comparing 2 Planned itineraries'})).toHaveFocus());
+  });
+
   // AC 1: Enforces 2-to-3 planned alternative selection constraint and enables comparison launch
   it('enforces 2-to-3 planned alternative selection constraint and enables comparison launch', async () => {
     const user = userEvent.setup();
@@ -335,9 +363,9 @@ describe('Itinerary Comparison and Booking Selection', () => {
     // Comparison view rendered
     expect(screen.getByRole('heading', {name: /comparing 2 planned itineraries/i})).toBeInTheDocument();
 
-    // Semantic grid / table elements
-    const grid = screen.getByRole('grid', {name: /itinerary comparison table/i});
-    expect(grid).toBeInTheDocument();
+    // Native table semantics retain row and column headers.
+    const grid = screen.getByRole('table', {name: /itinerary comparison table/i});
+    expect(grid).not.toHaveAttribute('role', 'grid');
 
     // Column headers for each alternative
     expect(within(grid).getByText(/planned itinerary #1/i)).toBeInTheDocument();
@@ -397,6 +425,10 @@ describe('Itinerary Comparison and Booking Selection', () => {
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
     expect(tabs[1]).toHaveAttribute('aria-selected', 'false');
     expect(tabs[2]).toHaveAttribute('aria-selected', 'false');
+    for (const tab of tabs) {
+      expect(document.getElementById(tab.getAttribute('aria-controls')!)).toBeInTheDocument();
+    }
+    expect(tabs.filter((tab) => tab.tabIndex === 0)).toHaveLength(1);
 
     // Live region announces Tab 1
     const liveRegion = screen.getByRole('status');
@@ -406,6 +438,8 @@ describe('Itinerary Comparison and Booking Selection', () => {
     tabs[0].focus();
     await user.keyboard('{ArrowRight}');
     expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
+    expect(document.activeElement).toBe(tabs[1]);
+    expect(document.getElementById(tabs[1].getAttribute('aria-controls')!)).toHaveAttribute('role', 'tabpanel');
     expect(liveRegion).toHaveTextContent(/showing itinerary 2 of 3: planned itinerary planned-/i);
 
     // ArrowRight again moves to Tab 3
@@ -473,10 +507,12 @@ describe('Itinerary Comparison and Booking Selection', () => {
     await user.click(checkboxes[0]);
     await user.click(checkboxes[1]);
     await user.click(screen.getByRole('button', {name: /compare selected itineraries/i}));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', {name: /comparing 2 planned itineraries/i})));
 
     // In comparison view, click "Select for Booking Review" on Alternative 1
     const reviewButtons = screen.getAllByRole('button', {name: /select alternative planned-1 for booking review/i});
     await user.click(reviewButtons[0]);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', {name: /review itinerary & component snapshots/i})));
 
     // Booking Review View rendered
     expect(screen.getByRole('heading', {name: /review itinerary & component snapshots/i})).toBeInTheDocument();
@@ -514,6 +550,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     const backBtn = screen.getByRole('button', {name: /← back to comparison/i});
     await user.click(backBtn);
     expect(screen.getByRole('heading', {name: /comparing 2 planned itineraries/i})).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', {name: /comparing 2 planned itineraries/i})));
   });
 
   // AC 5: Transitions from standalone planned alternative card to booking review screen and returns to workspace
@@ -546,8 +583,8 @@ describe('Itinerary Comparison and Booking Selection', () => {
     expect(screen.getByRole('heading', {name: /trip details & travelers/i})).toBeInTheDocument();
   });
 
-  // AC 6: Maintains WCAG AA compliant contrast classes and accessible ARIA table/grid semantics in comparison matrix
-  it('maintains WCAG AA compliant contrast classes and accessible ARIA table/grid semantics in comparison matrix', async () => {
+  // Text-bearing budget states and native table semantics.
+  it('keeps text-bearing budget states and native table semantics in comparison matrix', async () => {
     const trip = createMockTripWithPlanned(2);
 
     render(
@@ -569,11 +606,60 @@ describe('Itinerary Comparison and Booking Selection', () => {
     expect(overageBadgeEl).toHaveClass('badge-warning');
     expect(overageBadgeEl).toHaveAttribute('role', 'alert');
 
-    // Grid table and column headers
-    const grid = screen.getByRole('grid', {name: /itinerary comparison table/i});
+    // Native table and column headers
+    const grid = screen.getByRole('table', {name: /itinerary comparison table/i});
     expect(grid).toBeInTheDocument();
     const colHeaders = within(grid).getAllByRole('columnheader');
     expect(colHeaders.length).toBeGreaterThanOrEqual(3); // Attribute label + 2 alternatives
+  });
+
+  it('shows endpoint-local dates in comparison and review, including missing legacy times', () => {
+    const trip = createMockTripWithPlanned(1);
+    trip.destinationKey = 'destination-muc';
+    trip.destinationName = 'Munich';
+    const airfare = trip.alternatives[0].selections.airfare!;
+    airfare.outboundDepartureTime = '2027-03-05T23:00:00Z';
+    airfare.outboundArrivalTime = '2027-03-06T18:00:00Z';
+    airfare.outboundArrivalTimeZone = 'Europe/Berlin';
+    airfare.returnArrivalTime = null;
+    const comparison = render(<ItineraryComparisonView trip={trip} alternatives={trip.alternatives} onBack={() => {}} onSelectForBookingReview={() => {}} />);
+    expect(screen.getAllByText(/Departure: PDX.*March 5, 2027.*America\/Los_Angeles/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Arrival: MUC.*March 6, 2027.*Europe\/Berlin/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Arrival: PDX.*Schedule unavailable/).length).toBeGreaterThan(0);
+    comparison.unmount();
+    render(<BookingReviewView trip={trip} alternative={trip.alternatives[0]} returnTarget="workspace" onBack={() => {}} />);
+    expect(screen.getByText(/Arrival: MUC.*March 6, 2027.*Europe\/Berlin/)).toBeInTheDocument();
+    expect(screen.getByText(/Arrival: PDX.*Schedule unavailable/)).toBeInTheDocument();
+  });
+
+  it('does not present a missing server tally as a zero-price itinerary', () => {
+    const trip = createMockTripWithPlanned(1);
+    trip.alternatives[0].tally = undefined;
+    render(<ItineraryComparisonView trip={trip} alternatives={trip.alternatives} onBack={() => {}} onSelectForBookingReview={() => {}} />);
+    expect(screen.getAllByText('Total unavailable').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Budget position unavailable').length).toBeGreaterThan(0);
+    expect(screen.queryByText('$0.00')).not.toBeInTheDocument();
+  });
+
+  it('does not describe an unbudgeted itinerary as within budget', () => {
+    const trip = createMockTripWithPlanned(1);
+    trip.budgetCents = null;
+    trip.alternatives[0].tally = {...trip.alternatives[0].tally!, remainingBudgetCents: null, budgetOverageCents: null, isOverBudget: false};
+    render(<ItineraryComparisonView trip={trip} alternatives={trip.alternatives} onBack={() => {}} onSelectForBookingReview={() => {}} />);
+    expect(screen.getAllByText('No budget set').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/within budget/i)).not.toBeInTheDocument();
+  });
+
+  it('prevents booking when the authoritative tally is unavailable', async () => {
+    const trip = createMockTripWithPlanned(1);
+    trip.alternatives[0].tally = undefined;
+    const createBooking = vi.spyOn(tripsApi, 'createBooking');
+    render(<BookingReviewView trip={trip} alternative={trip.alternatives[0]} returnTarget="workspace" onBack={() => {}} />);
+    const confirm = screen.getByRole('button', {name: 'Confirm Booking'});
+    expect(confirm).toBeDisabled();
+    expect(confirm).toHaveAccessibleDescription(/total unavailable.*refresh prices before booking/i);
+    await userEvent.setup().click(confirm);
+    expect(createBooking).not.toHaveBeenCalled();
   });
 
   // AC 1 & 2: Handles interactive booking submission with pending state and transitions to confirmation

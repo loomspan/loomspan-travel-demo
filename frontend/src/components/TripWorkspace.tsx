@@ -203,6 +203,23 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
   const [reviewReturnView, setReviewReturnView] = useState<'workspace' | 'compare'>('workspace');
 
   useEffect(() => {
+    const headingId = {
+      workspace: 'workspace-heading', compare: 'comparison-heading',
+      'booking-review': 'booking-review-heading', 'booking-confirmation': 'confirmation-heading',
+    }[workspaceView];
+    const timer = window.setTimeout(() => document.getElementById(headingId)?.focus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [workspaceView]);
+
+  const scrollToIssue = (element: HTMLElement) => {
+    if (typeof element.scrollIntoView === 'function') {
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+      element.scrollIntoView({behavior: reduceMotion ? 'instant' : 'smooth', block: 'center'});
+    }
+    element.focus();
+  };
+
+  useEffect(() => {
     if (!hasBookingHistory || initialActiveBooking !== undefined) {
       return;
     }
@@ -261,10 +278,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     if (highlightedSlot === 'rental' && rentalMode !== 'hidden') {
       const el = document.getElementById('rental-slot-heading');
       if (el && document.activeElement !== el) {
-        if (typeof el.scrollIntoView === 'function') {
-          el.scrollIntoView({behavior: 'smooth', block: 'center'});
-        }
-        el.focus();
+        scrollToIssue(el);
       }
     }
   }, [highlightedSlot, rentalMode]);
@@ -1011,10 +1025,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         setTimeout(() => {
           const el = document.getElementById('rental-slot-heading');
           if (el) {
-            if (typeof el.scrollIntoView === 'function') {
-              el.scrollIntoView({behavior: 'smooth', block: 'center'});
-            }
-            el.focus();
+            scrollToIssue(el);
           }
         }, 0);
       }
@@ -1027,10 +1038,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     }
 
     if (targetEl) {
-      if (typeof targetEl.scrollIntoView === 'function') {
-        targetEl.scrollIntoView({behavior: 'smooth', block: 'center'});
-      }
-      targetEl.focus();
+      scrollToIssue(targetEl);
     }
   };
 

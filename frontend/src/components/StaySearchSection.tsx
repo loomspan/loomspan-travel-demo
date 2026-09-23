@@ -101,7 +101,7 @@ export function StaySearchSection({
       </div>
 
       {loading && <p className="hint" role="status">Searching accommodations…</p>}
-      {error && <div role="alert"><p className="field-error">{error}</p><button type="button" onClick={() => setRetryKey((value) => value + 1)}>Retry stay search</button></div>}
+      {error && <div role="alert"><p className="field-error">{error} Retry the accommodation search.</p><button type="button" onClick={() => setRetryKey((value) => value + 1)}>Retry stay search</button></div>}
 
       {!loading && !error && options.length === 0 && (
         <p className="hint">No accommodations found matching your criteria.</p>
