@@ -708,9 +708,8 @@ describe('App identity experience', () => {
 
     render(<App />);
     expect(await screen.findByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
-    const deleteBtn = screen.getByRole('button', {name: 'Delete trip San Francisco — Mar 10–14, 2027'});
-    expect(deleteBtn).toBeDisabled();
-    expect(deleteBtn).toHaveTextContent('Has booking history');
+    expect(screen.queryByRole('button', {name: 'Delete trip San Francisco — Mar 10–14, 2027'})).not.toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Cancel trip San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
   });
 
   it('handles stale trip deletion confirmation (409 STALE_CONFIRMATION) and refreshes view', async () => {
@@ -886,9 +885,8 @@ describe('App identity experience', () => {
     render(<App />);
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
-    const deleteBtn = await screen.findByRole('button', {name: 'Delete trip San Francisco — Mar 10–14, 2027'});
-    expect(deleteBtn).toBeDisabled();
-    expect(deleteBtn).toHaveTextContent('Has booking history');
+    expect(screen.queryByRole('button', {name: 'Delete trip San Francisco — Mar 10–14, 2027'})).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', {name: 'Cancel trip San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
   });
 
   it('validates dates in TripWorkspace and displays inline error', async () => {

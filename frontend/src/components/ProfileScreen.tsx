@@ -6,6 +6,7 @@ import {TripListSection} from './TripListSection';
 import {TripCreateModal} from './TripCreateModal';
 import {TripWorkspace} from './TripWorkspace';
 import {ConfirmDeleteModal, type DeleteTarget} from './ConfirmDeleteModal';
+import {CancelTripModal} from './CancelTripModal';
 import {tripsApi, type TripProfileSummary, type TripResponse, type AccommodationType} from '../api/tripsApi';
 import {IdentityApiError} from '../api/identityApi';
 
@@ -43,6 +44,9 @@ export function ProfileScreen({
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | undefined>();
+  const [cancelTripTarget, setCancelTripTarget] = useState<TripProfileSummary | null>(null);
+  const [cancelTripPending, setCancelTripPending] = useState(false);
+  const [cancelTripError, setCancelTripError] = useState<string | undefined>();
 
   // Password form state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -101,6 +105,36 @@ export function ProfileScreen({
       plannedCount: trip.plannedCount,
       hasBookingHistory: trip.hasBookingHistory,
     });
+  };
+
+  const handlePromptCancelTrip = (trip: TripProfileSummary) => {
+    setCancelTripError(undefined);
+    setCancelTripTarget(trip);
+  };
+
+  const handleConfirmCancelTrip = async () => {
+    if (!cancelTripTarget) return;
+    setCancelTripPending(true);
+    setCancelTripError(undefined);
+    try {
+      await tripsApi.cancelTrip(cancelTripTarget.id, {
+        expectedVersion: cancelTripTarget.version,
+      });
+      setCancelTripTarget(null);
+      if (onRefreshProfile) await onRefreshProfile();
+    } catch (err) {
+      if (err instanceof IdentityApiError) {
+        if (err.code === 'VERSION_CONFLICT') {
+          setCancelTripError('The trip has changed on the server. Please refresh and try again.');
+        } else {
+          setCancelTripError(err.message || 'Failed to cancel trip.');
+        }
+      } else {
+        setCancelTripError(err instanceof Error ? err.message : 'Could not cancel trip.');
+      }
+    } finally {
+      setCancelTripPending(false);
+    }
   };
 
   const activeTripSummary = [...upcoming, ...past].find((t) => t.id === activeTrip?.id);
@@ -167,6 +201,7 @@ export function ProfileScreen({
     const temporalStatus = activeTripSummary ? activeTripSummary.temporalStatus : 'UPCOMING';
     return (
       <TripWorkspace
+        key={activeTrip.id}
         initialTrip={activeTrip}
         initialEntryMode={entryContext?.mode ?? 'PLAN_TRIP'}
         initialAccommodationType={entryContext?.accommodationType}
@@ -226,6 +261,7 @@ export function ProfileScreen({
           past={past}
           onSelectTrip={(id) => void handleOpenTrip(id)}
           onDeleteTrip={handlePromptDeleteTrip}
+          onCancelTrip={handlePromptCancelTrip}
           onPlanTrip={() => setCreateModalMode('PLAN_TRIP')}
           onStartPlanTrip={() => setCreateModalMode('PLAN_TRIP')}
           onStartAirfare={() => setCreateModalMode('AIRFARE')}
@@ -288,6 +324,20 @@ export function ProfileScreen({
         errorMessage={deleteError}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => void handleConfirmDelete()}
+      />
+
+      {/* Cancel Trip Confirmation Modal */}
+      <CancelTripModal
+        isOpen={Boolean(cancelTripTarget)}
+        tripLabel={cancelTripTarget?.label ?? ''}
+        hasActiveBooking={Boolean(cancelTripTarget && cancelTripTarget.bookedCount > 0)}
+        pending={cancelTripPending}
+        errorMessage={cancelTripError}
+        onClose={() => {
+          setCancelTripTarget(null);
+          setCancelTripError(undefined);
+        }}
+        onConfirm={() => void handleConfirmCancelTrip()}
       />
     </section>
   );

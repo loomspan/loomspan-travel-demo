@@ -419,4 +419,34 @@ describe('tripsApi client', () => {
       body: undefined,
     });
   });
+
+  it('cancelBooking and cancelTrip API client methods send expectedVersion and CSRF headers', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, {id: 'trip-1', version: 2, status: 'ACTIVE'}));
+
+    const bookingResult = await tripsApi.cancelBooking('trip-1', 'booking-1', {expectedVersion: 1});
+    expect(bookingResult.version).toBe(2);
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/bookings/booking-1/cancel', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-XSRF-TOKEN': 'secret-token',
+      },
+      body: JSON.stringify({expectedVersion: 1}),
+    });
+
+    fetchMock.mockResolvedValueOnce(json(200, {id: 'trip-1', version: 3, status: 'CANCELED'}));
+
+    const tripResult = await tripsApi.cancelTrip('trip-1', {expectedVersion: 2});
+    expect(tripResult.status).toBe('CANCELED');
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/cancel', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-XSRF-TOKEN': 'secret-token',
+      },
+      body: JSON.stringify({expectedVersion: 2}),
+    });
+  });
 });

@@ -3,6 +3,7 @@ import type {AlternativeResponse} from '../api/tripsApi';
 type AlternativeCardProps = {
   alternative: AlternativeResponse;
   tripExpired?: boolean;
+  tripCanceled?: boolean;
   hasBookingHistory?: boolean;
   promotionPending?: boolean;
   isSelectedForCompare?: boolean;
@@ -21,6 +22,7 @@ type AlternativeCardProps = {
 export function AlternativeCard({
   alternative,
   tripExpired = false,
+  tripCanceled = false,
   hasBookingHistory = false,
   promotionPending = false,
   isSelectedForCompare = false,
@@ -58,6 +60,7 @@ export function AlternativeCard({
                 : 'Planned itinerary (read-only)'}
             </span>
             {isBooked && <span className="badge badge-booked">BOOKED</span>}
+            {tripCanceled && <span className="badge badge-canceled">Canceled Trip</span>}
             {tripExpired && <span className="badge badge-expired">Expired</span>}
           </div>
           <h4 id={`alt-heading-${alternative.id}`} className="alternative-card-title">
@@ -65,7 +68,7 @@ export function AlternativeCard({
           </h4>
           <span className="alternative-id">ID: {alternative.id.slice(0, 8)}…</span>
         </div>
-        {isPlanned && onToggleCompare && (
+        {isPlanned && !tripCanceled && onToggleCompare && (
           <div className="compare-checkbox-wrapper">
             <label className="checkbox-label" htmlFor={`compare-select-${alternative.id}`}>
               <input
@@ -81,11 +84,15 @@ export function AlternativeCard({
       </div>
 
       <div className="alternative-card-content">
-        {isPlanned && (
+        {tripCanceled ? (
+          <p className="hint read-only-hint">
+            This trip is canceled. All alternatives are read-only.
+          </p>
+        ) : isPlanned ? (
           <p className="hint read-only-hint">
             This planned alternative is snapshot-locked and read-only. Use &ldquo;Duplicate to draft&rdquo; to make modifications.
           </p>
-        )}
+        ) : null}
 
         {hasSelections ? (
           <div className="alternative-selections">
@@ -111,7 +118,21 @@ export function AlternativeCard({
       </div>
 
       <div className="alternative-card-actions">
-        {isDraft ? (
+        {tripCanceled ? (
+          <>
+            {isBooked && onViewBookingDetails && (
+              <button
+                type="button"
+                className="primary-button view-booking-details-btn"
+                onClick={onViewBookingDetails}
+                aria-label={`View booking details for itinerary ${alternative.id}`}
+              >
+                View Booking Details
+              </button>
+            )}
+            <span className="hint read-only-hint">Read-only (trip canceled)</span>
+          </>
+        ) : isDraft ? (
           <>
             <button
               type="button"

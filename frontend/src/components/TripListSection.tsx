@@ -5,6 +5,7 @@ type TripListSectionProps = {
   past: TripProfileSummary[];
   onSelectTrip: (tripId: string) => void;
   onDeleteTrip: (trip: TripProfileSummary) => void;
+  onCancelTrip?: (trip: TripProfileSummary) => void;
   onPlanTrip?: () => void;
   onStartPlanTrip?: () => void;
   onStartAirfare?: () => void;
@@ -34,12 +35,15 @@ function TripCard({
   trip,
   onSelect,
   onDelete,
+  onCancel,
 }: {
   trip: TripProfileSummary;
   onSelect: (tripId: string) => void;
   onDelete: (trip: TripProfileSummary) => void;
+  onCancel?: (trip: TripProfileSummary) => void;
 }) {
   const isPast = trip.temporalStatus === 'PAST';
+  const isCanceled = trip.status === 'CANCELED';
 
   return (
     <article className="card trip-card" aria-labelledby={`trip-heading-${trip.id}`}>
@@ -48,6 +52,9 @@ function TripCard({
           <span className={`badge ${isPast ? 'badge-past' : 'badge-upcoming'}`}>
             {isPast ? 'Past' : 'Upcoming'}
           </span>
+          {isCanceled && (
+            <span className="badge badge-canceled">Canceled</span>
+          )}
           {trip.bookedCount > 0 && (
             <span className="badge badge-booked">BOOKED</span>
           )}
@@ -87,16 +94,47 @@ function TripCard({
       )}
 
       <div className="trip-card-actions">
-        <button
-          type="button"
-          className="text-button delete-button"
-          onClick={() => onDelete(trip)}
-          disabled={trip.hasBookingHistory}
-          title={trip.hasBookingHistory ? 'Trips with booking history cannot be deleted' : undefined}
-          aria-label={`Delete trip ${trip.label}`}
-        >
-          {trip.hasBookingHistory ? 'Has booking history' : 'Delete trip'}
-        </button>
+        {isCanceled ? (
+          <button
+            type="button"
+            className="text-button"
+            disabled
+            title="This trip has been canceled"
+            aria-label={`Trip ${trip.label} is canceled`}
+          >
+            Trip canceled
+          </button>
+        ) : trip.hasBookingHistory ? (
+          isPast || trip.expiredAlternativeCount > 0 ? (
+            <button
+              type="button"
+              className="text-button delete-button"
+              disabled
+              title="Past or expired trips cannot be canceled"
+              aria-label={`Cancel trip ${trip.label}`}
+            >
+              Cancel trip
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="text-button delete-button"
+              onClick={() => onCancel && onCancel(trip)}
+              aria-label={`Cancel trip ${trip.label}`}
+            >
+              Cancel trip
+            </button>
+          )
+        ) : (
+          <button
+            type="button"
+            className="text-button delete-button"
+            onClick={() => onDelete(trip)}
+            aria-label={`Delete trip ${trip.label}`}
+          >
+            Delete trip
+          </button>
+        )}
         <button
           type="button"
           className="primary"
@@ -115,6 +153,7 @@ export function TripListSection({
   past,
   onSelectTrip,
   onDeleteTrip,
+  onCancelTrip,
   onPlanTrip,
   onStartPlanTrip,
   onStartAirfare,
@@ -161,6 +200,7 @@ export function TripListSection({
                 trip={trip}
                 onSelect={onSelectTrip}
                 onDelete={onDeleteTrip}
+                onCancel={onCancelTrip}
               />
             ))}
           </div>
@@ -181,6 +221,7 @@ export function TripListSection({
                 trip={trip}
                 onSelect={onSelectTrip}
                 onDelete={onDeleteTrip}
+                onCancel={onCancelTrip}
               />
             ))}
           </div>

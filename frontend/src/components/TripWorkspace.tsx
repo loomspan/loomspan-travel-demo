@@ -20,6 +20,10 @@ import {DraftReadinessBanner} from './DraftReadinessBanner';
 import {BudgetOverageModal} from './BudgetOverageModal';
 import {TripRevisionModal} from './TripRevisionModal';
 import {ConfirmDeleteModal, type DeleteTarget} from './ConfirmDeleteModal';
+import {CancelBookingModal} from './CancelBookingModal';
+import {PostCancellationTriageModal} from './PostCancellationTriageModal';
+import {CancelTripModal} from './CancelTripModal';
+import {BookingHistorySection} from './BookingHistorySection';
 import {
   ItinerarySummaryTally,
   formatCents,
@@ -158,6 +162,29 @@ export function TripWorkspace({
 
   const [selectedForCompareIds, setSelectedForCompareIds] = useState<string[]>([]);
   const [compareNotification, setCompareNotification] = useState<string | undefined>();
+  const isTripCanceled = trip.status === 'CANCELED';
+
+  const [hasEverBooked, setHasEverBooked] = useState<boolean>(
+    hasBookingHistory || Boolean(initialActiveBooking) || trip.status === 'CANCELED'
+  );
+  const isInitialTrip = trip.id === initialTrip.id;
+  const effectiveHasBookingHistory = (isInitialTrip && Boolean(hasBookingHistory)) || hasEverBooked;
+
+  const [isCancelBookingModalOpen, setIsCancelBookingModalOpen] = useState(false);
+  const [cancelBookingPending, setCancelBookingPending] = useState(false);
+  const [cancelBookingError, setCancelBookingError] = useState<string | undefined>();
+
+  const [isTriageModalOpen, setIsTriageModalOpen] = useState(false);
+  const [triagePending, setTriagePending] = useState(false);
+  const [triageAction, setTriageAction] = useState<'use-alternative' | 'create-draft' | null>(null);
+  const [triageError, setTriageError] = useState<string | undefined>();
+
+  const [isCancelTripModalOpen, setIsCancelTripModalOpen] = useState(false);
+  const [cancelTripPending, setCancelTripPending] = useState(false);
+  const [cancelTripError, setCancelTripError] = useState<string | undefined>();
+
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+
   const [activeBooking, setActiveBooking] = useState<BookingResponse | null>(
     initialActiveBooking ?? null
   );
@@ -241,7 +268,14 @@ export function TripWorkspace({
   const isPromotingRef = useRef(false);
 
   const applyTripState = useCallback((t: TripResponse) => {
-    setTrip(t);
+    setTrip((prev) => {
+      if (t.id !== prev.id) {
+        setHasEverBooked(t.status === 'CANCELED');
+        setActiveBooking(null);
+        setSelectedForCompareIds([]);
+      }
+      return t;
+    });
     setDestinationKey(t.destinationKey);
     setStartDate(t.startDate);
     setEndDate(t.endDate);
@@ -342,8 +376,7 @@ export function TripWorkspace({
 
   // Autosave execution with serialization
   const executeAutosave = useCallback(async () => {
-    if (isSavingRef.current) {
-      pendingSaveRef.current = true;
+    if (isSavingRef.current || isTripCanceled) {
       return;
     }
 
@@ -970,6 +1003,8 @@ export function TripWorkspace({
 
   const handleBookingSuccess = async (booking: BookingResponse) => {
     setActiveBooking(booking);
+    setHasEverBooked(true);
+    setHistoryRefreshKey((prev) => prev + 1);
     setWorkspaceView('booking-confirmation');
     try {
       const refreshedTrip = await tripsApi.getTrip(trip.id);
@@ -977,6 +1012,128 @@ export function TripWorkspace({
       if (onTripUpdated) onTripUpdated(refreshedTrip);
     } catch {
       setTrip((prev) => ({...prev, version: prev.version + 1}));
+    }
+  };
+
+  const handlePromptCancelBooking = () => {
+    setCancelBookingError(undefined);
+    setIsCancelBookingModalOpen(true);
+  };
+
+  const handleConfirmCancelBooking = async () => {
+    if (!activeBooking) return;
+    setCancelBookingPending(true);
+    setCancelBookingError(undefined);
+    try {
+      const updatedTrip = await tripsApi.cancelBooking(trip.id, activeBooking.id, {
+        expectedVersion: trip.version,
+      });
+      applyTripState(updatedTrip);
+      setActiveBooking(null);
+      setHasEverBooked(true);
+      setHistoryRefreshKey((prev) => prev + 1);
+      setIsCancelBookingModalOpen(false);
+      setIsTriageModalOpen(true);
+      setAutosaveStatus('saved');
+      setAutosaveMessage('Reservation canceled fee-free. Inventory restored.');
+      if (onTripUpdated) onTripUpdated(updatedTrip);
+    } catch (err) {
+      if (err instanceof IdentityApiError) {
+        if (err.code === 'VERSION_CONFLICT') {
+          setCancelBookingError('The Trip has changed on the server. Please reload and try again.');
+        } else {
+          setCancelBookingError(err.message || 'Failed to cancel reservation.');
+        }
+      } else {
+        setCancelBookingError(err instanceof Error ? err.message : 'Could not cancel reservation.');
+      }
+    } finally {
+      setCancelBookingPending(false);
+    }
+  };
+
+  const handleTriageUseAlternative = async (plannedId: string) => {
+    setTriagePending(true);
+    setTriageAction('use-alternative');
+    setTriageError(undefined);
+    try {
+      const updatedTrip = await tripsApi.duplicateAlternative(trip.id, plannedId, {
+        expectedVersion: trip.version,
+      });
+      applyTripState(updatedTrip);
+      setIsTriageModalOpen(false);
+      setAutosaveStatus('saved');
+      setAutosaveMessage('Planned itinerary copied to new draft.');
+      if (onTripUpdated) onTripUpdated(updatedTrip);
+    } catch (err) {
+      if (err instanceof IdentityApiError) {
+        setTriageError(err.message || 'Could not copy alternative.');
+      } else {
+        setTriageError(err instanceof Error ? err.message : 'Could not copy alternative.');
+      }
+    } finally {
+      setTriagePending(false);
+      setTriageAction(null);
+    }
+  };
+
+  const handleTriageCreateDraft = async () => {
+    setTriagePending(true);
+    setTriageAction('create-draft');
+    setTriageError(undefined);
+    try {
+      const updatedTrip = await tripsApi.createDraft(trip.id, {
+        expectedVersion: trip.version,
+      });
+      applyTripState(updatedTrip);
+      setIsTriageModalOpen(false);
+      setAutosaveStatus('saved');
+      setAutosaveMessage('New empty draft created.');
+      if (onTripUpdated) onTripUpdated(updatedTrip);
+    } catch (err) {
+      if (err instanceof IdentityApiError) {
+        setTriageError(err.message || 'Could not create draft.');
+      } else {
+        setTriageError(err instanceof Error ? err.message : 'Could not create draft.');
+      }
+    } finally {
+      setTriagePending(false);
+      setTriageAction(null);
+    }
+  };
+
+  const handlePromptCancelTrip = () => {
+    setCancelTripError(undefined);
+    setIsCancelTripModalOpen(true);
+  };
+
+  const handleConfirmCancelTrip = async () => {
+    setCancelTripPending(true);
+    setCancelTripError(undefined);
+    try {
+      const updatedTrip = await tripsApi.cancelTrip(trip.id, {
+        expectedVersion: trip.version,
+      });
+      applyTripState(updatedTrip);
+      setActiveBooking(null);
+      setHasEverBooked(true);
+      setHistoryRefreshKey((prev) => prev + 1);
+      setIsCancelTripModalOpen(false);
+      setAutosaveStatus('saved');
+      setAutosaveMessage('Trip canceled. Alternatives are now read-only.');
+      if (onTripUpdated) onTripUpdated(updatedTrip);
+    } catch (err) {
+      if (err instanceof IdentityApiError) {
+        if (err.code === 'VERSION_CONFLICT') {
+          setCancelTripError('The Trip has changed on the server. Please reload and try again.');
+        } else {
+          setCancelTripError(err.message || 'Failed to cancel trip.');
+        }
+      } else {
+        setCancelTripError(err instanceof Error ? err.message : 'Could not cancel trip.');
+      }
+    } finally {
+      setCancelTripPending(false);
     }
   };
 
@@ -1034,16 +1191,41 @@ export function TripWorkspace({
           ← Back to all trips
         </button>
         <div style={{display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap'}}>
-          <button
-            type="button"
-            className="text-button delete-button"
-            onClick={promptDeleteTrip}
-            disabled={hasBookingHistory}
-            title={hasBookingHistory ? 'Trips with booking history cannot be deleted' : undefined}
-            aria-label={`Delete trip ${trip.label}`}
-          >
-            {hasBookingHistory ? 'Has booking history' : 'Delete trip'}
-          </button>
+          {!effectiveHasBookingHistory ? (
+            <button
+              type="button"
+              className="text-button delete-button"
+              onClick={promptDeleteTrip}
+              aria-label={`Delete trip ${trip.label}`}
+            >
+              Delete trip
+            </button>
+          ) : isTripCanceled ? (
+            <button
+              type="button"
+              className="text-button"
+              disabled
+              title="This trip has been canceled"
+              aria-label={`Trip ${trip.label} is canceled`}
+            >
+              Trip canceled
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="text-button delete-button"
+              onClick={handlePromptCancelTrip}
+              disabled={isExpired || temporalStatus === 'PAST'}
+              title={
+                isExpired || temporalStatus === 'PAST'
+                  ? 'Past or expired trips cannot be canceled'
+                  : 'Cancel this trip'
+              }
+              aria-label={`Cancel trip ${trip.label}`}
+            >
+              Cancel trip
+            </button>
+          )}
           {onLogout && (
             <button
               type="button"
@@ -1064,6 +1246,7 @@ export function TripWorkspace({
             <span className={`badge ${temporalStatus === 'PAST' ? 'badge-past' : 'badge-upcoming'}`}>
               {temporalStatus === 'PAST' ? 'Past' : 'Upcoming'}
             </span>
+            {isTripCanceled && <span className="badge badge-canceled">Canceled</span>}
             {isExpired && <span className="badge badge-expired">Expired</span>}
           </div>
           <h1 id="workspace-heading" tabIndex={-1}>{trip.label}</h1>
@@ -1096,8 +1279,28 @@ export function TripWorkspace({
         </div>
       </header>
 
+      {/* Canceled Trip Banner */}
+      {isTripCanceled && (
+        <section className="canceled-trip-banner card" aria-labelledby="canceled-trip-banner-heading">
+          <div className="canceled-trip-banner-content">
+            <h2 id="canceled-trip-banner-heading">This trip has been canceled</h2>
+            <p>
+              All reservations have been released without fees, and booking history has been permanently preserved.
+              All alternatives on this trip are now read-only. You can duplicate this trip into a fresh travel plan to make new revisions.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="primary-button duplicate-canceled-trip-btn"
+            onClick={() => setIsRevisionModalOpen(true)}
+          >
+            Duplicate into a new Trip
+          </button>
+        </section>
+      )}
+
       {/* Active Booking Banner */}
-      {activeBooking && (
+      {activeBooking && !isTripCanceled && (
         <section className="active-booking-banner card" aria-labelledby="active-booking-heading">
           <div className="active-booking-header">
             <div>
@@ -1110,13 +1313,24 @@ export function TripWorkspace({
                 Booking Reference: <strong className="ref-code">{activeBooking.bookingReference}</strong>
               </p>
             </div>
-            <button
-              type="button"
-              className="primary-button view-details-action-btn"
-              onClick={() => setWorkspaceView('booking-confirmation')}
-            >
-              View Booking Details
-            </button>
+            <div className="active-booking-actions" style={{display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap'}}>
+              <button
+                type="button"
+                className="primary-button view-details-action-btn"
+                onClick={() => setWorkspaceView('booking-confirmation')}
+              >
+                View Booking Details
+              </button>
+              <button
+                type="button"
+                className="secondary-action-button cancel-booking-btn"
+                onClick={handlePromptCancelBooking}
+                disabled={isExpired || temporalStatus === 'PAST'}
+                title={isExpired || temporalStatus === 'PAST' ? 'Past or expired bookings cannot be canceled' : undefined}
+              >
+                Cancel Booking
+              </button>
+            </div>
           </div>
           <div className="active-booking-meta">
             <span>
@@ -1158,7 +1372,7 @@ export function TripWorkspace({
             <button
               type="button"
               className="primary-button promote-draft-btn"
-              disabled={isExpired || promotionPending}
+              disabled={isExpired || promotionPending || isTripCanceled}
               onClick={() => void handlePromoteDraft(activeDraft.id, activeDraft.version)}
               aria-label="Save as Planned Itinerary"
             >
@@ -1182,7 +1396,7 @@ export function TripWorkspace({
               onCancelSearch={() =>
                 setAirfareMode(activeDraft.selections.airfare ? 'selected' : 'empty')
               }
-              pending={componentMutationPending}
+              pending={componentMutationPending || isTripCanceled}
             />
 
             <StaySlot
@@ -1199,7 +1413,7 @@ export function TripWorkspace({
               onCancelSearch={() =>
                 setStayMode(activeDraft.selections.stay ? 'selected' : 'empty')
               }
-              pending={componentMutationPending}
+              pending={componentMutationPending || isTripCanceled}
             />
 
             <RentalSlot
@@ -1214,10 +1428,10 @@ export function TripWorkspace({
               onCancelSearch={() =>
                 setRentalMode(activeDraft.selections.rental ? 'selected' : 'hidden')
               }
-              pending={componentMutationPending}
+              pending={componentMutationPending || isTripCanceled}
             />
 
-            {(rentalMode === 'hidden' || (rentalMode === 'selected' && !activeDraft.selections.rental)) && (
+            {(rentalMode === 'hidden' || (rentalMode === 'selected' && !activeDraft.selections.rental)) && !isTripCanceled && (
               <div className="add-car-container">
                 <button
                   type="button"
@@ -1237,7 +1451,7 @@ export function TripWorkspace({
       <section className="workspace-section" aria-labelledby="shared-details-heading">
         <div className="section-header">
           <h3 id="shared-details-heading">Trip Details &amp; Travelers</h3>
-          {hasPlanned && (
+          {hasPlanned && !isTripCanceled && (
             <button
               type="button"
               className="text-button revise-button"
@@ -1248,10 +1462,15 @@ export function TripWorkspace({
           )}
         </div>
 
-        {hasPlanned && (
+        {hasPlanned && !isTripCanceled && (
           <p className="hint read-only-hint">
             Trips with Planned alternatives cannot change destination, dates, or traveler count in place.
             Use &ldquo;Revise Trip&rdquo; to create a new version.
+          </p>
+        )}
+        {isTripCanceled && (
+          <p className="hint read-only-hint">
+            This trip is canceled. Trip details are read-only.
           </p>
         )}
 
@@ -1262,7 +1481,7 @@ export function TripWorkspace({
               <select
                 id="workspace-destination"
                 value={destinationKey}
-                disabled={hasPlanned}
+                disabled={hasPlanned || isTripCanceled}
                 onChange={(e) => {
                   setDestinationKey(e.target.value);
                   setBudgetOverageAcknowledged(false);
@@ -1282,7 +1501,7 @@ export function TripWorkspace({
                 type="date"
                 id="workspace-start-date"
                 value={startDate}
-                disabled={hasPlanned}
+                disabled={hasPlanned || isTripCanceled}
                 min="2027-03-01"
                 max="2027-03-31"
                 onChange={(e) => {
@@ -1299,7 +1518,7 @@ export function TripWorkspace({
                 type="date"
                 id="workspace-end-date"
                 value={endDate}
-                disabled={hasPlanned}
+                disabled={hasPlanned || isTripCanceled}
                 min="2027-03-01"
                 max="2027-03-31"
                 onChange={(e) => {
@@ -1327,6 +1546,7 @@ export function TripWorkspace({
                 step="0.01"
                 placeholder="e.g. 2500.00"
                 value={budgetDollars}
+                disabled={isTripCanceled}
                 onChange={(e) => {
                   setBudgetDollars(e.target.value);
                   setBudgetOverageAcknowledged(false);
@@ -1347,7 +1567,7 @@ export function TripWorkspace({
                 id="workspace-traveler-count"
                 min="1"
                 max="8"
-                disabled={hasPlanned}
+                disabled={hasPlanned || isTripCanceled}
                 value={travelerCountInput}
                 onChange={(e) => {
                   const raw = e.target.value;
@@ -1382,7 +1602,7 @@ export function TripWorkspace({
                       id={`traveler-age-${i}`}
                       min="0"
                       max="120"
-                      disabled={hasPlanned}
+                      disabled={hasPlanned || isTripCanceled}
                       placeholder="Age"
                       value={travelerAges[i] ?? ''}
                       onChange={(e) => updateTravelerAge(i, e.target.value)}
@@ -1442,13 +1662,15 @@ export function TripWorkspace({
                 )}
               </>
             )}
-            <button
-              type="button"
-              className="primary create-empty-draft-btn"
-              onClick={() => void handleCreateEmptyDraft()}
-            >
-              Create empty draft
-            </button>
+            {!isTripCanceled && (
+              <button
+                type="button"
+                className="primary create-empty-draft-btn"
+                onClick={() => void handleCreateEmptyDraft()}
+              >
+                Create empty draft
+              </button>
+            )}
           </div>
         </div>
 
@@ -1477,6 +1699,8 @@ export function TripWorkspace({
                 key={alt.id}
                 alternative={alt}
                 tripExpired={isExpired}
+                tripCanceled={isTripCanceled}
+                hasBookingHistory={effectiveHasBookingHistory}
                 promotionPending={promotionPending}
                 isSelectedForCompare={selectedForCompareIds.includes(alt.id)}
                 isBooked={activeBooking?.plannedItineraryId === alt.id}
@@ -1495,17 +1719,75 @@ export function TripWorkspace({
         )}
       </section>
 
+      {/* Booking History Section */}
+      {(effectiveHasBookingHistory || isTripCanceled) && (
+        <BookingHistorySection
+          tripId={trip.id}
+          refreshKey={historyRefreshKey}
+        />
+      )}
+
       {/* Revision modal */}
       {isRevisionModalOpen && (
         <TripRevisionModal
           isOpen={isRevisionModalOpen}
           trip={trip}
+          mode={isTripCanceled ? 'duplicate' : 'revise'}
           onClose={() => setIsRevisionModalOpen(false)}
           onSuccess={(newTrip) => {
             applyTripState(newTrip);
             setIsRevisionModalOpen(false);
             if (onTripUpdated) onTripUpdated(newTrip);
           }}
+        />
+      )}
+
+      {/* Cancel booking modal */}
+      {isCancelBookingModalOpen && activeBooking && (
+        <CancelBookingModal
+          isOpen={isCancelBookingModalOpen}
+          tripLabel={trip.label}
+          bookingReference={activeBooking.bookingReference}
+          pending={cancelBookingPending}
+          errorMessage={cancelBookingError}
+          onClose={() => {
+            setIsCancelBookingModalOpen(false);
+            setCancelBookingError(undefined);
+          }}
+          onConfirm={() => void handleConfirmCancelBooking()}
+        />
+      )}
+
+      {/* Post-cancellation triage modal */}
+      {isTriageModalOpen && (
+        <PostCancellationTriageModal
+          isOpen={isTriageModalOpen}
+          plannedAlternatives={trip.planned || []}
+          pending={triagePending}
+          pendingAction={triageAction}
+          errorMessage={triageError}
+          onUseAlternative={(plannedId) => void handleTriageUseAlternative(plannedId)}
+          onCreateDraft={() => void handleTriageCreateDraft()}
+          onClose={() => {
+            setIsTriageModalOpen(false);
+            setTriageError(undefined);
+          }}
+        />
+      )}
+
+      {/* Cancel trip modal */}
+      {isCancelTripModalOpen && (
+        <CancelTripModal
+          isOpen={isCancelTripModalOpen}
+          tripLabel={trip.label}
+          hasActiveBooking={Boolean(activeBooking)}
+          pending={cancelTripPending}
+          errorMessage={cancelTripError}
+          onClose={() => {
+            setIsCancelTripModalOpen(false);
+            setCancelTripError(undefined);
+          }}
+          onConfirm={() => void handleConfirmCancelTrip()}
         />
       )}
 

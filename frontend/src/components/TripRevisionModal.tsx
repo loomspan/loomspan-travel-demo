@@ -5,6 +5,10 @@ import {IdentityApiError} from '../api/identityApi';
 type TripRevisionModalProps = {
   isOpen: boolean;
   trip: TripResponse;
+  mode?: 'revise' | 'duplicate';
+  title?: string;
+  submitLabel?: string;
+  hint?: string;
   onClose: () => void;
   onSuccess: (newTrip: TripResponse) => void;
 };
@@ -27,13 +31,32 @@ function validateDates(startDate: string, endDate: string): string | undefined {
   return undefined;
 }
 
-export function TripRevisionModal({isOpen, trip, onClose, onSuccess}: TripRevisionModalProps) {
+export function TripRevisionModal({
+  isOpen,
+  trip,
+  mode,
+  title,
+  submitLabel,
+  hint,
+  onClose,
+  onSuccess,
+}: TripRevisionModalProps) {
+  const isDuplicate = mode === 'duplicate' || trip.status === 'CANCELED';
+  const displayTitle = title ?? (isDuplicate ? 'Duplicate into a new Trip' : 'Revise trip');
+  const displaySubmitLabel =
+    submitLabel ?? (isDuplicate ? 'Duplicate trip' : 'Create revised trip');
+  const displayHint =
+    hint ??
+    (isDuplicate
+      ? 'Duplicate this trip into a fresh active travel plan.'
+      : 'Because this trip has Planned alternatives, modifying destination, dates, or travelers creates a new revised Trip copy.');
+
   const [destinationKey, setDestinationKey] = useState(trip.destinationKey);
   const [startDate, setStartDate] = useState(trip.startDate);
   const [endDate, setEndDate] = useState(trip.endDate);
   const [travelerCount, setTravelerCount] = useState(String(trip.travelerCount));
   const [selectedPlannedIds, setSelectedPlannedIds] = useState<string[]>(() =>
-    trip.planned.map((p) => p.id)
+    (trip.planned || []).map((p) => p.id)
   );
   const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -159,15 +182,13 @@ export function TripRevisionModal({isOpen, trip, onClose, onSuccess}: TripRevisi
         ref={modalRef}
       >
         <div className="modal-header">
-          <h2 id="revise-trip-heading">Revise trip</h2>
+          <h2 id="revise-trip-heading">{displayTitle}</h2>
           <button type="button" className="text-button" onClick={onClose} aria-label="Close dialog">
             ✕
           </button>
         </div>
 
-        <p className="hint">
-          Because this trip has Planned alternatives, modifying destination, dates, or travelers creates a new revised Trip copy.
-        </p>
+        <p className="hint">{displayHint}</p>
 
         {globalError && (
           <div className="field-error" role="alert" style={{marginBottom: '1rem'}}>
@@ -244,19 +265,27 @@ export function TripRevisionModal({isOpen, trip, onClose, onSuccess}: TripRevisi
           <div className="field">
             <fieldset>
               <legend>Planned alternatives to copy</legend>
-              <p className="hint">Selected itineraries will be revalidated and added as Drafts in the new trip:</p>
-              {trip.planned.map((p) => (
-                <label key={p.id} className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={selectedPlannedIds.includes(p.id)}
-                    onChange={() => togglePlannedId(p.id)}
-                  />
-                  <span>Planned snapshot ({p.id.slice(0, 8)}…)</span>
-                </label>
-              ))}
-              {fieldErrors.sourcePlanned && (
-                <p className="field-error">{fieldErrors.sourcePlanned}</p>
+              {(trip.planned || []).length === 0 ? (
+                <p className="hint read-only-hint">
+                  This trip has no planned alternatives to copy. At least one planned alternative is required to duplicate.
+                </p>
+              ) : (
+                <>
+                  <p className="hint">Selected itineraries will be revalidated and added as Drafts in the new trip:</p>
+                  {(trip.planned || []).map((p) => (
+                    <label key={p.id} className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={selectedPlannedIds.includes(p.id)}
+                        onChange={() => togglePlannedId(p.id)}
+                      />
+                      <span>Planned snapshot ({p.id.slice(0, 8)}…)</span>
+                    </label>
+                  ))}
+                  {fieldErrors.sourcePlanned && (
+                    <p className="field-error">{fieldErrors.sourcePlanned}</p>
+                  )}
+                </>
               )}
             </fieldset>
           </div>
@@ -265,8 +294,16 @@ export function TripRevisionModal({isOpen, trip, onClose, onSuccess}: TripRevisi
             <button type="button" className="text-button" onClick={onClose} disabled={pending}>
               Cancel
             </button>
-            <button type="submit" className="primary" disabled={pending}>
-              {pending ? 'Revising…' : 'Create revised trip'}
+            <button
+              type="submit"
+              className="primary"
+              disabled={pending || (trip.planned || []).length === 0}
+            >
+              {pending
+                ? isDuplicate
+                  ? 'Duplicating…'
+                  : 'Revising…'
+                : displaySubmitLabel}
             </button>
           </div>
         </form>
