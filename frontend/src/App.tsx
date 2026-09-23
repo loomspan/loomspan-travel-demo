@@ -30,7 +30,7 @@ export default function App() {
   const [logoutPending, setLogoutPending] = useState(false);
 
   const showFailure = (failure: FormFailure) => setNotice({message: failure.message, fields: failure.fields, kind: 'error'});
-  const loadProfile = async (afterLogin = false, reportUnauthenticated = false): Promise<boolean> => {
+  const loadProfile = async (afterLogin = false, reportUnauthenticated = false, preserveAuthenticatedOnFailure = false): Promise<boolean> => {
     const requestId = ++profileRequestId.current;
     try {
       const profile = await identityApi.getProfile();
@@ -39,7 +39,10 @@ export default function App() {
       return true;
     } catch (error) {
       if (requestId !== profileRequestId.current) return false;
-      const failure = failureFor(error, 'profile'); setScreen({kind: 'public'});
+      const failure = failureFor(error, 'profile');
+      if (!preserveAuthenticatedOnFailure || (error instanceof IdentityApiError && error.code === 'UNAUTHENTICATED')) {
+        setScreen({kind: 'public'});
+      }
       if (reportUnauthenticated || !(error instanceof IdentityApiError) || error.code !== 'UNAUTHENTICATED') showFailure(failure);
       return false;
     }
@@ -104,7 +107,7 @@ export default function App() {
           logoutPending={logoutPending}
           onPasswordChange={changePassword}
           onFailure={showFailure}
-          onRefreshProfile={loadProfile}
+          onRefreshProfile={() => loadProfile(false, false, true)}
         />
       : <AuthScreen onRegister={register} onLogin={login} onFailure={showFailure} />}
     <AboutDemoTab />

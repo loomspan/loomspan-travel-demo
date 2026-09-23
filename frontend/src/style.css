@@ -631,14 +631,33 @@ a:focus-visible, summary:focus-visible { outline: 3px solid #d26521; outline-off
 .alternative-costs strong { text-align: right; }
 .alternative-costs .alternative-grand-total { margin-top: .35rem; padding-top: .55rem; border-top: 1px solid var(--line); color: var(--ink-strong); font-weight: 700; }
 .alternative-costs .alternative-overage { color: var(--danger); font-weight: 700; }
+.primary-navigation { width: min(100%, 72rem); margin: 0 auto 1rem; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; }
+.primary-navigation [aria-current="page"] { font-weight: 800; text-decoration: underline; text-underline-offset: .25rem; }
+.navigation-save-status { margin-left: auto; overflow-wrap: anywhere; }
+.save-error { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.profile-card, .workspace-card, .trip-card, .alternative-card, .component-slot,
+.booking-component-card, .mobile-alt-card, .history-item { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.trip-card-header > *, .workspace-header > *, .section-header > *, .field-group > *,
+.flight-option-card > *, .stay-option-card > *, .rental-option-card > * { min-width: 0; }
+.comparison-table th, .comparison-table td, .booking-review-workspace-card *,
+.booking-history-section * { overflow-wrap: anywhere; }
 
 @media (max-width: 768px) {
   .desktop-comparison-matrix { display: none; }
   .mobile-comparison-switcher { display: block; }
+  .comparison-workspace-card, .comparison-view-container { overflow: visible; }
+  .mobile-tablist { max-width: 100%; position: sticky; top: 0; z-index: 5; background: #fff; }
 }
 
 @media (max-width: 520px) {
   .shell { padding: 1rem 0.75rem; place-items: start center; }
+  .primary-navigation { margin-top: .5rem; padding: .75rem; }
+  .primary-navigation button { min-width: 0; white-space: normal; text-align: left; }
+  .navigation-save-status { width: 100%; margin-left: 0; }
+  .section-header, .booking-review-header, .history-item-header { flex-wrap: wrap; }
+  .component-slots-grid, .alternatives-grid, .trips-grid { grid-template-columns: minmax(0, 1fr); }
+  .alternative-costs > div { flex-wrap: wrap; }
+  .alternative-costs strong { overflow-wrap: anywhere; }
   .card { width: 100%; margin-top: 1.5rem; padding: 1.25rem; }
   .password-input { grid-template-columns: 1fr; }
   .about-tab { top: auto; bottom: 0; }

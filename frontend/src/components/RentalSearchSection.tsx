@@ -69,6 +69,7 @@ export function RentalSearchSection({
   const [options, setOptions] = useState<RentalOptionResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
+  const [retryKey, setRetryKey] = useState(0);
   const [dateError, setDateError] = useState<string | undefined>();
   const [serverExplanation, setServerExplanation] = useState<string | null>(null);
 
@@ -132,7 +133,7 @@ export function RentalSearchSection({
     return () => {
       active = false;
     };
-  }, [trip.id, trip.startDate, trip.endDate, trip.destinationKey, draftId, pickupAt, returnAt, sort]);
+  }, [trip.id, trip.startDate, trip.endDate, trip.destinationKey, draftId, pickupAt, returnAt, sort, retryKey]);
 
   return (
     <div className="component-search-section rental-search" aria-labelledby="rental-search-heading">
@@ -194,7 +195,7 @@ export function RentalSearchSection({
 
       {dateError && <p className="field-error" role="alert">{dateError}</p>}
       {loading && <p className="hint" role="status">Searching cars…</p>}
-      {error && <p className="field-error" role="alert">{error}</p>}
+      {error && <div role="alert"><p className="field-error">{error}</p><button type="button" onClick={() => setRetryKey((value) => value + 1)}>Retry rental search</button></div>}
 
       {!loading && !error && !dateError && options.length === 0 && (
         <p className="hint">No rental cars found matching your criteria.</p>

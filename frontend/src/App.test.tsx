@@ -439,6 +439,110 @@ describe('App identity experience', () => {
     expect(await screen.findByText('All changes saved.')).toBeInTheDocument();
   });
 
+  it('keeps a failed edit visibly unsaved and retries the current values', async () => {
+    const trip = {id: 'trip-1', destinationKey: 'destination-sfo', destinationName: 'San Francisco', originAirportCode: 'PDX',
+      startDate: '2027-03-10', endDate: '2027-03-14', travelerCount: 1, travelerAges: null,
+      budgetCents: null, label: 'Trip to San Francisco', version: 0, drafts: [], planned: [], alternatives: [], revisionSummary: null};
+    fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [{
+      id: trip.id, label: trip.label, destinationKey: trip.destinationKey, destinationName: trip.destinationName,
+      startDate: trip.startDate, endDate: trip.endDate, version: 0, temporalStatus: 'UPCOMING',
+      draftCount: 0, plannedCount: 0, expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: [],
+    }], past: []})).mockResolvedValueOnce(json(200, trip))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(json(200, {...trip, version: 1, budgetCents: 250000}));
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
+    await user.type(screen.getByLabelText('Budget (USD)'), '2500');
+    expect(await screen.findByRole('button', {name: 'Retry save'})).toBeInTheDocument();
+    expect(screen.getByText('Your edited details have not been saved.')).toBeInTheDocument();
+    expect(screen.queryByText('All changes saved.')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Home'}));
+    await user.click(screen.getByRole('button', {name: `Trip: ${trip.label}`}));
+    expect(screen.getByLabelText('Budget (USD)')).toHaveValue(2500);
+    await user.click(screen.getByRole('button', {name: 'Retry save'}));
+    expect(await screen.findByText('All changes saved.')).toBeInTheDocument();
+    const puts = fetchMock.mock.calls.filter((call) => call[1]?.method === 'PUT');
+    expect(puts).toHaveLength(2);
+    expect(puts[1][1]?.body).toBe(JSON.stringify({expectedVersion: 0, destinationKey: trip.destinationKey,
+      startDate: trip.startDate, endDate: trip.endDate, travelerCount: 1, travelerAges: null, budgetCents: 250000}));
+  });
+
+  it('keeps the active Trip and unsaved edit when profile refresh fails', async () => {
+    const trip = {id: 'trip-1', destinationKey: 'destination-sfo', destinationName: 'San Francisco', originAirportCode: 'PDX',
+      startDate: '2027-03-10', endDate: '2027-03-14', travelerCount: 1, travelerAges: null,
+      budgetCents: null, label: 'Trip to San Francisco', version: 0, drafts: [], planned: [], alternatives: [], revisionSummary: null};
+    fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [{
+      id: trip.id, label: trip.label, destinationKey: trip.destinationKey, destinationName: trip.destinationName,
+      startDate: trip.startDate, endDate: trip.endDate, version: 0, temporalStatus: 'UPCOMING',
+      draftCount: 0, plannedCount: 0, expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: [],
+    }], past: []})).mockResolvedValueOnce(json(200, trip))
+      .mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'));
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
+    await user.type(screen.getByLabelText('Budget (USD)'), '2500');
+    expect(await screen.findByRole('button', {name: 'Retry save'})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Profile'}));
+    expect(await screen.findByRole('alert')).toHaveTextContent('We could not reach DeTour');
+    expect(screen.getByText('ada@example.test')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: `Trip: ${trip.label}`}));
+    expect(screen.getByLabelText('Budget (USD)')).toHaveValue(2500);
+    expect(screen.getByRole('button', {name: 'Retry save'})).toBeInTheDocument();
+  });
+
+  it('keeps an in-flight save and edited value while visiting Home', async () => {
+    const trip = {id: 'trip-1', destinationKey: 'destination-sfo', destinationName: 'San Francisco', originAirportCode: 'PDX',
+      startDate: '2027-03-10', endDate: '2027-03-14', travelerCount: 1, travelerAges: null,
+      budgetCents: null, label: 'Trip to San Francisco', version: 0, drafts: [], planned: [], alternatives: [], revisionSummary: null};
+    let resolveSave!: (response: Response) => void;
+    const pendingSave = new Promise<Response>((resolve) => { resolveSave = resolve; });
+    fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [{
+      id: trip.id, label: trip.label, destinationKey: trip.destinationKey, destinationName: trip.destinationName,
+      startDate: trip.startDate, endDate: trip.endDate, version: 0, temporalStatus: 'UPCOMING',
+      draftCount: 0, plannedCount: 0, expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: [],
+    }], past: []})).mockResolvedValueOnce(json(200, trip))
+      .mockImplementationOnce(() => pendingSave)
+      .mockResolvedValueOnce(json(200, {...trip, version: 1, budgetCents: 250000}));
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
+    await user.type(screen.getByLabelText('Budget (USD)'), '2500');
+    await waitFor(() => expect(fetchMock.mock.calls.some((call) => call[1]?.method === 'PUT')).toBe(true));
+    await user.click(screen.getByRole('button', {name: 'Home'}));
+    expect(screen.getByText('Trip changes pending')).toBeInTheDocument();
+    resolveSave(json(200, {...trip, version: 1, budgetCents: 250000}));
+    await user.click(screen.getByRole('button', {name: `Trip: ${trip.label}`}));
+    expect(screen.getByLabelText('Budget (USD)')).toHaveValue(2500);
+    expect(await screen.findByText('All changes saved.')).toBeInTheDocument();
+  });
+
+  it('finishes saving when an interim edit is reverted before the response', async () => {
+    const trip = {id: 'trip-1', destinationKey: 'destination-sfo', destinationName: 'San Francisco', originAirportCode: 'PDX',
+      startDate: '2027-03-10', endDate: '2027-03-14', travelerCount: 1, travelerAges: null,
+      budgetCents: null, label: 'Trip to San Francisco', version: 0, drafts: [], planned: [], alternatives: [], revisionSummary: null};
+    let resolveSave!: (response: Response) => void;
+    const pendingSave = new Promise<Response>((resolve) => { resolveSave = resolve; });
+    fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [{
+      id: trip.id, label: trip.label, destinationKey: trip.destinationKey, destinationName: trip.destinationName,
+      startDate: trip.startDate, endDate: trip.endDate, version: 0, temporalStatus: 'UPCOMING',
+      draftCount: 0, plannedCount: 0, expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: [],
+    }], past: []})).mockResolvedValueOnce(json(200, trip)).mockImplementationOnce(() => pendingSave);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
+    const budget = screen.getByLabelText('Budget (USD)');
+    await user.type(budget, '2500');
+    await waitFor(() => expect(fetchMock.mock.calls.some((call) => call[1]?.method === 'PUT')).toBe(true));
+    await user.clear(budget);
+    await user.type(budget, '2501');
+    await user.clear(budget);
+    await user.type(budget, '2500');
+    resolveSave(json(200, {...trip, version: 1, budgetCents: 250000}));
+    expect(await screen.findByText('All changes saved.')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter((call) => call[1]?.method === 'PUT')).toHaveLength(1);
+  });
+
   it('handles optimistic concurrency conflict (409 VERSION_CONFLICT) by preserving user edits and offering reload', async () => {
     const tripDetail = {
       id: 'trip-1',

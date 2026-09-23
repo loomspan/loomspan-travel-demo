@@ -30,6 +30,7 @@ export function StaySearchSection({
   const [options, setOptions] = useState<StayOptionResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -54,7 +55,7 @@ export function StaySearchSection({
     return () => {
       active = false;
     };
-  }, [trip.id, draftId, type, sort]);
+  }, [trip.id, draftId, type, sort, retryKey]);
 
   return (
     <div className="component-search-section stay-search" aria-labelledby="stay-search-heading">
@@ -100,7 +101,7 @@ export function StaySearchSection({
       </div>
 
       {loading && <p className="hint" role="status">Searching accommodations…</p>}
-      {error && <p className="field-error" role="alert">{error}</p>}
+      {error && <div role="alert"><p className="field-error">{error}</p><button type="button" onClick={() => setRetryKey((value) => value + 1)}>Retry stay search</button></div>}
 
       {!loading && !error && options.length === 0 && (
         <p className="hint">No accommodations found matching your criteria.</p>

@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState, useCallback} from 'react';
+import {useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef} from 'react';
 import {
   tripsApi,
   type TripResponse,
@@ -49,6 +49,12 @@ type TripWorkspaceProps = {
   onTripUpdated?: (trip: TripResponse) => void;
   onLogout?: () => Promise<void>;
   logoutPending?: boolean;
+  onSaveStatusChange?: (status: 'idle' | 'saving' | 'saved' | 'error' | 'conflict', dirty: boolean) => void;
+};
+
+export type TripWorkspaceHandle = {
+  refreshIfClean: () => Promise<void>;
+  hasUnsavedChanges: () => boolean;
 };
 
 const SUPPORTED_DESTINATIONS = [
@@ -69,7 +75,7 @@ function validateDates(startDate: string, endDate: string): string | undefined {
   return undefined;
 }
 
-export function TripWorkspace({
+export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(function TripWorkspace({
   initialTrip,
   initialActiveBooking,
   initialEntryMode = 'PLAN_TRIP',
@@ -82,7 +88,8 @@ export function TripWorkspace({
   onTripUpdated,
   onLogout,
   logoutPending = false,
-}: TripWorkspaceProps) {
+  onSaveStatusChange,
+}: TripWorkspaceProps, ref) {
   const [trip, setTrip] = useState<TripResponse>(initialTrip);
   const [destinationKey, setDestinationKey] = useState(initialTrip.destinationKey);
   const [startDate, setStartDate] = useState(initialTrip.startDate);
@@ -103,6 +110,7 @@ export function TripWorkspace({
 
   const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'conflict'>('idle');
   const [autosaveMessage, setAutosaveMessage] = useState<string | undefined>();
+  const [refreshFailed, setRefreshFailed] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [revisionSummary, setRevisionSummary] = useState<RevisionSummaryResponse | null>(
     initialTrip.revisionSummary ?? null
@@ -296,10 +304,8 @@ export function TripWorkspace({
     }
   }, []);
 
-  // Sync state if initialTrip changes
-  useEffect(() => {
-    applyTripState(initialTrip);
-  }, [initialTrip, applyTripState]);
+  // A keyed workspace receives its opening Trip once. Parent profile refreshes must
+  // never replace local edits or a newer mutation response.
 
   const hasPlanned = trip.planned && trip.planned.length > 0;
   const plannedAlternatives = (trip.alternatives || []).filter(
@@ -374,9 +380,42 @@ export function TripWorkspace({
     return false;
   }, [destinationKey, startDate, endDate, travelerCountInput, trip]);
 
+  const hasUnsavedChanges = useCallback(() => {
+    const {ages, budgetCents} = validateInputs();
+    return isSavingRef.current || componentMutationPending || isDirty(ages, budgetCents) || autosaveStatus === 'saving' || (autosaveStatus === 'error' && !refreshFailed) || autosaveStatus === 'conflict';
+  }, [validateInputs, isDirty, autosaveStatus, componentMutationPending, refreshFailed]);
+  const latestRefreshState = useRef({hasUnsavedChanges, version: trip.version});
+  latestRefreshState.current = {hasUnsavedChanges, version: trip.version};
+
+  useEffect(() => {
+    onSaveStatusChange?.(autosaveStatus, hasUnsavedChanges());
+  }, [autosaveStatus, hasUnsavedChanges, onSaveStatusChange]);
+
+  useImperativeHandle(ref, () => ({
+    hasUnsavedChanges,
+    refreshIfClean: async () => {
+      if (hasUnsavedChanges()) return;
+      const requestedVersion = trip.version;
+      try {
+        const freshTrip = await tripsApi.getTrip(trip.id);
+        if (!latestRefreshState.current.hasUnsavedChanges() && freshTrip.version >= latestRefreshState.current.version) {
+          applyTripState(freshTrip);
+          setRefreshFailed(false);
+          setAutosaveStatus((current) => current === 'saved' ? 'saved' : 'idle');
+          setAutosaveMessage((current) => current === 'All changes saved.' ? current : undefined);
+        }
+      } catch {
+        if (latestRefreshState.current.hasUnsavedChanges() || latestRefreshState.current.version !== requestedVersion) return;
+        setRefreshFailed(true);
+        setAutosaveStatus('error');
+        setAutosaveMessage('Could not refresh trip. Retry when you return.');
+      }
+    },
+  }), [hasUnsavedChanges, trip.id, trip.version, applyTripState]);
+
   // Autosave execution with serialization
   const executeAutosave = useCallback(async () => {
-    if (isSavingRef.current || isTripCanceled) {
+    if (isSavingRef.current || isTripCanceled || autosaveStatus === 'conflict') {
       return;
     }
 
@@ -389,6 +428,13 @@ export function TripWorkspace({
     }
 
     if (!isDirty(ages, budgetCents)) {
+      // An edit made during the previous request may have been reverted before
+      // that request completed. In that case the returned Trip is already current.
+      if (autosaveStatus === 'saving') {
+        pendingSaveRef.current = false;
+        setAutosaveStatus('saved');
+        setAutosaveMessage('All changes saved.');
+      }
       return;
     }
 
@@ -397,6 +443,7 @@ export function TripWorkspace({
     setAutosaveMessage('Saving changes…');
     isSavingRef.current = true;
     pendingSaveRef.current = false;
+    let saved = false;
 
     try {
       const count = parseInt(travelerCountInput, 10);
@@ -411,11 +458,12 @@ export function TripWorkspace({
       });
 
       setTrip(updatedTrip);
+      saved = true;
       if (updatedTrip.revisionSummary) {
         setRevisionSummary(updatedTrip.revisionSummary);
       }
-      setAutosaveStatus('saved');
-      setAutosaveMessage('All changes saved.');
+      setAutosaveStatus(pendingSaveRef.current ? 'saving' : 'saved');
+      setAutosaveMessage(pendingSaveRef.current ? 'Saving latest changes…' : 'All changes saved.');
     } catch (err) {
       if (err instanceof IdentityApiError) {
         if (err.code === 'VERSION_CONFLICT') {
@@ -441,7 +489,7 @@ export function TripWorkspace({
       }
     } finally {
       isSavingRef.current = false;
-      if (pendingSaveRef.current) {
+      if (pendingSaveRef.current && saved) {
         pendingSaveRef.current = false;
         if (debounceTimer.current) clearTimeout(debounceTimer.current);
         debounceTimer.current = setTimeout(() => {
@@ -449,7 +497,7 @@ export function TripWorkspace({
         }, 300);
       }
     }
-  }, [trip.id, trip.version, destinationKey, startDate, endDate, travelerCountInput, validateInputs, isDirty]);
+  }, [trip.id, trip.version, destinationKey, startDate, endDate, travelerCountInput, validateInputs, isDirty, autosaveStatus, isTripCanceled]);
 
   const executeAutosaveRef = useRef(executeAutosave);
   useEffect(() => {
@@ -468,6 +516,12 @@ export function TripWorkspace({
       return;
     }
 
+    if (autosaveStatus === 'error' || autosaveStatus === 'conflict') return;
+    if (isSavingRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
+
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
       void executeAutosaveRef.current();
@@ -483,6 +537,7 @@ export function TripWorkspace({
     try {
       const freshTrip = await tripsApi.getTrip(trip.id);
       applyTripState(freshTrip);
+      setRefreshFailed(false);
       setAutosaveStatus('idle');
       setAutosaveMessage(undefined);
       setFieldErrors({});
@@ -494,6 +549,7 @@ export function TripWorkspace({
         });
       }
     } catch {
+      setRefreshFailed(true);
       setAutosaveStatus('error');
       setAutosaveMessage('Could not reload trip data.');
     }
@@ -1263,7 +1319,16 @@ export function TripWorkspace({
         >
           {autosaveStatus === 'saving' && <span>{autosaveMessage || 'Saving…'}</span>}
           {autosaveStatus === 'saved' && <span>{autosaveMessage || 'All changes saved.'}</span>}
-          {autosaveStatus === 'error' && <span className="field-error">{autosaveMessage}</span>}
+          {autosaveStatus === 'error' && (
+            <div className="save-error" role="alert">
+              <span className="field-error">{autosaveMessage}</span>
+              {refreshFailed ? (
+                <button type="button" className="text-button" onClick={() => void handleReloadFromServer()}>Retry refresh</button>
+              ) : isDirty(validateInputs().ages, validateInputs().budgetCents) ? (
+                <><span>Your edited details have not been saved.</span><button type="button" className="text-button" onClick={() => void executeAutosaveRef.current()}>Retry save</button></>
+              ) : <span>Retry the action from this Trip.</span>}
+            </div>
+          )}
           {autosaveStatus === 'conflict' && (
             <div className="conflict-alert" role="alert">
               <span>{autosaveMessage}</span>
@@ -1274,6 +1339,7 @@ export function TripWorkspace({
               >
                 Reload from server
               </button>
+              <span className="hint">Reloading discards your local edits.</span>
             </div>
           )}
         </div>
@@ -1572,6 +1638,7 @@ export function TripWorkspace({
                 onChange={(e) => {
                   const raw = e.target.value;
                   setTravelerCountInput(raw);
+                  setFieldErrors((previous) => ({...previous, travelerCount: ''}));
                   setBudgetOverageAcknowledged(false);
                   const val = parseInt(raw, 10);
                   if (!isNaN(val) && val >= 1 && val <= 8) {
@@ -1837,4 +1904,4 @@ export function TripWorkspace({
       )}
     </section>
   );
-}
+});

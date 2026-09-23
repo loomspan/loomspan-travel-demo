@@ -1,6 +1,6 @@
-import {useState} from 'react';
+import {createRef, useState} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {render, screen, waitFor, within} from '@testing-library/react';
+import {act, render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import {
@@ -9,6 +9,9 @@ import {
 } from './components/ItinerarySummaryTally';
 import {ConfirmRemoveModal} from './components/ConfirmRemoveModal';
 import {formatLocalToDestinationIso} from './components/RentalSearchSection';
+import {AirfareSearchSection} from './components/AirfareSearchSection';
+import {TripWorkspace, type TripWorkspaceHandle} from './components/TripWorkspace';
+import {tripsApi} from './api/tripsApi';
 import type {TripResponse, DraftSelectionResponse} from './api/tripsApi';
 
 const json = (status: number, body: unknown) =>
@@ -61,6 +64,113 @@ describe('Progressive Trip Builder Experience', () => {
     vi.unstubAllGlobals();
     document.cookie = 'XSRF-TOKEN=; max-age=0; path=/';
     fetchMock.mockReset();
+  });
+
+  it('keeps the active Draft through Home and Profile and returns to the same saved tally', async () => {
+    const user = userEvent.setup();
+    const trip = createMockTrip();
+    fetchMock.mockResolvedValueOnce(json(200, {
+      email: 'ada@example.test', upcoming: [{id: trip.id, label: trip.label,
+        destinationKey: trip.destinationKey, destinationName: trip.destinationName,
+        startDate: trip.startDate, endDate: trip.endDate, version: trip.version,
+        temporalStatus: 'UPCOMING', draftCount: 1, plannedCount: 0,
+        expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: []}], past: [],
+    })).mockResolvedValueOnce(json(200, trip)).mockResolvedValueOnce(json(200, {
+      email: 'ada@example.test', upcoming: [], past: [],
+    })).mockResolvedValueOnce(json(200, trip));
+
+    render(<App />);
+    await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
+    expect(await screen.findByRole('heading', {name: 'Progressive Trip Builder'})).toBeInTheDocument();
+    const draftTotal = screen.getByRole('heading', {name: /Draft totals/});
+    expect(draftTotal).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', {name: 'Home'}));
+    expect(screen.getByRole('heading', {name: 'Home'})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Profile'}));
+    expect(screen.getByText('ada@example.test')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: `Trip: ${trip.label}`}));
+    expect(screen.getByRole('heading', {name: 'Progressive Trip Builder'})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /Draft totals/})).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter((call) => ['POST', 'PUT', 'DELETE'].includes(call[1]?.method as string))).toHaveLength(0);
+  });
+
+  it('does not reopen a Trip after navigating Home during a slow open', async () => {
+    const trip = createMockTrip();
+    fetchMock.mockResolvedValueOnce(json(200, {
+      email: 'ada@example.test', upcoming: [{id: trip.id, label: trip.label,
+        destinationKey: trip.destinationKey, destinationName: trip.destinationName,
+        startDate: trip.startDate, endDate: trip.endDate, version: trip.version,
+        temporalStatus: 'UPCOMING', draftCount: 1, plannedCount: 0,
+        expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: []}], past: [],
+    }));
+    let resolveTrip!: (trip: TripResponse) => void;
+    const pendingTrip = new Promise<TripResponse>((resolve) => { resolveTrip = resolve; });
+    const getTrip = vi.spyOn(tripsApi, 'getTrip').mockReturnValueOnce(pendingTrip);
+    render(<App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
+    expect(screen.getByText('Opening Trip…')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Home'}));
+    await act(async () => { resolveTrip(trip); await pendingTrip; });
+    expect(screen.getByRole('heading', {name: 'Home'})).toBeInTheDocument();
+    expect(screen.queryByRole('heading', {name: 'Progressive Trip Builder'})).not.toBeInTheDocument();
+    getTrip.mockRestore();
+  });
+
+  it('offers Plan Trip, Airfare, and Stay entry points on Home without creating a Draft on navigation', async () => {
+    const user = userEvent.setup();
+    fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [], past: []}));
+    render(<App />);
+    await screen.findByText('ada@example.test');
+    await user.click(screen.getByRole('button', {name: 'Home'}));
+    for (const [name, title] of [['Plan Trip', /plan a new trip/i], ['Airfare', /plan a trip with airfare/i], ['Stay', /plan a trip with stay/i]] as const) {
+      await user.click(screen.getByRole('button', {name}));
+      expect(screen.getByRole('dialog', {name: title})).toBeInTheDocument();
+      await user.click(screen.getByRole('button', {name: 'Cancel'}));
+    }
+    expect(fetchMock.mock.calls.filter((call) => ['POST', 'PUT', 'DELETE'].includes(call[1]?.method as string))).toHaveLength(0);
+  });
+
+  it('retries a failed flight search and shows an empty result', async () => {
+    const user = userEvent.setup();
+    fetchMock.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(json(200, {options: []}));
+    render(<AirfareSearchSection trip={createMockTrip()} draftId="draft-1" onSelect={vi.fn()} onCancel={vi.fn()} pending={false} />);
+    expect(await screen.findByRole('button', {name: 'Retry flight search'})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Retry flight search'}));
+    expect(await screen.findByText(/No flights/)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not replace newer local edits with a stale Trip refresh response', async () => {
+    let resolveRefresh!: (trip: TripResponse) => void;
+    const refresh = new Promise<TripResponse>((resolve) => { resolveRefresh = resolve; });
+    const getTrip = vi.spyOn(tripsApi, 'getTrip').mockReturnValueOnce(refresh);
+    const ref = createRef<TripWorkspaceHandle>();
+    render(<TripWorkspace ref={ref} initialTrip={createMockTrip()} onBack={() => {}} onTripDeleted={() => {}} />);
+    let refreshResult!: Promise<void>;
+    await act(async () => { refreshResult = ref.current!.refreshIfClean(); });
+    await userEvent.setup().clear(screen.getByLabelText('Budget (USD)'));
+    await userEvent.setup().type(screen.getByLabelText('Budget (USD)'), '2500');
+    await act(async () => { resolveRefresh(createMockTrip({version: 1, budgetCents: 100000})); await refreshResult; });
+    expect(screen.getByLabelText('Budget (USD)')).toHaveValue(2500);
+    getTrip.mockRestore();
+  });
+
+  it('does not show a stale refresh failure after local edits begin', async () => {
+    let rejectRefresh!: (error: Error) => void;
+    const refresh = new Promise<TripResponse>((_resolve, reject) => { rejectRefresh = reject; });
+    const getTrip = vi.spyOn(tripsApi, 'getTrip').mockReturnValueOnce(refresh);
+    const ref = createRef<TripWorkspaceHandle>();
+    render(<TripWorkspace ref={ref} initialTrip={createMockTrip()} onBack={() => {}} onTripDeleted={() => {}} />);
+    let refreshResult!: Promise<void>;
+    await act(async () => { refreshResult = ref.current!.refreshIfClean(); });
+    await userEvent.setup().clear(screen.getByLabelText('Budget (USD)'));
+    await userEvent.setup().type(screen.getByLabelText('Budget (USD)'), '2500');
+    await act(async () => { rejectRefresh(new Error('offline')); await refreshResult; });
+    expect(screen.getByLabelText('Budget (USD)')).toHaveValue(2500);
+    expect(screen.queryByText('Could not refresh trip. Retry when you return.')).not.toBeInTheDocument();
+    getTrip.mockRestore();
   });
 
   it('initiates trip creation through Airfare entry point and launches directly into flight search', async () => {
@@ -119,6 +229,24 @@ describe('Progressive Trip Builder Experience', () => {
     expect(screen.getByRole('button', {name: /add stay/i})).toBeInTheDocument();
     expect(screen.queryByRole('heading', {name: /rental car|search rental cars/i})).not.toBeInTheDocument();
     expect(screen.getByRole('button', {name: /add a car/i})).toBeInTheDocument();
+
+    const anotherTrip = createMockTrip({id: 'trip-2', label: 'Second trip'});
+    fetchMock.mockResolvedValueOnce(json(200, {
+      email: 'ada@example.test', upcoming: [
+        {id: 'trip-1', label: 'Trip to San Francisco', destinationKey: 'destination-sfo', destinationName: 'San Francisco',
+          startDate: '2027-03-10', endDate: '2027-03-14', version: 0, temporalStatus: 'UPCOMING', draftCount: 1,
+          plannedCount: 0, expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: []},
+        {id: anotherTrip.id, label: anotherTrip.label, destinationKey: anotherTrip.destinationKey,
+          destinationName: anotherTrip.destinationName, startDate: anotherTrip.startDate, endDate: anotherTrip.endDate,
+          version: anotherTrip.version, temporalStatus: 'UPCOMING', draftCount: 1, plannedCount: 0,
+          expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: []},
+      ], past: [],
+    })).mockResolvedValueOnce(json(200, anotherTrip));
+    await user.click(screen.getByRole('button', {name: 'Profile'}));
+    await user.click(await screen.findByRole('button', {name: `Open trip ${anotherTrip.label}`}));
+    expect(await screen.findByRole('heading', {name: 'Progressive Trip Builder'})).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: /add airfare/i})).toBeInTheDocument();
+    expect(screen.queryByRole('heading', {name: /search flights/i})).not.toBeInTheDocument();
   });
 
   it('initiates trip creation through Stay entry point with upfront accommodation type preference and opens stay search', async () => {

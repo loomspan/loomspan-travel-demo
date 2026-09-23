@@ -16,6 +16,7 @@ export function BookingHistorySection({
   const [bookings, setBookings] = useState<BookingResponse[]>(initialBookings ?? []);
   const [loading, setLoading] = useState<boolean>(!initialBookings);
   const [error, setError] = useState<string | undefined>();
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,7 +41,7 @@ export function BookingHistorySection({
     return () => {
       cancelled = true;
     };
-  }, [tripId, refreshKey]);
+  }, [tripId, refreshKey, retryKey]);
 
   if (loading && bookings.length === 0) {
     return (
@@ -56,12 +57,13 @@ export function BookingHistorySection({
       <section className="booking-history-section" aria-labelledby="booking-history-heading">
         <h3 id="booking-history-heading">Booking History</h3>
         <p className="field-error" role="alert">{error}</p>
+        <button type="button" onClick={() => setRetryKey((value) => value + 1)}>Retry booking history</button>
       </section>
     );
   }
 
   if (bookings.length === 0) {
-    return null;
+    return <section className="booking-history-section" aria-labelledby="booking-history-heading"><h3 id="booking-history-heading">Booking History</h3><p>No booking history yet.</p></section>;
   }
 
   return (
@@ -73,6 +75,8 @@ export function BookingHistorySection({
             Immutable audit record
           </span>
         </summary>
+
+        {error && <div role="alert"><p className="field-error">{error} Showing the last loaded booking history.</p><button type="button" onClick={() => setRetryKey((value) => value + 1)}>Retry booking history</button></div>}
 
         <div className="booking-history-list" role="list">
           {bookings.map((booking) => {

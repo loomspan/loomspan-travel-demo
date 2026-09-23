@@ -47,6 +47,7 @@ export function AirfareSearchSection({
   const [options, setOptions] = useState<FlightCombinationResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -71,7 +72,7 @@ export function AirfareSearchSection({
     return () => {
       active = false;
     };
-  }, [trip.id, draftId, directOnly, sort]);
+  }, [trip.id, draftId, directOnly, sort, retryKey]);
 
   return (
     <div className="component-search-section airfare-search" aria-labelledby="airfare-search-heading">
@@ -117,7 +118,7 @@ export function AirfareSearchSection({
       </div>
 
       {loading && <p className="hint" role="status">Searching flights…</p>}
-      {error && <p className="field-error" role="alert">{error}</p>}
+      {error && <div role="alert"><p className="field-error">{error}</p><button type="button" onClick={() => setRetryKey((value) => value + 1)}>Retry flight search</button></div>}
 
       {!loading && !error && options.length === 0 && (
         <p className="hint">No flights found matching your criteria.</p>

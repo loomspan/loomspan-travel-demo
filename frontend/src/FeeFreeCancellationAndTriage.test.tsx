@@ -916,13 +916,15 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
 
   // Test 15: BookingHistorySection displays error message when fetch fails
   it('BookingHistorySection displays error message when fetch fails', async () => {
-    vi.spyOn(tripsApi, 'getBookingHistory').mockRejectedValueOnce(new Error('Network connection lost.'));
+    vi.spyOn(tripsApi, 'getBookingHistory').mockRejectedValueOnce(new Error('Network connection lost.')).mockResolvedValueOnce([]);
 
     render(<BookingHistorySection tripId="trip-err" />);
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Network connection lost.');
     });
+    await userEvent.setup().click(screen.getByRole('button', {name: 'Retry booking history'}));
+    expect(await screen.findByText('No booking history yet.')).toBeInTheDocument();
   });
 
   // Test 16: TripListSection displays "Trip canceled" even if hasBookingHistory is false
