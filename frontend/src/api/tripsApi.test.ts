@@ -366,4 +366,57 @@ describe('tripsApi client', () => {
       }),
     });
   });
+
+  it('createBooking sends POST request with idempotency key in header and body', async () => {
+    fetchMock.mockResolvedValueOnce(json(201, {id: 'booking-1', bookingReference: 'DT-ABC123', status: 'ACTIVE'}));
+
+    const result = await tripsApi.createBooking('trip-1', {
+      plannedItineraryId: 'planned-1',
+      expectedVersion: 1,
+      idempotencyKey: 'book-uuid-123',
+    });
+
+    expect(result.id).toBe('booking-1');
+    expect(result.bookingReference).toBe('DT-ABC123');
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/bookings', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-XSRF-TOKEN': 'secret-token',
+        'Idempotency-Key': 'book-uuid-123',
+      },
+      body: JSON.stringify({
+        plannedItineraryId: 'planned-1',
+        expectedVersion: 1,
+        idempotencyKey: 'book-uuid-123',
+      }),
+    });
+  });
+
+  it('getActiveBooking sends GET request to active booking endpoint', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, {id: 'booking-1', status: 'ACTIVE'}));
+
+    const result = await tripsApi.getActiveBooking('trip-1');
+    expect(result.status).toBe('ACTIVE');
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/bookings/active', {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: undefined,
+      body: undefined,
+    });
+  });
+
+  it('getBookingHistory sends GET request to bookings history endpoint', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, [{id: 'booking-1', status: 'ACTIVE'}]));
+
+    const result = await tripsApi.getBookingHistory('trip-1');
+    expect(result).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/bookings', {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: undefined,
+      body: undefined,
+    });
+  });
 });

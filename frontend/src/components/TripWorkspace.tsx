@@ -8,11 +8,13 @@ import {
   type StayOptionResponse,
   type RentalOptionResponse,
   type AccommodationType,
+  type BookingResponse,
 } from '../api/tripsApi';
 import {IdentityApiError} from '../api/identityApi';
 import {AlternativeCard} from './AlternativeCard';
 import {ItineraryComparisonView} from './ItineraryComparisonView';
 import {BookingReviewView} from './BookingReviewView';
+import {BookingConfirmationView} from './BookingConfirmationView';
 import {RevisionSummaryBanner} from './RevisionSummaryBanner';
 import {DraftReadinessBanner} from './DraftReadinessBanner';
 import {BudgetOverageModal} from './BudgetOverageModal';
@@ -32,6 +34,7 @@ import {ConfirmRemoveModal} from './ConfirmRemoveModal';
 
 type TripWorkspaceProps = {
   initialTrip: TripResponse;
+  initialActiveBooking?: BookingResponse | null;
   initialEntryMode?: 'PLAN_TRIP' | 'AIRFARE' | 'STAY';
   initialAccommodationType?: AccommodationType;
   hasBookingHistory?: boolean;
@@ -64,6 +67,7 @@ function validateDates(startDate: string, endDate: string): string | undefined {
 
 export function TripWorkspace({
   initialTrip,
+  initialActiveBooking,
   initialEntryMode = 'PLAN_TRIP',
   initialAccommodationType,
   hasBookingHistory = false,
@@ -154,9 +158,32 @@ export function TripWorkspace({
 
   const [selectedForCompareIds, setSelectedForCompareIds] = useState<string[]>([]);
   const [compareNotification, setCompareNotification] = useState<string | undefined>();
-  const [workspaceView, setWorkspaceView] = useState<'workspace' | 'compare' | 'booking-review'>('workspace');
+  const [activeBooking, setActiveBooking] = useState<BookingResponse | null>(
+    initialActiveBooking ?? null
+  );
+  const [workspaceView, setWorkspaceView] = useState<
+    'workspace' | 'compare' | 'booking-review' | 'booking-confirmation'
+  >('workspace');
   const [reviewAlternativeId, setReviewAlternativeId] = useState<string | null>(null);
   const [reviewReturnView, setReviewReturnView] = useState<'workspace' | 'compare'>('workspace');
+
+  useEffect(() => {
+    if (!hasBookingHistory || initialActiveBooking !== undefined) {
+      return;
+    }
+    let cancelled = false;
+    tripsApi
+      .getActiveBooking(trip.id)
+      .then((booking) => {
+        if (!cancelled) setActiveBooking(booking);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveBooking(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [trip.id, hasBookingHistory, initialActiveBooking]);
 
   useEffect(() => {
     if (!trip.alternatives) {
@@ -935,9 +962,22 @@ export function TripWorkspace({
   };
 
   const handleSelectForBookingReview = (alternativeId: string, returnTarget: 'workspace' | 'compare') => {
+    if (activeBooking) return;
     setReviewAlternativeId(alternativeId);
     setReviewReturnView(returnTarget);
     setWorkspaceView('booking-review');
+  };
+
+  const handleBookingSuccess = async (booking: BookingResponse) => {
+    setActiveBooking(booking);
+    setWorkspaceView('booking-confirmation');
+    try {
+      const refreshedTrip = await tripsApi.getTrip(trip.id);
+      applyTripState(refreshedTrip);
+      if (onTripUpdated) onTripUpdated(refreshedTrip);
+    } catch {
+      setTrip((prev) => ({...prev, version: prev.version + 1}));
+    }
   };
 
   if (workspaceView === 'compare') {
@@ -951,6 +991,7 @@ export function TripWorkspace({
           alternatives={comparedAlternatives}
           onBack={() => setWorkspaceView('workspace')}
           onSelectForBookingReview={(id) => handleSelectForBookingReview(id, 'compare')}
+          hasActiveBooking={Boolean(activeBooking)}
         />
       </section>
     );
@@ -966,10 +1007,24 @@ export function TripWorkspace({
             alternative={reviewAlternative}
             returnTarget={reviewReturnView}
             onBack={() => setWorkspaceView(reviewReturnView)}
+            onBookingSuccess={(booking) => void handleBookingSuccess(booking)}
           />
         </section>
       );
     }
+  }
+
+  if (workspaceView === 'booking-confirmation' && activeBooking) {
+    return (
+      <section aria-labelledby="confirmation-heading" className="card workspace-card booking-confirmation-workspace-card">
+        <BookingConfirmationView
+          trip={trip}
+          booking={activeBooking}
+          onViewInWorkspace={() => setWorkspaceView('workspace')}
+          onViewAllTrips={onBack}
+        />
+      </section>
+    );
   }
 
   return (
@@ -1040,6 +1095,42 @@ export function TripWorkspace({
           )}
         </div>
       </header>
+
+      {/* Active Booking Banner */}
+      {activeBooking && (
+        <section className="active-booking-banner card" aria-labelledby="active-booking-heading">
+          <div className="active-booking-header">
+            <div>
+              <div className="badge-row">
+                <span className="badge badge-booked">BOOKED</span>
+                <span className="badge badge-active">Active Reservation</span>
+              </div>
+              <h2 id="active-booking-heading" className="active-booking-title">Active Booking</h2>
+              <p className="active-booking-ref">
+                Booking Reference: <strong className="ref-code">{activeBooking.bookingReference}</strong>
+              </p>
+            </div>
+            <button
+              type="button"
+              className="primary-button view-details-action-btn"
+              onClick={() => setWorkspaceView('booking-confirmation')}
+            >
+              View Booking Details
+            </button>
+          </div>
+          <div className="active-booking-meta">
+            <span>
+              Booked:{' '}
+              <strong>
+                {activeBooking.bookedAt ? new Date(activeBooking.bookedAt).toLocaleDateString() : 'Confirmed'}
+              </strong>
+            </span>
+            <span>
+              Grand Total: <strong>{formatCents(activeBooking.grandTotalCents)}</strong>
+            </span>
+          </div>
+        </section>
+      )}
 
       {revisionSummary && (
         <RevisionSummaryBanner
@@ -1388,6 +1479,9 @@ export function TripWorkspace({
                 tripExpired={isExpired}
                 promotionPending={promotionPending}
                 isSelectedForCompare={selectedForCompareIds.includes(alt.id)}
+                isBooked={activeBooking?.plannedItineraryId === alt.id}
+                hasActiveBooking={Boolean(activeBooking)}
+                onViewBookingDetails={() => setWorkspaceView('booking-confirmation')}
                 onToggleCompare={handleToggleCompare}
                 onSelectForBookingReview={(id) => handleSelectForBookingReview(id, 'workspace')}
                 onDuplicateDraft={(id, ver) => void handleDuplicateDraft(id, ver)}

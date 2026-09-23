@@ -1264,4 +1264,54 @@ describe('App identity experience', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', expect.objectContaining({method: 'POST'}));
     expect(await screen.findByRole('heading', {name: 'Welcome back'})).toBeInTheDocument();
   });
+
+  it('displays BOOKED status badge and primary booking reference on profile screen for booked trips', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, {
+      email: 'traveler@example.test',
+      upcoming: [{
+        id: 'trip-booked-1',
+        destinationKey: 'destination-sfo',
+        destinationName: 'San Francisco',
+        startDate: '2027-03-10',
+        endDate: '2027-03-14',
+        label: 'San Francisco Getaway',
+        version: 2,
+        temporalStatus: 'UPCOMING',
+        draftCount: 1,
+        plannedCount: 1,
+        expiredAlternativeCount: 0,
+        bookedCount: 1,
+        hasBookingHistory: true,
+        primaryBookingReference: 'DT-TEST01',
+        alternatives: [{ id: 'plan-1', lifecycle: 'PLANNED', version: null, status: 'PLANNED', expired: false }],
+      }],
+      past: [{
+        id: 'trip-past-1',
+        destinationKey: 'destination-muc',
+        destinationName: 'Munich',
+        startDate: '2027-02-01',
+        endDate: '2027-02-07',
+        label: 'Past Munich Trip',
+        version: 3,
+        temporalStatus: 'PAST',
+        draftCount: 0,
+        plannedCount: 1,
+        expiredAlternativeCount: 0,
+        bookedCount: 1,
+        hasBookingHistory: true,
+        primaryBookingReference: 'DT-PAST99',
+        alternatives: [],
+      }],
+    }));
+
+    render(<App />);
+
+    // Upcoming trip and past trip display BOOKED badges
+    const bookedBadges = await screen.findAllByText('BOOKED');
+    expect(bookedBadges.length).toBe(2);
+
+    expect(screen.getAllByText(/booking reference:/i).length).toBe(2);
+    expect(screen.getByText('DT-TEST01')).toBeInTheDocument();
+    expect(screen.getByText('DT-PAST99')).toBeInTheDocument();
+  });
 });

@@ -18,5 +18,6 @@ public record TripProfileSummary(
         int expiredAlternativeCount,
         int bookedCount,
         boolean hasBookingHistory,
+        String primaryBookingReference,
         List<AlternativeProfileSummary> alternatives) {
 }

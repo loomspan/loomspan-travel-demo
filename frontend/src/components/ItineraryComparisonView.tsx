@@ -8,6 +8,7 @@ export type ItineraryComparisonViewProps = {
   alternatives: AlternativeResponse[];
   onBack: () => void;
   onSelectForBookingReview: (alternativeId: string) => void;
+  hasActiveBooking?: boolean;
 };
 
 export function ItineraryComparisonView({
@@ -15,6 +16,7 @@ export function ItineraryComparisonView({
   alternatives,
   onBack,
   onSelectForBookingReview,
+  hasActiveBooking = false,
 }: ItineraryComparisonViewProps) {
   const [activeMobileIndex, setActiveMobileIndex] = useState(0);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -157,11 +159,18 @@ export function ItineraryComparisonView({
                 <button
                   type="button"
                   className="primary-button select-for-booking-btn"
-                  onClick={() => onSelectForBookingReview(activeAlt.id)}
+                  disabled={hasActiveBooking}
+                  aria-disabled={hasActiveBooking}
+                  onClick={() => !hasActiveBooking && onSelectForBookingReview(activeAlt.id)}
                   aria-label={`Select alternative ${activeAlt.id} for booking review`}
                 >
                   Select for Booking Review
                 </button>
+                {hasActiveBooking && (
+                  <p className="hint booking-disabled-hint">
+                    This trip already has an active booking. Only one active booking is permitted per trip.
+                  </p>
+                )}
               </div>
 
               {/* Financial Section */}
@@ -314,11 +323,18 @@ export function ItineraryComparisonView({
                     <button
                       type="button"
                       className="primary-button select-for-booking-btn"
-                      onClick={() => onSelectForBookingReview(alt.id)}
+                      disabled={hasActiveBooking}
+                      aria-disabled={hasActiveBooking}
+                      onClick={() => !hasActiveBooking && onSelectForBookingReview(alt.id)}
                       aria-label={`Select alternative ${alt.id} for booking review`}
                     >
                       Select for Booking Review
                     </button>
+                    {hasActiveBooking && (
+                      <p className="hint booking-disabled-hint">
+                        This trip already has an active booking. Only one active booking is permitted per trip.
+                      </p>
+                    )}
                   </div>
                 </th>
               ))}

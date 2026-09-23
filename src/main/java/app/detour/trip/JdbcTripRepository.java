@@ -264,6 +264,16 @@ class JdbcTripRepository implements TripRepository {
         return count != null ? count : 0;
     }
 
+    @Override
+    public Optional<String> findPrimaryBookingReference(long tripId) {
+        List<String> refs = jdbc.query(
+                "SELECT booking_reference FROM detour_booking WHERE trip_id = ? ORDER BY CASE WHEN status = 'ACTIVE' THEN 0 ELSE 1 END, created_at DESC LIMIT 1",
+                (rs, rowNum) -> rs.getString(1),
+                tripId
+        );
+        return refs.stream().findFirst();
+    }
+
     @Override public void insertDraftCopy(long tripId, UUID publicId, DraftSelections selections) {
         insertDraft(tripId, publicId);
         long draftId = jdbc.queryForObject("SELECT id FROM detour_trip_draft WHERE public_id = ?", Long.class, publicId);

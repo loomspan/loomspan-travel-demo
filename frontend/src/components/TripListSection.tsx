@@ -48,12 +48,20 @@ function TripCard({
           <span className={`badge ${isPast ? 'badge-past' : 'badge-upcoming'}`}>
             {isPast ? 'Past' : 'Upcoming'}
           </span>
+          {trip.bookedCount > 0 && (
+            <span className="badge badge-booked">BOOKED</span>
+          )}
           <h3 id={`trip-heading-${trip.id}`} className="trip-card-title">
             {trip.label}
           </h3>
           <p className="trip-card-subtitle">
             {trip.destinationName} • {trip.startDate} to {trip.endDate}
           </p>
+          {trip.bookedCount > 0 && trip.primaryBookingReference && (
+            <p className="trip-card-booking-ref">
+              Booking Reference: <strong>{trip.primaryBookingReference}</strong>
+            </p>
+          )}
         </div>
         <div className="trip-card-counts">
           <span className="count-pill">{trip.draftCount} Draft alternative{trip.draftCount === 1 ? '' : 's'}</span>

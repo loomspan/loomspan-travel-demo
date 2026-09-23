@@ -1,4 +1,7 @@
-import type {TripResponse, AlternativeResponse} from '../api/tripsApi';
+import {useState} from 'react';
+import type {TripResponse, AlternativeResponse, BookingResponse} from '../api/tripsApi';
+import {tripsApi} from '../api/tripsApi';
+import {IdentityApiError} from '../api/identityApi';
 import {formatCents, computeRentalTotalCents} from './ItinerarySummaryTally';
 import {formatMinutes, formatTime} from './AirfareSearchSection';
 
@@ -7,6 +10,7 @@ export type BookingReviewViewProps = {
   alternative: AlternativeResponse;
   returnTarget: 'workspace' | 'compare';
   onBack: () => void;
+  onBookingSuccess?: (booking: BookingResponse) => void;
 };
 
 export function BookingReviewView({
@@ -14,9 +18,47 @@ export function BookingReviewView({
   alternative,
   returnTarget,
   onBack,
+  onBookingSuccess,
 }: BookingReviewViewProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitAnnouncement, setSubmitAnnouncement] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorFields, setErrorFields] = useState<Record<string, string> | null>(null);
+
   const selections = alternative.selections;
   const tally = alternative.tally;
+
+  const handleConfirmBooking = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    setErrorFields(null);
+    setSubmitAnnouncement('Reserving inventory…');
+
+    const idempotencyKey =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `book-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+    try {
+      const booking = await tripsApi.createBooking(trip.id, {
+        plannedItineraryId: alternative.id,
+        expectedVersion: trip.version,
+        idempotencyKey,
+      });
+      setSubmitAnnouncement(`Booking confirmed! Reference: ${booking.bookingReference}`);
+      onBookingSuccess?.(booking);
+    } catch (err) {
+      setIsSubmitting(false);
+      setSubmitAnnouncement('');
+      if (err instanceof IdentityApiError) {
+        setErrorMessage(err.apiMessage || 'Reservation could not be completed.');
+        setErrorFields(err.fields && Object.keys(err.fields).length > 0 ? err.fields : null);
+      } else {
+        setErrorMessage('An unexpected error occurred while confirming your booking.');
+      }
+    }
+  };
 
   const renderMissing = (type: 'airfare' | 'stay' | 'rental') => {
     const labels = {
@@ -237,20 +279,22 @@ export function BookingReviewView({
               {formatCents(tally?.grandTotalCents ?? 0)}
             </span>
           </div>
-          <div className="total-row budget-position-row">
-            <span>Budget Position:</span>
-            <span>
-              {tally?.isOverBudget ? (
-                <span className="badge badge-warning" role="alert">
-                  Over Budget by {formatCents(tally.budgetOverageCents ?? 0)}
-                </span>
-              ) : (
-                <span className="badge badge-success">
-                  Within Budget ({formatCents(tally?.remainingBudgetCents ?? 0)} remaining)
-                </span>
-              )}
-            </span>
-          </div>
+          {tally && (tally.isOverBudget || tally.remainingBudgetCents !== null) && (
+            <div className="total-row budget-position-row">
+              <span>Budget Position:</span>
+              <span>
+                {tally.isOverBudget ? (
+                  <span className="badge badge-warning" role="alert">
+                    Over Budget by {formatCents(tally.budgetOverageCents ?? 0)}
+                  </span>
+                ) : (
+                  <span className="badge badge-success">
+                    Within Budget ({formatCents(tally.remainingBudgetCents ?? 0)} remaining)
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -265,19 +309,48 @@ export function BookingReviewView({
         </div>
       </div>
 
-      {/* Staged Confirm Booking Section */}
+      {/* Conflict Error Summary */}
+      {errorMessage && (
+        <div className="booking-conflict-alert card" role="alert" aria-labelledby="booking-conflict-heading">
+          <h3 id="booking-conflict-heading" className="conflict-heading">Reservation could not be completed</h3>
+          <p className="conflict-message">{errorMessage}</p>
+          {errorFields && Object.keys(errorFields).length > 0 && (
+            <ul className="conflict-fields-list">
+              {Object.entries(errorFields).map(([field, msg]) => (
+                <li key={field}>
+                  <strong>{field.charAt(0).toUpperCase() + field.slice(1)}:</strong> {msg}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="conflict-actions">
+            <button
+              type="button"
+              className="secondary-action-button"
+              onClick={onBack}
+            >
+              {returnTarget === 'compare' ? 'Return to comparison' : 'Return to Trip Workspace'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Screen reader announcement region */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {submitAnnouncement}
+      </div>
+
+      {/* Active Confirm Booking Section */}
       <div className="booking-confirm-section">
         <button
           type="button"
           className="primary-button confirm-booking-btn"
-          disabled={true}
-          aria-disabled="true"
+          disabled={isSubmitting}
+          aria-disabled={isSubmitting}
+          onClick={() => void handleConfirmBooking()}
         >
-          Confirm Booking
+          {isSubmitting ? 'Reserving inventory…' : 'Confirm Booking'}
         </button>
-        <p className="confirm-booking-note hint">
-          Ready for Phase 6 simulated booking implementation.
-        </p>
       </div>
     </section>
   );

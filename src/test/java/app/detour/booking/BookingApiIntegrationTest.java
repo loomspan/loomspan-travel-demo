@@ -534,11 +534,12 @@ class BookingApiIntegrationTest {
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].status").value("ACTIVE"));
 
-        // Profile summary reflects bookedCount: 1 and hasBookingHistory: true
+        // Profile summary reflects bookedCount: 1, hasBookingHistory: true, and primaryBookingReference
         owner.unsafe(get("/api/trips"), null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.upcoming[0].bookedCount").value(1))
-                .andExpect(jsonPath("$.upcoming[0].hasBookingHistory").value(true));
+                .andExpect(jsonPath("$.upcoming[0].hasBookingHistory").value(true))
+                .andExpect(jsonPath("$.upcoming[0].primaryBookingReference").value(org.hamcrest.Matchers.matchesPattern("^DT-[A-Z0-9]{6}$")));
 
         // Trip deletion rejected because of booking history
         owner.unsafe(delete("/api/trips/{tripId}", tripId),

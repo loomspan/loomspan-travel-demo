@@ -22,6 +22,7 @@ export type TripProfileSummary = {
   expiredAlternativeCount: number;
   bookedCount: number;
   hasBookingHistory: boolean;
+  primaryBookingReference?: string | null;
   alternatives: AlternativeProfileSummary[];
 };
 
@@ -470,6 +471,38 @@ export type TripDeleteRequest = {
   confirmed?: boolean | null;
 };
 
+export type CreateBookingRequest = {
+  plannedItineraryId: string;
+  expectedVersion: number;
+  idempotencyKey?: string;
+};
+
+export type BookingResponse = {
+  id: string;
+  tripId: string;
+  plannedItineraryId: string;
+  bookingReference: string;
+  status: 'ACTIVE' | 'CANCELED' | string;
+  grandTotalCents: number;
+  idempotencyKey: string;
+  bookedAt: string;
+  canceledAt?: string | null;
+  airfareReference?: string | null;
+  stayReference?: string | null;
+  rentalReference?: string | null;
+  selections: DraftSelectionResponse;
+  tally: ItineraryTallyResponse;
+};
+
+function cleanCreateBookingPayload(p: CreateBookingRequest): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    plannedItineraryId: p.plannedItineraryId,
+    expectedVersion: p.expectedVersion,
+  };
+  if (p.idempotencyKey !== undefined) body.idempotencyKey = p.idempotencyKey;
+  return body;
+}
+
 function cleanCreatePayload(p: CreateTripRequest): Record<string, unknown> {
   const body: Record<string, unknown> = {
     destinationKey: p.destinationKey,
@@ -665,4 +698,18 @@ export const tripsApi = {
 
   promoteDraft: (tripId: string, draftId: string, payload: PromotionRequest): Promise<TripResponse> =>
     request<TripResponse>(`/api/trips/${tripId}/drafts/${draftId}/plan`, 'POST', cleanPromotionPayload(payload)),
+
+  createBooking: (tripId: string, payload: CreateBookingRequest): Promise<BookingResponse> => {
+    const headers: Record<string, string> = {};
+    if (payload.idempotencyKey) {
+      headers['Idempotency-Key'] = payload.idempotencyKey;
+    }
+    return request<BookingResponse>(`/api/trips/${tripId}/bookings`, 'POST', cleanCreateBookingPayload(payload), headers);
+  },
+
+  getActiveBooking: (tripId: string): Promise<BookingResponse> =>
+    request<BookingResponse>(`/api/trips/${tripId}/bookings/active`, 'GET'),
+
+  getBookingHistory: (tripId: string): Promise<BookingResponse[]> =>
+    request<BookingResponse[]>(`/api/trips/${tripId}/bookings`, 'GET'),
 };

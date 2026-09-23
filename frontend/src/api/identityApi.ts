@@ -25,17 +25,22 @@ export function csrfToken(): string | undefined {
     ?.slice('XSRF-TOKEN='.length);
 }
 
-export async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+export async function request<T>(path: string, method = 'GET', body?: unknown, headers?: Record<string, string>): Promise<T> {
   const unsafe = method !== 'GET';
   const token = unsafe ? csrfToken() : undefined;
   if (unsafe && !token) throw new IdentityApiError('csrf-missing');
 
   let response: Response;
+  const mergedHeaders = (unsafe || headers) ? {
+    ...(unsafe ? {'Content-Type': 'application/json', 'X-XSRF-TOKEN': decodeURIComponent(token!)} : {}),
+    ...headers,
+  } : undefined;
+
   try {
     response = await fetch(path, {
       method,
       credentials: 'same-origin',
-      headers: unsafe ? {'Content-Type': 'application/json', 'X-XSRF-TOKEN': decodeURIComponent(token!)} : undefined,
+      headers: mergedHeaders,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {

@@ -155,6 +155,7 @@ public class TripService {
                     expiredCount,
                     trips.activeBookingCount(trip.id()),
                     trips.hasBookingHistory(trip.id()),
+                    trips.findPrimaryBookingReference(trip.id()).orElse(null),
                     List.copyOf(alternatives));
 
             if (pastTrip) {

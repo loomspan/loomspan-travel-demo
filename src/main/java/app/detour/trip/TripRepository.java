@@ -23,6 +23,8 @@ public interface TripRepository {
 
     int activeBookingCount(long tripId);
 
+    Optional<String> findPrimaryBookingReference(long tripId);
+
     boolean advanceVersion(long tripId, long ownerUserId, long expectedVersion);
 
     boolean advanceVersionForDraft(long tripId, long ownerUserId, long expectedVersion, long draftId,

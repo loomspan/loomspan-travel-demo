@@ -6,8 +6,11 @@ type AlternativeCardProps = {
   hasBookingHistory?: boolean;
   promotionPending?: boolean;
   isSelectedForCompare?: boolean;
+  isBooked?: boolean;
+  hasActiveBooking?: boolean;
   onToggleCompare?: (alternativeId: string, checked: boolean) => void;
   onSelectForBookingReview?: (alternativeId: string) => void;
+  onViewBookingDetails?: () => void;
   onDuplicateDraft: (draftId: string, version: number) => void;
   onDuplicatePlanned: (alternativeId: string) => void;
   onDeleteDraft: (draftId: string, version: number) => void;
@@ -21,8 +24,11 @@ export function AlternativeCard({
   hasBookingHistory = false,
   promotionPending = false,
   isSelectedForCompare = false,
+  isBooked = false,
+  hasActiveBooking = false,
   onToggleCompare,
   onSelectForBookingReview,
+  onViewBookingDetails,
   onDuplicateDraft,
   onDuplicatePlanned,
   onDeleteDraft,
@@ -51,6 +57,7 @@ export function AlternativeCard({
                   : 'Draft'
                 : 'Planned itinerary (read-only)'}
             </span>
+            {isBooked && <span className="badge badge-booked">BOOKED</span>}
             {tripExpired && <span className="badge badge-expired">Expired</span>}
           </div>
           <h4 id={`alt-heading-${alternative.id}`} className="alternative-card-title">
@@ -140,7 +147,7 @@ export function AlternativeCard({
               type="button"
               className="text-button delete-button"
               onClick={() => onDeletePlanned(alternative.id)}
-              aria-label={`Delete planned itinerary ${alternative.id.slice(0, 8)}`}
+              aria-label={`Delete planned itinerary ${alternative.id}`}
             >
               Delete planned itinerary
             </button>
@@ -148,20 +155,38 @@ export function AlternativeCard({
               type="button"
               className="secondary-action-button"
               onClick={() => onDuplicatePlanned(alternative.id)}
-              aria-label={`Duplicate planned itinerary ${alternative.id.slice(0, 8)} to draft`}
+              aria-label={`Duplicate planned itinerary ${alternative.id} to draft`}
             >
               Duplicate to draft
             </button>
-            {onSelectForBookingReview && (
+            {isBooked && onViewBookingDetails ? (
               <button
                 type="button"
-                className="primary-button select-for-booking-btn"
-                onClick={() => onSelectForBookingReview(alternative.id)}
-                aria-label={`Select planned itinerary ${alternative.id} for booking review`}
+                className="primary-button view-booking-details-btn"
+                onClick={onViewBookingDetails}
+                aria-label={`View booking details for itinerary ${alternative.id}`}
               >
-                Select for Booking Review
+                View Booking Details
               </button>
-            )}
+            ) : onSelectForBookingReview ? (
+              <>
+                <button
+                  type="button"
+                  className="primary-button select-for-booking-btn"
+                  disabled={hasActiveBooking}
+                  aria-disabled={hasActiveBooking}
+                  onClick={() => !hasActiveBooking && onSelectForBookingReview(alternative.id)}
+                  aria-label={`Select planned itinerary ${alternative.id} for booking review`}
+                >
+                  Select for Booking Review
+                </button>
+                {hasActiveBooking && (
+                  <p className="hint booking-disabled-hint">
+                    This trip already has an active booking. Only one active booking is permitted per trip.
+                  </p>
+                )}
+              </>
+            ) : null}
           </>
         )}
       </div>

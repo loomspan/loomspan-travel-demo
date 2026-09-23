@@ -42,13 +42,13 @@ Travelers can explicitly trigger simulated booking from the Booking Review scree
 
 ## Acceptance criteria
 
-- [ ] Clicking "Confirm Booking" on `BookingReviewView` sends `POST /api/trips/{tripId}/bookings` with an idempotency key and displays a pending state.
-- [ ] On success, the application renders the Booking Confirmation screen showing the master `DT-` booking reference, individual component confirmation codes, itemized pricing, and the simulated booking disclosure.
-- [ ] On inventory conflict (HTTP 409), the view displays an accessible error summary explaining why the reservation failed and keeps the traveler's draft/planned selections intact.
-- [ ] In the Trip Workspace, an active booking displays a prominent Active Booking card and badges the corresponding itinerary as `BOOKED`.
-- [ ] When an active booking exists, "Select for Booking Review" is disabled on all other Planned alternatives with clear explanatory copy.
-- [ ] On the Profile screen, booked trips display the `BOOKED` status badge and primary booking reference under Upcoming or Past sections.
-- [ ] All confirmation and status views meet WCAG AA contrast standards, keyboard navigation requirements, and screen-reader announcements verified in Vitest component tests.
+- [x] Clicking "Confirm Booking" on `BookingReviewView` sends `POST /api/trips/{tripId}/bookings` with an idempotency key and displays a pending state.
+- [x] On success, the application renders the Booking Confirmation screen showing the master `DT-` booking reference, individual component confirmation codes, itemized pricing, and the simulated booking disclosure.
+- [x] On inventory conflict (HTTP 409), the view displays an accessible error summary explaining why the reservation failed and keeps the traveler's draft/planned selections intact.
+- [x] In the Trip Workspace, an active booking displays a prominent Active Booking card and badges the corresponding itinerary as `BOOKED`.
+- [x] When an active booking exists, "Select for Booking Review" is disabled on all other Planned alternatives with clear explanatory copy.
+- [x] On the Profile screen, booked trips display the `BOOKED` status badge and primary booking reference under Upcoming or Past sections.
+- [x] All confirmation and status views meet WCAG AA contrast standards, keyboard navigation requirements, and screen-reader announcements verified in Vitest component tests.
 
 ## Context
 

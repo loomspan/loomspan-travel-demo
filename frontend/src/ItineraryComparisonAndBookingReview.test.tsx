@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event';
 import {TripWorkspace} from './components/TripWorkspace';
 import {ItineraryComparisonView} from './components/ItineraryComparisonView';
 import {BookingReviewView} from './components/BookingReviewView';
-import type {TripResponse, AlternativeResponse} from './api/tripsApi';
+import {tripsApi, type TripResponse, type AlternativeResponse, type BookingResponse} from './api/tripsApi';
+import {IdentityApiError} from './api/identityApi';
 
 function createMockPlannedAlternative(
   id: string,
@@ -501,10 +502,10 @@ describe('Itinerary Comparison and Booking Selection', () => {
       'This is a simulated booking with fictional inventory. No real payment, billing address, or external reservation is required.'
     );
 
-    // Disabled Phase 6 Confirm Booking action
+    // Active Confirm Booking action
     const confirmBtn = screen.getByRole('button', {name: /confirm booking/i});
-    expect(confirmBtn).toBeDisabled();
-    expect(screen.getByText(/ready for phase 6 simulated booking implementation\./i)).toBeInTheDocument();
+    expect(confirmBtn).toBeEnabled();
+    expect(screen.queryByText(/ready for phase 6 simulated booking implementation\./i)).not.toBeInTheDocument();
 
     // Return back to comparison view
     const backBtn = screen.getByRole('button', {name: /← back to comparison/i});
@@ -570,5 +571,208 @@ describe('Itinerary Comparison and Booking Selection', () => {
     expect(grid).toBeInTheDocument();
     const colHeaders = within(grid).getAllByRole('columnheader');
     expect(colHeaders.length).toBeGreaterThanOrEqual(3); // Attribute label + 2 alternatives
+  });
+
+  // AC 1 & 2: Handles interactive booking submission with pending state and transitions to confirmation
+  it('handles interactive booking submission with pending state and transitions to confirmation', async () => {
+    const user = userEvent.setup();
+    const trip = createMockTripWithPlanned(1);
+    const mockBooking: BookingResponse = {
+      id: 'booking-res-123',
+      tripId: trip.id,
+      plannedItineraryId: 'planned-1',
+      bookingReference: 'DT-TEST99',
+      status: 'ACTIVE',
+      grandTotalCents: 191850,
+      idempotencyKey: 'idemp-uuid',
+      bookedAt: '2027-01-15T12:00:00Z',
+      canceledAt: null,
+      airfareReference: 'FL-TESTAIR',
+      stayReference: 'HT-TESTSTAY',
+      rentalReference: 'RC-TESTRENT',
+      selections: trip.alternatives[0].selections,
+      tally: trip.alternatives[0].tally!,
+    };
+
+    let resolveBooking: (val: any) => void;
+    const bookingPromise = new Promise((resolve) => {
+      resolveBooking = resolve;
+    });
+
+    vi.spyOn(tripsApi, 'getActiveBooking').mockRejectedValue(new IdentityApiError('api', 404, 'NOT_FOUND'));
+    const createBookingSpy = vi.spyOn(tripsApi, 'createBooking').mockReturnValue(bookingPromise as any);
+    vi.spyOn(tripsApi, 'getTrip').mockResolvedValue({...trip, version: trip.version + 1});
+
+    render(
+      <TripWorkspace
+        initialTrip={trip}
+        onBack={() => {}}
+        onTripDeleted={() => {}}
+      />
+    );
+
+    // Navigate to booking review
+    await user.click(screen.getByRole('button', {name: /select planned itinerary planned-1 for booking review/i}));
+    expect(screen.getByRole('heading', {name: /review itinerary & component snapshots/i})).toBeInTheDocument();
+
+    // Click Confirm Booking
+    const confirmBtn = screen.getByRole('button', {name: /confirm booking/i});
+    await user.click(confirmBtn);
+
+    // Verify in-flight pending state
+    expect(confirmBtn).toBeDisabled();
+    expect(confirmBtn).toHaveTextContent(/reserving inventory/i);
+    expect(createBookingSpy).toHaveBeenCalledTimes(1);
+    const callArgs = createBookingSpy.mock.calls[0];
+    expect(callArgs[0]).toBe(trip.id);
+    expect(callArgs[1].plannedItineraryId).toBe('planned-1');
+    expect(callArgs[1].expectedVersion).toBe(trip.version);
+    expect(callArgs[1].idempotencyKey).toBeDefined();
+
+    // Resolve booking
+    resolveBooking!(mockBooking);
+
+    // Transitions to confirmation view
+    await waitFor(() => {
+      expect(screen.getByRole('heading', {name: /booking confirmed!/i})).toBeInTheDocument();
+    });
+    expect(screen.getByText('DT-TEST99')).toBeInTheDocument();
+    expect(screen.getByText('FL-TESTAIR')).toBeInTheDocument();
+    expect(screen.getByText('HT-TESTSTAY')).toBeInTheDocument();
+    expect(screen.getByText('RC-TESTRENT')).toBeInTheDocument();
+  });
+
+  // AC 3: Handles 409 inventory conflict with accessible alert and preserved selections
+  it('handles 409 inventory conflict with accessible alert and preserved selections', async () => {
+    const user = userEvent.setup();
+    const trip = createMockTripWithPlanned(1);
+
+    vi.spyOn(tripsApi, 'getActiveBooking').mockRejectedValue(new IdentityApiError('api', 404, 'NOT_FOUND'));
+    vi.spyOn(tripsApi, 'createBooking').mockRejectedValue(
+      new IdentityApiError(
+        'api',
+        409,
+        'INVENTORY_CONFLICT',
+        {
+          airfare: 'Selected flight sold out',
+          stay: 'Accommodation unit no longer available',
+        },
+        'One or more components are no longer available.'
+      )
+    );
+
+    render(
+      <TripWorkspace
+        initialTrip={trip}
+        onBack={() => {}}
+        onTripDeleted={() => {}}
+      />
+    );
+
+    await user.click(screen.getByRole('button', {name: /select planned itinerary planned-1 for booking review/i}));
+    const confirmBtn = screen.getByRole('button', {name: /confirm booking/i});
+    await user.click(confirmBtn);
+
+    // Accessible error alert container rendered
+    const alert = await screen.findByRole('alert', {name: /reservation could not be completed/i});
+    expect(alert).toBeInTheDocument();
+    expect(screen.getByText(/one or more components are no longer available\./i)).toBeInTheDocument();
+    expect(screen.getByText(/selected flight sold out/i)).toBeInTheDocument();
+    expect(screen.getByText(/accommodation unit no longer available/i)).toBeInTheDocument();
+
+    // User selections and snapshots remain intact
+    expect(screen.getByRole('heading', {name: /airfare snapshot/i})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /stay snapshot/i})).toBeInTheDocument();
+
+    // Confirm button re-enabled after error
+    expect(screen.getByRole('button', {name: /confirm booking/i})).toBeEnabled();
+
+    // Return to workspace button inside alert works
+    const returnBtn = screen.getByRole('button', {name: /return to trip workspace/i});
+    await user.click(returnBtn);
+    expect(screen.getByRole('heading', {name: /trip details & travelers/i})).toBeInTheDocument();
+  });
+
+  // AC 4 & 5: Renders active booking banner and enforces single-booking constraint in workspace
+  it('renders active booking banner and enforces single-booking constraint in workspace', async () => {
+    const user = userEvent.setup();
+    const trip = createMockTripWithPlanned(2);
+    const mockActiveBooking: BookingResponse = {
+      id: 'active-booking-01',
+      tripId: trip.id,
+      plannedItineraryId: 'planned-1',
+      bookingReference: 'DT-ACT001',
+      status: 'ACTIVE',
+      grandTotalCents: 191850,
+      idempotencyKey: 'idemp-uuid',
+      bookedAt: '2027-01-20T10:00:00Z',
+      canceledAt: null,
+      airfareReference: 'FL-AIR1',
+      stayReference: 'HT-STAY1',
+      rentalReference: 'RC-RENT1',
+      selections: trip.alternatives[0].selections,
+      tally: trip.alternatives[0].tally!,
+    };
+
+    vi.spyOn(tripsApi, 'getActiveBooking').mockResolvedValue(mockActiveBooking);
+
+    render(
+      <TripWorkspace
+        initialTrip={trip}
+        initialActiveBooking={mockActiveBooking}
+        onBack={() => {}}
+        onTripDeleted={() => {}}
+      />
+    );
+
+    // Active Booking banner rendered
+    expect(screen.getByRole('heading', {name: /active booking/i})).toBeInTheDocument();
+    expect(screen.getByText('DT-ACT001')).toBeInTheDocument();
+
+    // Planned-1 displays BOOKED badge and View Booking Details
+    const bookedBadges = screen.getAllByText('BOOKED');
+    expect(bookedBadges.length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', {name: /view booking details for itinerary planned-1/i})).toBeInTheDocument();
+
+    // Planned-2 has "Select for Booking Review" disabled with single-booking hint
+    const reviewBtnAlt2 = screen.getByRole('button', {name: /select planned itinerary planned-2 for booking review/i});
+    expect(reviewBtnAlt2).toBeDisabled();
+    expect(
+      screen.getByText(/this trip already has an active booking\. only one active booking is permitted per trip\./i)
+    ).toBeInTheDocument();
+
+    // Creating drafts and duplicating remains enabled
+    expect(screen.getByRole('button', {name: /create empty draft/i})).toBeEnabled();
+    expect(screen.getByRole('button', {name: /duplicate planned itinerary planned-2 to draft/i})).toBeEnabled();
+
+    // Clicking "View Booking Details" navigates to confirmation view
+    await user.click(screen.getByRole('button', {name: /view booking details for itinerary planned-1/i}));
+    expect(screen.getByRole('heading', {name: /booking confirmed!/i})).toBeInTheDocument();
+  });
+
+  // AC 5: Disables select for booking review in comparison view when active booking exists
+  it('disables select for booking review in comparison view when active booking exists', async () => {
+    const trip = createMockTripWithPlanned(2);
+
+    render(
+      <ItineraryComparisonView
+        trip={trip}
+        alternatives={trip.alternatives}
+        onBack={() => {}}
+        onSelectForBookingReview={() => {}}
+        hasActiveBooking={true}
+      />
+    );
+
+    // All "Select for Booking Review" buttons in comparison are disabled
+    const selectButtons = screen.getAllByRole('button', {name: /select alternative planned-[12] for booking review/i});
+    for (const btn of selectButtons) {
+      expect(btn).toBeDisabled();
+    }
+
+    // Explanatory copy displayed
+    expect(
+      screen.getAllByText(/this trip already has an active booking\. only one active booking is permitted per trip\./i).length
+    ).toBeGreaterThan(0);
   });
 });
