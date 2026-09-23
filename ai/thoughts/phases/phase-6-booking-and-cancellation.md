@@ -53,5 +53,5 @@ A user can book one valid Planned itinerary with a deliberate confirmation, rece
 
 ## Annotations
 
-- **[UNDECIDED]** Exact format of fictional booking and component confirmation references.
+- **[RESOLVED]** Booking references use `DT-`, airfare `FL-`, stay `HT-`, and rental `RC-`, each followed by six uppercase alphanumeric characters, as implemented in `BookingReferenceGenerator`.
 - **[FUTURE]** Payment, cancellation penalties, refunds, modifications/exchanges, supplier cancellations, recovery, waitlists, and overbooking.

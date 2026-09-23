@@ -57,5 +57,5 @@ Authenticated users can create upcoming trips, maintain multiple autosaved Draft
 
 ## Annotations
 
-- **[UNDECIDED]** Exact card hierarchy and status/count presentation require UX design.
+- **[RESOLVED]** The current profile UI establishes card hierarchy and status/count presentation; Phase 7 may refine its visual consistency and accessibility.
 - **[FUTURE]** Custom trip names, notes, sharing, collaboration, voting, and merging independently created trips.

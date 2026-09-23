@@ -52,7 +52,10 @@ DeTour presents a cohesive, accessible, responsive experience; explains its limi
 
 ## Annotations
 
-- **[OPEN QUESTION]** Select visual identity, colors, typography, and whether DeTour needs a logo beyond its wordmark.
-- **[OPEN QUESTION]** Finalize the exact demo-drawer instructions and disclosure copy.
-- **[UNDECIDED]** Decide whether destructive actions use modal dialogs or inline confirmation patterns as part of UX design.
+- **[DECIDED]** Refine the existing teal palette, Georgia headings, and text-only DeTour wordmark. A separate logo is not required for the first release. Consolidate these into a consistent visual system and verify contrast and focus treatments.
+- **[DECIDED]** Keep modal dialogs for destructive confirmations. Make their wording, focus behavior, keyboard operation, and dismissal rules consistent.
+- **[DECIDED]** Phase 7 ends with a release-ready packaged application and verification evidence; deployment is outside this phase.
+- **[PROPOSED COPY]** Public introduction: “Plan a trip your way. Start with airfare, a stay, or a complete itinerary. Save alternatives, compare total costs, and choose what works for you.” The existing login/register action labels remain functional copy.
+- **[PROPOSED COPY]** About this demo: “DeTour uses fictional suppliers, schedules, prices, availability, and bookings. No payment is collected and no real reservation is made. Trips depart from PDX, travel to San Francisco, Munich, or Mexico City, and use dates in March 2027. Start with Plan Trip, Airfare, or Stay. Add other components when you want them, save a Draft as Planned, compare up to three Planned itineraries, and review one to book. An active Booking can be canceled before its departure date begins in Portland time.” Final wording remains to be reviewed during the Phase 7 copy pass.
+- **[CLARIFICATION]** The About tab is the sole general product-level demo disclosure. Keep the explicit fictional-booking notice at booking review required by Phase 6.
 - **[FUTURE]** Native mobile apps, offline planning, localization, dark mode, marketing pages, and public catalog browsing.

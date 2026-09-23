@@ -4,7 +4,7 @@
 
 This handoff makes the DeTour planning work resumable without access to the conversation that produced it. It describes the current repository, the authority of the roadmap, settled boundaries that are easy to misread from the old code, and the next work to perform.
 
-Last updated: 2026-09-17.
+Last updated: 2026-09-23.
 
 ## Read order
 
@@ -21,27 +21,25 @@ If documents appear to conflict, treat [README.md](README.md) as authoritative, 
 
 - Product discovery is substantially complete.
 - The dependency-ordered roadmap and eight delivery phases are written.
-- Detailed implementation tickets have **not** yet been written.
-- No DeTour application implementation has started as part of this planning work.
+- Detailed implementation tickets have been written through Phase 6 in `ai/thoughts/tickets/`.
+- Phases 1–6 have been implemented in the current repository. Phase 7 remains the next planned work; its release checks have not yet been completed.
 - Phase 0 is complete. Its conservative persistence-preservation decision was superseded before implementation by the roadmap's development-stage clean-break policy.
 - Event functionality has been deferred from the initial release to the [Version 2 Events roadmap](../future/version-2-events.md).
-- The next expected activity is to create cohesive implementation tickets for Phase 1.
-- The remaining visual/copy questions block only the affected Phase 7 tickets; they do not block ticket writing for Phases 0–6.
+- The next expected activity is to write and implement cohesive Phase 7 tickets, including product experience, documentation, and release verification.
+- Visual direction, destructive confirmation pattern, and release target are settled in the Phase 7 document. Final public/authentication and About copy remains for its copy pass; proposed wording is recorded there.
 - The user wants solutions to remain as simple as possible while fully satisfying the recorded requirements.
 
-## Current repository baseline
+## Current repository state
 
-The existing application is Wayfarer, a compact Spring Boot/React/H2 application:
+The current application is DeTour, a Spring Boot/React/H2 application:
 
 - Java 21 and Spring Boot 4.1.0.
 - React 19.2.6, TypeScript 5.9.3, and Vite 8.2.2.
 - H2 persistence with Flyway.
 - Maven builds the frontend and packages it into the Spring Boot JAR.
-- Current Java package: `demo.wayfarer`; target DeTour package: `app.detour`.
-- Current product is a fixed Boston–New York October 2026 weekend for two adults.
-- Current behavior includes model-coordinated trip assessment, natural-language changes, simulated booking/exchange, supplier cancellation, and recovery.
-- Loomspan is used through its Spring Boot starter, `SkillTemplate`, Java skill annotations, YAML skill manifests, model configuration, and execution evidence.
-- DeTour intentionally replaces model planning with deterministic application logic and removes exchange/disruption/recovery behavior from the initial release.
+- Java package: `app.detour`.
+- Current behavior includes account identity, fictional March 2027 catalog inventory, trips and alternatives, component search, planning and comparison, simulated booking, and cancellation.
+- No Loomspan or other model integration is part of DeTour. Planning and ranking are deterministic application logic; exchange, disruption, and recovery are outside the initial release.
 
 The completed Phase 0 baseline later confirmed that the previously noted `IntakeService.java` and `TripStore.java` changes were not present in its execution checkout. A future context must still run `git status` before implementation and must not overwrite or revert unrelated work. The clean-break policy authorizes removal of obsolete application paths through scoped tickets; it does not authorize broad worktree cleanup.
 
@@ -120,28 +118,23 @@ Do not implement a generic ambiguous Cancel action:
 
 ## Remaining decisions
 
-Only two items are still labeled **[OPEN QUESTION]** in the roadmap beyond the annotation legend:
+The remaining Phase 7 **[OPEN QUESTION]** is final public authentication-page and About this demo copy. Proposed wording is in the Phase 7 document.
 
-1. DeTour visual identity: colors, typography, and wordmark/logo treatment.
-2. Final public authentication-page and About this demo copy.
+The Phase 7 visual direction is to refine the existing teal palette and Georgia headings with a text-only wordmark. Destructive confirmations remain modal. The delivery target is a release-ready packaged application, not deployment.
 
-Several **[UNDECIDED]** implementation-design items intentionally remain with their owning phase:
+Earlier implementation-design annotations have been resolved:
 
-- exact fictional catalog names, prices, schedules, capacities, ratings, locations, and city-center distances;
-- profile card hierarchy/status presentation;
-- fictional confirmation-reference format;
-- modal versus inline destructive confirmations;
-- the exact confirmation-gated DeTour development-reset command and database target selected in Phase 1.
+- The earlier phase annotations for catalog details, profile card hierarchy, and confirmation references are resolved by their current implementations. Consult fixtures and UI/code for exact values; they are not Phase 7 decisions.
+- The development reset command and default database target are documented in the repository README and `scripts/reset-detour.ps1`.
 
-These are not permission to change product behavior. Resolve them in the relevant design/ticket, annotate the roadmap, and keep scope within the corresponding phase.
+These implementation choices do not change the settled product behavior in the roadmap.
 
 ## Recommended next steps
 
-1. Convert Phase 1 into small, independently verifiable implementation tickets governed by the clean-break policy.
-2. Continue phase by phase in dependency order. A later-phase ticket may be drafted early, but its dependencies must be explicit and it must not silently pull work forward.
-3. Resolve the two visual/copy open questions when drafting their affected Phase 7 tickets, unless the user chooses to settle them earlier.
-4. Do not begin implementation merely because tickets are being written; implementation should start only when requested.
-5. Keep [README.md](README.md), this guide, and the relevant phase file synchronized whenever a ticket resolves an annotation or changes scope.
+1. Draft Phase 7 tickets from the current code and the settled decisions in the Phase 7 document.
+2. Finalize the proposed public and About copy during the copy pass.
+3. Complete the Phase 7 experience, documentation, accessibility, and packaged-application verification work.
+4. Keep [README.md](README.md), this guide, and the relevant phase file synchronized whenever a ticket resolves an annotation or changes scope.
 
 ## Ticket-authoring contract
 

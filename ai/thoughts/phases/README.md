@@ -6,7 +6,7 @@ This is the durable roadmap for replacing the Wayfarer application with DeTour. 
 
 For continuation in a new working context, read this file completely and then read [CONTINUATION.md](CONTINUATION.md). The continuation guide records repository state, non-obvious constraints, remaining decisions, and the next expected planning work.
 
-Last updated: 2026-09-17.
+Last updated: 2026-09-23.
 
 ## Development-stage clean-break policy
 
@@ -167,9 +167,11 @@ No other routine product copy should describe DeTour as a demo.
 
 ## Global unresolved items
 
-- **[OPEN QUESTION]** What visual identity, colors, typography, and wordmark/logo treatment should DeTour use?
-- **[OPEN QUESTION]** What is the final public authentication-page and About this demo copy?
-- **[UNDECIDED]** Exact fictional supplier/property names, schedules, capacities, prices, ratings, and locations will be designed in Phase 2.
+- **[DECIDED]** Phase 7 refines the current teal palette, Georgia headings, and text-only DeTour wordmark; no separate logo is required for the first release.
+- **[DECIDED]** Destructive actions retain modal confirmations, with consistent accessibility and wording.
+- **[DECIDED]** Phase 7 delivers a release-ready packaged application. Deployment is outside its scope.
+- **[OPEN QUESTION]** Final wording for public authentication-page and About this demo copy. Proposed text is recorded in the Phase 7 document for the copy pass.
+- **[CLARIFICATION]** The single About tab is the only general product-level demo disclosure. The explicit simulated-booking notice at booking review remains required.
 
 ## Deferred enhancement register
 

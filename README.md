@@ -1,6 +1,6 @@
 # DeTour
 
-DeTour is a clean Spring Boot and React foundation for the travel platform's next development stage. It intentionally contains no catalog, trip, or booking behavior.
+DeTour is a Spring Boot and React application for planning trips with fictional March 2027 airfare, stays, and rental cars. Registered users can save and compare itinerary alternatives, confirm simulated bookings, and cancel them before the trip expires. Phase 7 product experience, documentation, accessibility, and release verification are still in progress.
 
 ## Build and run
 

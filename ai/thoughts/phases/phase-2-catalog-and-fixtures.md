@@ -52,5 +52,5 @@ Flyway creates a compact but varied fictional airfare, accommodation, and rental
 
 ## Annotations
 
-- **[UNDECIDED]** Exact names, prices, schedules, ratings, capacities, locations, and city-center distances are Phase 2 design work.
+- **[RESOLVED]** Exact names, prices, schedules, ratings, capacities, locations, and city-center distances are defined by the implemented Flyway catalog fixtures.
 - **[FUTURE]** Live suppliers, real-time inventory, dynamic pricing, multiple currencies, and additional date ranges.
