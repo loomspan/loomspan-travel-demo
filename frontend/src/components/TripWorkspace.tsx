@@ -11,6 +11,8 @@ import {
 } from '../api/tripsApi';
 import {IdentityApiError} from '../api/identityApi';
 import {AlternativeCard} from './AlternativeCard';
+import {ItineraryComparisonView} from './ItineraryComparisonView';
+import {BookingReviewView} from './BookingReviewView';
 import {RevisionSummaryBanner} from './RevisionSummaryBanner';
 import {DraftReadinessBanner} from './DraftReadinessBanner';
 import {BudgetOverageModal} from './BudgetOverageModal';
@@ -150,6 +152,25 @@ export function TripWorkspace({
   const [budgetOverageAcknowledged, setBudgetOverageAcknowledged] = useState(false);
   const [highlightedSlot, setHighlightedSlot] = useState<'airfare' | 'stay' | 'rental' | null>(null);
 
+  const [selectedForCompareIds, setSelectedForCompareIds] = useState<string[]>([]);
+  const [compareNotification, setCompareNotification] = useState<string | undefined>();
+  const [workspaceView, setWorkspaceView] = useState<'workspace' | 'compare' | 'booking-review'>('workspace');
+  const [reviewAlternativeId, setReviewAlternativeId] = useState<string | null>(null);
+  const [reviewReturnView, setReviewReturnView] = useState<'workspace' | 'compare'>('workspace');
+
+  useEffect(() => {
+    if (!trip.alternatives) {
+      setSelectedForCompareIds([]);
+      return;
+    }
+    const validIds = new Set(
+      trip.alternatives
+        .filter((a) => a.lifecycle.toUpperCase() === 'PLANNED')
+        .map((a) => a.id)
+    );
+    setSelectedForCompareIds((prev) => prev.filter((id) => validIds.has(id)));
+  }, [trip.alternatives]);
+
   useEffect(() => {
     if (activeDraft?.selections?.airfare) {
       setAirfareMode('selected');
@@ -220,6 +241,9 @@ export function TripWorkspace({
   }, [initialTrip, applyTripState]);
 
   const hasPlanned = trip.planned && trip.planned.length > 0;
+  const plannedAlternatives = (trip.alternatives || []).filter(
+    (a) => a.lifecycle.toUpperCase() === 'PLANNED'
+  );
 
   // Validation helper
   const validateInputs = useCallback(() => {
@@ -894,6 +918,60 @@ export function TripWorkspace({
     }
   };
 
+  const handleToggleCompare = (id: string, checked: boolean) => {
+    if (checked) {
+      if (selectedForCompareIds.length >= 3) {
+        setCompareNotification(
+          'You can compare at most 3 itineraries at once. Deselect one before adding another.'
+        );
+        return;
+      }
+      setSelectedForCompareIds((prev) => [...prev, id]);
+      setCompareNotification(undefined);
+    } else {
+      setSelectedForCompareIds((prev) => prev.filter((item) => item !== id));
+      setCompareNotification(undefined);
+    }
+  };
+
+  const handleSelectForBookingReview = (alternativeId: string, returnTarget: 'workspace' | 'compare') => {
+    setReviewAlternativeId(alternativeId);
+    setReviewReturnView(returnTarget);
+    setWorkspaceView('booking-review');
+  };
+
+  if (workspaceView === 'compare') {
+    const comparedAlternatives = (trip.alternatives || []).filter(
+      (a) => a.lifecycle.toUpperCase() === 'PLANNED' && selectedForCompareIds.includes(a.id)
+    );
+    return (
+      <section aria-labelledby="comparison-heading" className="card workspace-card comparison-workspace-card">
+        <ItineraryComparisonView
+          trip={trip}
+          alternatives={comparedAlternatives}
+          onBack={() => setWorkspaceView('workspace')}
+          onSelectForBookingReview={(id) => handleSelectForBookingReview(id, 'compare')}
+        />
+      </section>
+    );
+  }
+
+  if (workspaceView === 'booking-review' && reviewAlternativeId) {
+    const reviewAlternative = (trip.alternatives || []).find((a) => a.id === reviewAlternativeId);
+    if (reviewAlternative) {
+      return (
+        <section aria-labelledby="booking-review-heading" className="card workspace-card booking-review-workspace-card">
+          <BookingReviewView
+            trip={trip}
+            alternative={reviewAlternative}
+            returnTarget={reviewReturnView}
+            onBack={() => setWorkspaceView(reviewReturnView)}
+          />
+        </section>
+      );
+    }
+  }
+
   return (
     <section className="card workspace-card" aria-labelledby="workspace-heading">
       <div className="workspace-nav">
@@ -1244,17 +1322,60 @@ export function TripWorkspace({
           <span className="count-pill">
             {trip.drafts ? trip.drafts.length : 0} Draft alternative{trip.drafts && trip.drafts.length === 1 ? '' : 's'}
           </span>
-          <button
-            type="button"
-            className="primary create-empty-draft-btn"
-            onClick={() => void handleCreateEmptyDraft()}
-          >
-            Create empty draft
-          </button>
+          <span className="count-pill">
+            {plannedAlternatives.length} Planned alternative{plannedAlternatives.length === 1 ? '' : 's'}
+          </span>
+          <div className="alternatives-actions" style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center'}}>
+            {plannedAlternatives.length >= 2 && (
+              <>
+                <button
+                  type="button"
+                  className="primary-button compare-launch-btn"
+                  disabled={selectedForCompareIds.length < 2}
+                  onClick={() => setWorkspaceView('compare')}
+                  aria-label={`Compare selected itineraries (${selectedForCompareIds.length})`}
+                >
+                  Compare selected itineraries ({selectedForCompareIds.length})
+                </button>
+                {selectedForCompareIds.length > 0 && (
+                  <button
+                    type="button"
+                    className="text-button clear-compare-btn"
+                    onClick={() => {
+                      setSelectedForCompareIds([]);
+                      setCompareNotification(undefined);
+                    }}
+                  >
+                    Clear comparison selection
+                  </button>
+                )}
+              </>
+            )}
+            <button
+              type="button"
+              className="primary create-empty-draft-btn"
+              onClick={() => void handleCreateEmptyDraft()}
+            >
+              Create empty draft
+            </button>
+          </div>
         </div>
-        <p className="hint">
-          Draft alternatives let you explore and compare options. Empty draft creation starts fresh, while duplication copies an existing source.
-        </p>
+
+        {plannedAlternatives.length >= 2 ? (
+          <p className="hint">
+            Draft alternatives let you explore and compare options. Select 2 or 3 Planned alternatives to compare them side-by-side.
+          </p>
+        ) : (
+          <p className="hint">
+            Draft alternatives let you explore and compare options. Promote at least 2 draft alternatives to Planned to compare them.
+          </p>
+        )}
+
+        {compareNotification && (
+          <div className="compare-notification" role="alert" aria-live="polite">
+            {compareNotification}
+          </div>
+        )}
 
         {(!trip.alternatives || trip.alternatives.length === 0) ? (
           <p className="hint">No alternatives yet. Create an empty draft to get started.</p>
@@ -1266,6 +1387,9 @@ export function TripWorkspace({
                 alternative={alt}
                 tripExpired={isExpired}
                 promotionPending={promotionPending}
+                isSelectedForCompare={selectedForCompareIds.includes(alt.id)}
+                onToggleCompare={handleToggleCompare}
+                onSelectForBookingReview={(id) => handleSelectForBookingReview(id, 'workspace')}
                 onDuplicateDraft={(id, ver) => void handleDuplicateDraft(id, ver)}
                 onDuplicatePlanned={(id) => void handleDuplicatePlanned(id)}
                 onDeleteDraft={(id, ver) => promptDeleteDraft(id, ver)}

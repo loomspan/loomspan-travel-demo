@@ -15,13 +15,13 @@ type AirfareSearchSectionProps = {
   pending: boolean;
 };
 
-function formatMinutes(minutes: number): string {
+export function formatMinutes(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return `${h}h ${m}m`;
 }
 
-function formatTime(isoString: string, timeZone?: string): string {
+export function formatTime(isoString: string, timeZone?: string): string {
   try {
     const d = new Date(isoString);
     return d.toLocaleTimeString('en-US', {

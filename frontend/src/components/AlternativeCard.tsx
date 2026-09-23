@@ -5,6 +5,9 @@ type AlternativeCardProps = {
   tripExpired?: boolean;
   hasBookingHistory?: boolean;
   promotionPending?: boolean;
+  isSelectedForCompare?: boolean;
+  onToggleCompare?: (alternativeId: string, checked: boolean) => void;
+  onSelectForBookingReview?: (alternativeId: string) => void;
   onDuplicateDraft: (draftId: string, version: number) => void;
   onDuplicatePlanned: (alternativeId: string) => void;
   onDeleteDraft: (draftId: string, version: number) => void;
@@ -17,6 +20,9 @@ export function AlternativeCard({
   tripExpired = false,
   hasBookingHistory = false,
   promotionPending = false,
+  isSelectedForCompare = false,
+  onToggleCompare,
+  onSelectForBookingReview,
   onDuplicateDraft,
   onDuplicatePlanned,
   onDeleteDraft,
@@ -52,6 +58,19 @@ export function AlternativeCard({
           </h4>
           <span className="alternative-id">ID: {alternative.id.slice(0, 8)}…</span>
         </div>
+        {isPlanned && onToggleCompare && (
+          <div className="compare-checkbox-wrapper">
+            <label className="checkbox-label" htmlFor={`compare-select-${alternative.id}`}>
+              <input
+                type="checkbox"
+                id={`compare-select-${alternative.id}`}
+                checked={isSelectedForCompare}
+                onChange={(e) => onToggleCompare(alternative.id, e.target.checked)}
+              />
+              <span>Select for comparison</span>
+            </label>
+          </div>
+        )}
       </div>
 
       <div className="alternative-card-content">
@@ -133,6 +152,16 @@ export function AlternativeCard({
             >
               Duplicate to draft
             </button>
+            {onSelectForBookingReview && (
+              <button
+                type="button"
+                className="primary-button select-for-booking-btn"
+                onClick={() => onSelectForBookingReview(alternative.id)}
+                aria-label={`Select planned itinerary ${alternative.id} for booking review`}
+              >
+                Select for Booking Review
+              </button>
+            )}
           </>
         )}
       </div>

@@ -36,12 +36,12 @@ Users can select two or three Planned alternatives for a Trip, compare them side
 
 ## Acceptance criteria
 
-- [ ] Users can select 2 or 3 Planned alternatives for a Trip and launch the comparison view; selecting fewer than 2 or more than 3 is cleanly constrained.
-- [ ] Desktop viewport renders side-by-side comparison columns; mobile viewport renders a stacked layout with a persistent alternative switcher.
-- [ ] Comparison displays grand total, budget position (remaining/overage), flight stops/duration/times, stay type/location/rooms, and car class/times.
-- [ ] Missing optional components are visually and semantically distinguished from zero-cost selections.
-- [ ] Clicking "Select for Booking Review" on any compared alternative opens the booking review summary with all component details, totals, and the fictional booking disclosure.
-- [ ] Keyboard navigation, screen-reader announcements, and responsive viewport behavior are thoroughly verified in Vitest tests.
+- [x] Users can select 2 or 3 Planned alternatives for a Trip and launch the comparison view; selecting fewer than 2 or more than 3 is cleanly constrained.
+- [x] Desktop viewport renders side-by-side comparison columns; mobile viewport renders a stacked layout with a persistent alternative switcher.
+- [x] Comparison displays grand total, budget position (remaining/overage), flight stops/duration/times, stay type/location/rooms, and car class/times.
+- [x] Missing optional components are visually and semantically distinguished from zero-cost selections.
+- [x] Clicking "Select for Booking Review" on any compared alternative opens the booking review summary with all component details, totals, and the fictional booking disclosure.
+- [x] Keyboard navigation, screen-reader announcements, and responsive viewport behavior are thoroughly verified in Vitest tests.
 
 ## Context
 
