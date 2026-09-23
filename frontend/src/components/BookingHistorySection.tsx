@@ -92,13 +92,13 @@ export function BookingHistorySection({
                       className={`badge ${isCanceled ? 'badge-canceled' : 'badge-booked'}`}
                       style={{marginRight: '0.5rem'}}
                     >
-                      {booking.status}
+                      {isCanceled ? 'Canceled Booking' : 'Booking'}
                     </span>
                     <strong id={`history-ref-${booking.id}`} className="ref-code">
                       {booking.bookingReference}
                     </strong>
                   </div>
-                  <strong>{formatCents(booking.grandTotalCents)}</strong>
+                  <strong>Grand total: {formatCents(booking.grandTotalCents)} USD</strong>
                 </div>
 
                 <div className="history-meta">
@@ -138,13 +138,20 @@ export function BookingHistorySection({
                   )}
                   {sel?.rental && (
                     <div>
-                      <strong>Rental:</strong> {sel.rental.vehicleClassName} at{' '}
+                      <strong>Rental Car:</strong> {sel.rental.vehicleClassName} at{' '}
                       {sel.rental.locationName}{' '}
                       {booking.rentalReference && (
                         <span className="ref-code">({booking.rentalReference})</span>
                       )}
                     </div>
                   )}
+                </div>
+                <div className="alternative-costs" aria-label="Booking totals in USD">
+                  <div><span>Airfare total</span><strong>{sel?.airfare ? formatCents(booking.tally.airfareTotalCents) : 'Not selected'}</strong></div>
+                  <div><span>Stay total</span><strong>{sel?.stay ? formatCents(booking.tally.stayTotalCents) : 'Not selected'}</strong></div>
+                  <div><span>Rental Car total</span><strong>{sel?.rental ? formatCents(booking.tally.rentalTotalCents) : 'Not selected'}</strong></div>
+                  {booking.tally.isOverBudget && <div className="alternative-overage"><span>Budget overage</span><strong>{formatCents(booking.tally.budgetOverageCents ?? 0)} USD</strong></div>}
+                  {!booking.tally.isOverBudget && booking.tally.remainingBudgetCents !== null && <div><span>Budget remaining</span><strong>{formatCents(booking.tally.remainingBudgetCents)} USD</strong></div>}
                 </div>
               </article>
             );

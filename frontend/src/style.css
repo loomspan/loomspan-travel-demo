@@ -1,4 +1,23 @@
-:root { color: #17383b; background: #eef5f3; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+:root {
+  --ink: #17383b;
+  --ink-strong: #12333c;
+  --muted: #4c6666;
+  --teal: #17614f;
+  --teal-deep: #124d3f;
+  --teal-soft: #e8f4ef;
+  --canvas: #eef5f3;
+  --surface: #ffffff;
+  --line: #c7dcda;
+  --warning: #8b530c;
+  --warning-soft: #fff5da;
+  --danger: #a32929;
+  --danger-soft: #fff0ed;
+  --radius: .6rem;
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.5;
+}
 * { box-sizing: border-box; } body { margin: 0; min-width: 320px; } button, input { font: inherit; }
 .shell { min-height: 100vh; display: grid; place-items: center; padding: 2rem 5rem; background: radial-gradient(circle at top right, #cce9df, transparent 42%), #eef5f3; }
 .card { width: min(100%, 35rem); padding: clamp(1.5rem, 5vw, 3rem); background: #fff; border: 1px solid #c7dcda; border-radius: 1rem; box-shadow: 0 1rem 3rem #17383b1a; }
@@ -513,6 +532,105 @@ h1, h2 { color: #12333c; } h1 { margin: 0; font-family: Georgia, serif; font-siz
   white-space: nowrap;
   border-width: 0;
 }
+
+/* DeTour shared visual language */
+.wordmark {
+  display: inline-block;
+  margin-bottom: 1rem;
+  color: var(--teal-deep);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -.035em;
+  line-height: 1;
+  text-transform: none;
+}
+h1, h2, h3, h4 { color: var(--ink-strong); }
+h2, h3, h4 { font-family: Georgia, "Times New Roman", serif; line-height: 1.2; }
+h2 { font-size: clamp(1.3rem, 2.5vw, 1.7rem); }
+h3 { font-size: 1.2rem; }
+p { line-height: 1.55; }
+.card, .modal, .alternative-card, .component-slot, .booking-component-card,
+.booking-totals-card, .trip-card, .history-item { border-radius: var(--radius); }
+.card { border-color: var(--line); }
+.shell { background: radial-gradient(circle at top right, #cce9df, transparent 42%), var(--canvas); }
+.hint, .trip-meta, .trip-card-subtitle, .selected-meta { color: var(--muted); }
+.currency-note { color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif; font-size: .72em; font-weight: 600; }
+.primary, .primary-button, .secondary, .secondary-action-button, .text-button,
+.tabs button, button { transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease; }
+.primary, .primary-button { background: var(--teal); color: #fff; border-radius: .45rem; }
+.primary:hover:not(:disabled), .primary-button:hover:not(:disabled) { background: var(--teal-deep); }
+.secondary, .secondary-action-button {
+  min-height: 2.6rem; padding: .5rem .9rem; border: 1px solid var(--teal);
+  border-radius: .45rem; background: var(--surface); color: var(--teal-deep);
+  font-weight: 700; cursor: pointer;
+}
+.secondary:hover:not(:disabled), .secondary-action-button:hover:not(:disabled) { background: var(--teal-soft); }
+.text-button { color: var(--teal-deep); font-weight: 600; }
+.delete-button { color: var(--danger); }
+.danger-button, .delete-confirm-button, .primary.danger-button,
+.primary.delete-confirm-button { background: var(--danger); color: #fff; }
+.danger-button:hover:not(:disabled), .delete-confirm-button:hover:not(:disabled),
+.primary.danger-button:hover:not(:disabled), .primary.delete-confirm-button:hover:not(:disabled) { background: #831e1e; }
+button:disabled { cursor: not-allowed; }
+input, select, textarea { font: inherit; color: var(--ink-strong); background: var(--surface); }
+select, textarea { width: 100%; min-height: 2.8rem; padding: .6rem .7rem; border: 1px solid #789795; border-radius: .35rem; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible,
+a:focus-visible, summary:focus-visible { outline: 3px solid #d26521; outline-offset: 3px; }
+.field-error, .error-summary, .status-error, .status-conflict, .booking-conflict-alert { color: #7f1d1d; }
+.error-summary, .status-error, .status-conflict, .booking-conflict-alert,
+.driver-age-notice, .acknowledgment-checkbox-container { background: var(--danger-soft); border-color: #dfa8a1; }
+.badge { border: 1px solid transparent; border-radius: 999px; padding: .25rem .65rem; text-transform: none; letter-spacing: .015em; }
+.badge-upcoming, .badge-active, .badge-booked { background: #dcefe9; border-color: #9bc6b9; color: #155141; }
+.badge-draft, .status-saving { background: var(--warning-soft); border-color: #e5c17e; color: var(--warning); }
+.badge-planned, .badge-success, .status-saved { background: #e5f3eb; border-color: #a8ceb5; color: #205840; }
+.badge-expired, .badge-canceled, .badge-past { background: #edf1f0; border-color: #c5d2cf; color: #405a59; }
+.badge-warning, .badge-overage, .status-error { background: var(--danger-soft); border-color: #dfa8a1; color: #8d2824; }
+.count-pill { border: 1px solid var(--line); border-radius: 999px; }
+.alternative-card-draft { border-left-color: #b57b24; }
+.alternative-card-planned { border-left-color: var(--teal); background: #fbfdfc; }
+.promote-draft-btn { background: var(--teal); }
+.promote-draft-btn:hover:not(:disabled) { background: var(--teal-deep); }
+.itinerary-tally, .component-search-section, .booking-trip-summary,
+.comparison-alt-header, .mobile-alt-card, .booking-component-card,
+.booking-totals-card, .budget-overage-breakdown { background: #f7fbf9; border-color: var(--line); }
+.tally-item-label, .summary-label, .breakdown-label { color: var(--muted); }
+.tally-item-value, .tally-total-row, .summary-value, .breakdown-value,
+.component-price, .flight-price-total, .stay-price-total, .rental-price-total,
+.grand-total-amount, .header-grand-total { color: var(--ink-strong); }
+.tally-overage, .overage-highlight { color: var(--danger); }
+.tally-remaining, .grand-total-highlight, .grand-total-value { color: var(--teal-deep); }
+.readiness-banner { background: var(--warning-soft); border-color: #e5c17e; color: #694109; }
+.readiness-banner-title, .readiness-issue-message { color: #694109; }
+.revision-summary-banner { background: var(--teal-soft); border-color: #a8ceb5; color: var(--ink); }
+.revision-summary-header h3 { color: var(--teal-deep); }
+.active-booking-banner, .confirmation-banner, .booking-disclosure-callout,
+.triage-success-banner { background: var(--teal-soft); border-color: #a8ceb5; border-left-color: var(--teal); }
+.active-booking-title, .active-booking-ref, .active-booking-meta,
+.confirmation-title, .confirmation-booking-ref, .disclosure-content h4,
+.disclosure-text, .trip-card-booking-ref { color: var(--teal-deep); }
+.success-icon { background: var(--teal); }
+.reference-item { background: #f7fbf9; border-color: var(--line); }
+.mobile-tab.active { background: var(--teal); border-color: var(--teal); }
+.mobile-tab { background: #f7fbf9; border-color: var(--line); color: var(--ink); }
+.missing-component { color: var(--muted); background: #f7fbf9; border-color: var(--line); }
+.comparison-table, .comparison-table th, .comparison-table td,
+.booking-history-accordion, .booking-history-list, .history-item, .history-breakdown { border-color: var(--line); }
+.comparison-label-header, .comparison-alt-header, .row-header,
+.booking-history-summary, .history-item { background: #f7fbf9; color: var(--ink-strong); }
+.section-divider-row th { background: var(--teal-soft); color: var(--teal-deep); }
+.comparison-cell.strong-value { color: var(--ink-strong); }
+.booking-history-summary:hover { background: var(--teal-soft); }
+.active-booking-meta { border-top-color: #a8ceb5; }
+.compare-notification { background: var(--warning-soft); border-color: #e5c17e; color: var(--warning); }
+.canceled-trip-banner { background: #f4f8f7; border-color: var(--line); border-left-color: #718985; }
+.canceled-trip-banner-content h2 { color: var(--ink-strong); }
+.trip-card, .alternative-card, .component-slot { box-shadow: 0 .3rem 1.2rem #17383b0b; }
+.alternative-costs { margin-top: 1rem; padding: .8rem; border: 1px solid var(--line); border-radius: .45rem; background: #f7fbf9; }
+.alternative-costs > div { display: flex; justify-content: space-between; gap: 1rem; padding: .25rem 0; }
+.alternative-costs strong { text-align: right; }
+.alternative-costs .alternative-grand-total { margin-top: .35rem; padding-top: .55rem; border-top: 1px solid var(--line); color: var(--ink-strong); font-weight: 700; }
+.alternative-costs .alternative-overage { color: var(--danger); font-weight: 700; }
 
 @media (max-width: 768px) {
   .desktop-comparison-matrix { display: none; }

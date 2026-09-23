@@ -170,6 +170,8 @@ describe('BookingConfirmationView', () => {
 
     expect(screen.queryByText('Rental Confirmation')).not.toBeInTheDocument();
     expect(screen.queryByText('RC-7T1N5V')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Not selected')).toHaveLength(2);
+    expect(screen.getByRole('heading', {name: 'Cost breakdown (USD)'})).toBeInTheDocument();
   });
 
   it('displays mandatory simulated booking disclosure with role="note"', () => {
@@ -252,7 +254,7 @@ describe('BookingConfirmationView', () => {
       />
     );
 
-    expect(screen.getByText('Cost Breakdown')).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'Cost breakdown (USD)'})).toBeInTheDocument();
     expect(screen.getByText('$740.00')).toBeInTheDocument();
     expect(screen.getByText('$916.00')).toBeInTheDocument();
     expect(screen.getByText('$262.50')).toBeInTheDocument();

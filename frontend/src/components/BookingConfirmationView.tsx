@@ -138,30 +138,17 @@ export function BookingConfirmationView({
 
         {/* Financial Breakdown */}
         <div className="confirmation-financial-summary">
-          <h4 className="financial-heading">Cost Breakdown</h4>
+          <h4 className="financial-heading">Cost breakdown <span className="currency-note">(USD)</span></h4>
           <div className="financial-rows">
-            {selections?.airfare && (
-              <div className="financial-row">
-                <span>Airfare Total</span>
-                <span>{formatCents(tally?.airfareTotalCents ?? 0)}</span>
-              </div>
-            )}
-            {selections?.stay && (
-              <div className="financial-row">
-                <span>Accommodation Total</span>
-                <span>{formatCents(tally?.stayTotalCents ?? 0)}</span>
-              </div>
-            )}
-            {selections?.rental && (
-              <div className="financial-row">
-                <span>Rental Car Total</span>
-                <span>{formatCents(tally?.rentalTotalCents ?? 0)}</span>
-              </div>
-            )}
+            <div className="financial-row"><span>Airfare Total</span><span>{selections?.airfare ? formatCents(tally?.airfareTotalCents ?? 0) : 'Not selected'}</span></div>
+            <div className="financial-row"><span>Stay Total</span><span>{selections?.stay ? formatCents(tally?.stayTotalCents ?? 0) : 'Not selected'}</span></div>
+            <div className="financial-row"><span>Rental Car Total</span><span>{selections?.rental ? formatCents(tally?.rentalTotalCents ?? 0) : 'Not selected'}</span></div>
             <div className="financial-row total-row">
               <strong>Grand Total</strong>
               <strong className="grand-total-value">{formatCents(booking.grandTotalCents)}</strong>
             </div>
+            {tally?.isOverBudget && <div className="financial-row alternative-overage"><span>Budget overage</span><strong>{formatCents(tally.budgetOverageCents ?? 0)} USD</strong></div>}
+            {tally && !tally.isOverBudget && tally.remainingBudgetCents !== null && <div className="financial-row"><span>Budget remaining</span><strong>{formatCents(tally.remainingBudgetCents)} USD</strong></div>}
           </div>
         </div>
       </div>

@@ -606,9 +606,9 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
 
     expect(screen.getByText('DT-ACT123')).toBeInTheDocument();
     expect(screen.getByText('DT-CAN456')).toBeInTheDocument();
-    expect(screen.getByText('$1,240.00')).toBeInTheDocument();
-    expect(screen.getByText('$980.00')).toBeInTheDocument();
-    expect(screen.getByText('CANCELED')).toBeInTheDocument();
+    expect(screen.getByText('Grand total: $1,240.00 USD')).toBeInTheDocument();
+    expect(screen.getByText('Grand total: $980.00 USD')).toBeInTheDocument();
+    expect(screen.getByText('Canceled Booking')).toBeInTheDocument();
   });
 
   // Test 10: Expired and Past trips suppress cancel actions
@@ -768,7 +768,7 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
     );
 
     // Canceled trip displays Canceled badge and does not display Cancel trip or Delete trip
-    expect(screen.getByText('Canceled', {selector: '.badge-canceled'})).toBeInTheDocument();
+    expect(screen.getByText('Canceled Trip', {selector: '.badge-canceled'})).toBeInTheDocument();
     expect(screen.queryByRole('button', {name: 'Cancel trip Canceled SFO Trip'})).not.toBeInTheDocument();
     expect(screen.queryByRole('button', {name: 'Delete trip Canceled SFO Trip'})).not.toBeInTheDocument();
 

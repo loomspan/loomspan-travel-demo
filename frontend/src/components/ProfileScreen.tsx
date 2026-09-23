@@ -234,7 +234,7 @@ export function ProfileScreen({
     <section className="card profile-card" aria-labelledby="profile-heading">
       <div className="profile-heading">
         <div>
-          <p className="eyebrow">DETOUR</p>
+          <p className="eyebrow wordmark">DeTour</p>
           <h1 id="profile-heading" tabIndex={-1}>
             Your profile
           </h1>

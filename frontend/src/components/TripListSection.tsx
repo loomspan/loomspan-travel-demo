@@ -20,7 +20,7 @@ function AlternativeSummaryItem({alt}: {alt: AlternativeProfileSummary}) {
     <li className="alternative-summary-item">
       <div className="alternative-summary-meta">
         <span className={`badge ${isDraft ? 'badge-draft' : 'badge-planned'}`}>
-          {isDraft ? (alt.version !== null ? `Draft v${alt.version}` : 'Draft') : 'Planned'}
+          {isDraft ? (alt.version !== null ? `Draft v${alt.version}` : 'Draft') : 'Planned itinerary'}
         </span>
         {isExpired && <span className="badge badge-expired">Expired</span>}
         <span className="alternative-id" title={alt.id}>
@@ -53,10 +53,10 @@ function TripCard({
             {isPast ? 'Past' : 'Upcoming'}
           </span>
           {isCanceled && (
-            <span className="badge badge-canceled">Canceled</span>
+            <span className="badge badge-canceled">Canceled Trip</span>
           )}
           {trip.bookedCount > 0 && (
-            <span className="badge badge-booked">BOOKED</span>
+            <span className="badge badge-booked">Booking</span>
           )}
           <h3 id={`trip-heading-${trip.id}`} className="trip-card-title">
             {trip.label}
@@ -71,13 +71,13 @@ function TripCard({
           )}
         </div>
         <div className="trip-card-counts">
-          <span className="count-pill">{trip.draftCount} Draft alternative{trip.draftCount === 1 ? '' : 's'}</span>
-          <span className="count-pill">{trip.plannedCount} Planned</span>
+          <span className="count-pill">{trip.draftCount} Draft{trip.draftCount === 1 ? '' : 's'}</span>
+          <span className="count-pill">{trip.plannedCount} Planned itinerary{trip.plannedCount === 1 ? '' : 's'}</span>
           {trip.expiredAlternativeCount > 0 && (
             <span className="count-pill badge-expired">{trip.expiredAlternativeCount} Expired</span>
           )}
           {trip.bookedCount > 0 && (
-            <span className="count-pill badge-booked">{trip.bookedCount} Booked</span>
+            <span className="count-pill badge-booked">{trip.bookedCount} Booking{trip.bookedCount === 1 ? '' : 's'}</span>
           )}
         </div>
       </div>

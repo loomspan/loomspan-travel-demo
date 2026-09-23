@@ -88,18 +88,19 @@ export function ItineraryComparisonView({
         <div>
           <p className="eyebrow">ITINERARY COMPARISON</p>
           <h2 id="comparison-heading">
-            Comparing {alternatives.length} Planned Alternatives
+            Comparing {alternatives.length} Planned itineraries
           </h2>
           <p className="trip-meta">
             {trip.destinationName} ({trip.originAirportCode} → {trip.destinationKey.replace('destination-', '').toUpperCase()}) • {trip.startDate} to {trip.endDate} • {trip.travelerCount} traveler{trip.travelerCount === 1 ? '' : 's'}
           </p>
+          <p className="hint">All amounts in USD.</p>
         </div>
       </header>
 
       {/* Screen reader live announcement for active mobile switcher tab */}
       <div className="sr-only" aria-live="polite" role="status">
         {activeAlt
-          ? `Showing itinerary ${activeMobileIndex + 1} of ${alternatives.length}: Planned ${activeAlt.id}`
+          ? `Showing itinerary ${activeMobileIndex + 1} of ${alternatives.length}: Planned itinerary ${activeAlt.id}`
           : ''}
       </div>
 
@@ -140,7 +141,7 @@ export function ItineraryComparisonView({
           >
             <div className="card mobile-alt-card">
               <div className="mobile-alt-header">
-                <h3>Planned Alternative #{activeMobileIndex + 1}</h3>
+                <h3>Planned itinerary #{activeMobileIndex + 1}</h3>
                 <span className="alternative-id">ID: {activeAlt.id.slice(0, 8)}…</span>
                 <div className="mobile-price-banner">
                   <span className="grand-total-amount">
@@ -175,7 +176,7 @@ export function ItineraryComparisonView({
 
               {/* Financial Section */}
               <div className="mobile-section">
-                <h4>Financial Summary</h4>
+                <h4>Financial summary (USD)</h4>
                 <div className="mobile-detail-row">
                   <span>Grand Total:</span>
                   <strong>{formatCents(activeAlt.tally?.grandTotalCents ?? 0)}</strong>
@@ -189,7 +190,7 @@ export function ItineraryComparisonView({
                   <span>{activeAlt.selections.stay ? formatCents(activeAlt.tally?.stayTotalCents ?? 0) : renderMissing('stay')}</span>
                 </div>
                 <div className="mobile-detail-row">
-                  <span>Rental Total:</span>
+                  <span>Rental Car Total:</span>
                   <span>{activeAlt.selections.rental ? formatCents(activeAlt.tally?.rentalTotalCents ?? 0) : renderMissing('rental')}</span>
                 </div>
               </div>
@@ -234,7 +235,7 @@ export function ItineraryComparisonView({
 
               {/* Stay Section */}
               <div className="mobile-section">
-                <h4>Accommodation</h4>
+                <h4>Stay</h4>
                 {activeAlt.selections.stay ? (
                   <div className="mobile-stay-details">
                     <div>
@@ -304,7 +305,7 @@ export function ItineraryComparisonView({
                   className="comparison-alt-header"
                 >
                   <div className="alt-header-box">
-                    <span className="badge badge-planned">Planned #{idx + 1}</span>
+                    <span className="badge badge-planned">Planned itinerary #{idx + 1}</span>
                     <span className="alternative-id">ID: {alt.id.slice(0, 8)}…</span>
                     <div className="header-grand-total">
                       {formatCents(alt.tally?.grandTotalCents ?? 0)}
@@ -344,7 +345,7 @@ export function ItineraryComparisonView({
             {/* --- Section: Financial --- */}
             <tr className="section-divider-row" role="row">
               <th colSpan={alternatives.length + 1} scope="colgroup">
-                Financial Summary
+                Financial summary (USD)
               </th>
             </tr>
             <tr role="row">
@@ -372,7 +373,7 @@ export function ItineraryComparisonView({
               ))}
             </tr>
             <tr role="row">
-              <th scope="row" className="row-header">Airfare Subtotal</th>
+              <th scope="row" className="row-header">Airfare total</th>
               {alternatives.map((alt) => (
                 <td key={alt.id} className="comparison-cell">
                   {alt.selections.airfare ? (
@@ -384,7 +385,7 @@ export function ItineraryComparisonView({
               ))}
             </tr>
             <tr role="row">
-              <th scope="row" className="row-header">Stay Subtotal</th>
+              <th scope="row" className="row-header">Stay total</th>
               {alternatives.map((alt) => (
                 <td key={alt.id} className="comparison-cell">
                   {alt.selections.stay ? (
@@ -396,7 +397,7 @@ export function ItineraryComparisonView({
               ))}
             </tr>
             <tr role="row">
-              <th scope="row" className="row-header">Rental Car Subtotal</th>
+              <th scope="row" className="row-header">Rental Car total</th>
               {alternatives.map((alt) => (
                 <td key={alt.id} className="comparison-cell">
                   {alt.selections.rental ? (

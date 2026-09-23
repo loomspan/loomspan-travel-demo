@@ -258,23 +258,23 @@ export function BookingReviewView({
 
       {/* Itemized totals & budget position */}
       <div className="card booking-totals-card">
-        <h3 className="section-title">Authoritative Booking Totals</h3>
+        <h3 className="section-title">Booking totals <span className="currency-note">(USD)</span></h3>
         <div className="totals-breakdown-list">
           <div className="total-row">
-            <span>Airfare Subtotal:</span>
+            <span>Airfare total:</span>
             <span>{selections.airfare ? formatCents(tally?.airfareTotalCents ?? 0) : renderMissing('airfare')}</span>
           </div>
           <div className="total-row">
-            <span>Stay Subtotal:</span>
+            <span>Stay total:</span>
             <span>{selections.stay ? formatCents(tally?.stayTotalCents ?? 0) : renderMissing('stay')}</span>
           </div>
           <div className="total-row">
-            <span>Rental Car Subtotal:</span>
+            <span>Rental Car total:</span>
             <span>{selections.rental ? formatCents(tally?.rentalTotalCents ?? 0) : renderMissing('rental')}</span>
           </div>
           <hr className="tally-divider" />
           <div className="total-row grand-total-row">
-            <span>Final Booking Grand Total:</span>
+            <span>Grand total:</span>
             <span className="grand-total-highlight">
               {formatCents(tally?.grandTotalCents ?? 0)}
             </span>

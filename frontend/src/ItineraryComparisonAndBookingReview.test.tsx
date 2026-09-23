@@ -333,15 +333,18 @@ describe('Itinerary Comparison and Booking Selection', () => {
     await user.click(compareBtn);
 
     // Comparison view rendered
-    expect(screen.getByRole('heading', {name: /comparing 2 planned alternatives/i})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /comparing 2 planned itineraries/i})).toBeInTheDocument();
 
     // Semantic grid / table elements
     const grid = screen.getByRole('grid', {name: /itinerary comparison table/i});
     expect(grid).toBeInTheDocument();
 
     // Column headers for each alternative
-    expect(within(grid).getByText(/planned #1/i)).toBeInTheDocument();
-    expect(within(grid).getByText(/planned #2/i)).toBeInTheDocument();
+    expect(within(grid).getByText(/planned itinerary #1/i)).toBeInTheDocument();
+    expect(within(grid).getByText(/planned itinerary #2/i)).toBeInTheDocument();
+    expect(within(grid).getByText('Airfare total')).toBeInTheDocument();
+    expect(within(grid).getByText('Stay total')).toBeInTheDocument();
+    expect(within(grid).getByText('Rental Car total')).toBeInTheDocument();
 
     // Authoritative totals & budget badges
     expect(within(grid).getAllByText('$1,918.50').length).toBeGreaterThan(0);
@@ -397,18 +400,18 @@ describe('Itinerary Comparison and Booking Selection', () => {
 
     // Live region announces Tab 1
     const liveRegion = screen.getByRole('status');
-    expect(liveRegion).toHaveTextContent(/showing itinerary 1 of 3: planned planned-/i);
+    expect(liveRegion).toHaveTextContent(/showing itinerary 1 of 3: planned itinerary planned-/i);
 
     // Focus first tab and use ArrowRight key
     tabs[0].focus();
     await user.keyboard('{ArrowRight}');
     expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
-    expect(liveRegion).toHaveTextContent(/showing itinerary 2 of 3: planned planned-/i);
+    expect(liveRegion).toHaveTextContent(/showing itinerary 2 of 3: planned itinerary planned-/i);
 
     // ArrowRight again moves to Tab 3
     await user.keyboard('{ArrowRight}');
     expect(tabs[2]).toHaveAttribute('aria-selected', 'true');
-    expect(liveRegion).toHaveTextContent(/showing itinerary 3 of 3: planned planned-/i);
+    expect(liveRegion).toHaveTextContent(/showing itinerary 3 of 3: planned itinerary planned-/i);
 
     // ArrowRight wraps to Tab 1
     await user.keyboard('{ArrowRight}');
@@ -510,7 +513,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     // Return back to comparison view
     const backBtn = screen.getByRole('button', {name: /← back to comparison/i});
     await user.click(backBtn);
-    expect(screen.getByRole('heading', {name: /comparing 2 planned alternatives/i})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /comparing 2 planned itineraries/i})).toBeInTheDocument();
   });
 
   // AC 5: Transitions from standalone planned alternative card to booking review screen and returns to workspace
@@ -730,7 +733,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     expect(screen.getByText('DT-ACT001')).toBeInTheDocument();
 
     // Planned-1 displays BOOKED badge and View Booking Details
-    const bookedBadges = screen.getAllByText('BOOKED');
+    const bookedBadges = screen.getAllByText('Booking');
     expect(bookedBadges.length).toBeGreaterThan(0);
     expect(screen.getByRole('button', {name: /view booking details for itinerary planned-1/i})).toBeInTheDocument();
 

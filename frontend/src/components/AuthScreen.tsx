@@ -38,7 +38,7 @@ export function AuthScreen({onRegister, onLogin, onFailure}: AuthScreenProps) {
   };
 
   return <section className="card auth-card" aria-labelledby="auth-heading">
-    <p className="eyebrow">DETOUR</p>
+    <p className="eyebrow wordmark">DeTour</p>
     <h1 id="auth-heading" tabIndex={-1}>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h1>
     <div className="tabs" role="group" aria-label="Account actions">
       <button type="button" aria-pressed={mode === 'login'} disabled={pending} onClick={() => switchMode('login')}>Log in form</button>

@@ -1,4 +1,5 @@
 import type {AlternativeResponse} from '../api/tripsApi';
+import {formatCents} from './ItinerarySummaryTally';
 
 type AlternativeCardProps = {
   alternative: AlternativeResponse;
@@ -59,12 +60,12 @@ export function AlternativeCard({
                   : 'Draft'
                 : 'Planned itinerary (read-only)'}
             </span>
-            {isBooked && <span className="badge badge-booked">BOOKED</span>}
+            {isBooked && <span className="badge badge-booked">Booking</span>}
             {tripCanceled && <span className="badge badge-canceled">Canceled Trip</span>}
             {tripExpired && <span className="badge badge-expired">Expired</span>}
           </div>
           <h4 id={`alt-heading-${alternative.id}`} className="alternative-card-title">
-            {isDraft ? 'Draft alternative' : 'Planned itinerary snapshot'}
+            {isDraft ? 'Draft' : 'Planned itinerary'}
           </h4>
           <span className="alternative-id">ID: {alternative.id.slice(0, 8)}…</span>
         </div>
@@ -90,7 +91,7 @@ export function AlternativeCard({
           </p>
         ) : isPlanned ? (
           <p className="hint read-only-hint">
-            This planned alternative is snapshot-locked and read-only. Use &ldquo;Duplicate to draft&rdquo; to make modifications.
+            This planned itinerary is snapshot-locked and read-only. Use &ldquo;Duplicate to draft&rdquo; to make modifications.
           </p>
         ) : null}
 
@@ -108,12 +109,22 @@ export function AlternativeCard({
             )}
             {selections.rental && (
               <div className="selection-item">
-                <strong>Rental:</strong> {selections.rental.vehicleClassName} at {selections.rental.locationName}
+                <strong>Rental Car:</strong> {selections.rental.vehicleClassName} at {selections.rental.locationName}
               </div>
             )}
           </div>
         ) : (
           <p className="hint">No components selected yet.</p>
+        )}
+        {alternative.tally && (
+          <div className="alternative-costs" aria-label="Itinerary totals in USD">
+            <div><span>Airfare total</span><strong>{selections.airfare ? formatCents(alternative.tally.airfareTotalCents) : 'Not selected'}</strong></div>
+            <div><span>Stay total</span><strong>{selections.stay ? formatCents(alternative.tally.stayTotalCents) : 'Not selected'}</strong></div>
+            <div><span>Rental Car total</span><strong>{selections.rental ? formatCents(alternative.tally.rentalTotalCents) : 'Not selected'}</strong></div>
+            <div className="alternative-grand-total"><span>Grand total</span><strong>{formatCents(alternative.tally.grandTotalCents)} USD</strong></div>
+            {alternative.tally.isOverBudget && <div className="alternative-overage"><span>Budget overage</span><strong>{formatCents(alternative.tally.budgetOverageCents ?? 0)} USD</strong></div>}
+            {!alternative.tally.isOverBudget && alternative.tally.remainingBudgetCents !== null && <div><span>Budget remaining</span><strong>{formatCents(alternative.tally.remainingBudgetCents)} USD</strong></div>}
+          </div>
         )}
       </div>
 

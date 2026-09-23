@@ -431,7 +431,7 @@ describe('Draft Promotion and Readiness Experience', () => {
 
     // Read-only notice is displayed
     expect(
-      screen.getByText(/trips with planned alternatives cannot change destination, dates, or traveler count in place/i)
+      screen.getByText(/trips with planned itineraries cannot change destination, dates, or traveler count in place/i)
     ).toBeInTheDocument();
 
     // Planned alternative card does not render Promote to Planned button

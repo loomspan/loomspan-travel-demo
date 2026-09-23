@@ -423,7 +423,7 @@ export function TripWorkspace({
           setAutosaveMessage('The Trip has changed on the server. Reload before saving.');
         } else if (err.code === 'IMMUTABLE_TRIP') {
           setAutosaveStatus('error');
-          setAutosaveMessage('Trips with Planned alternatives cannot change destination, dates, or travelers in place. Use "Revise Trip".');
+          setAutosaveMessage('Trips with Planned itineraries cannot change destination, dates, or travelers in place. Use "Revise Trip".');
         } else if (err.code === 'VALIDATION_FAILED' || Object.keys(err.fields).length > 0) {
           setFieldErrors(err.fields);
           setAutosaveStatus('error');
@@ -1241,12 +1241,12 @@ export function TripWorkspace({
 
       <header className="workspace-header">
         <div>
-          <p className="eyebrow">TRIP WORKSPACE</p>
+          <p className="eyebrow wordmark">DeTour</p>
           <div className="badge-row" style={{marginBottom: '0.35rem'}}>
             <span className={`badge ${temporalStatus === 'PAST' ? 'badge-past' : 'badge-upcoming'}`}>
               {temporalStatus === 'PAST' ? 'Past' : 'Upcoming'}
             </span>
-            {isTripCanceled && <span className="badge badge-canceled">Canceled</span>}
+            {isTripCanceled && <span className="badge badge-canceled">Canceled Trip</span>}
             {isExpired && <span className="badge badge-expired">Expired</span>}
           </div>
           <h1 id="workspace-heading" tabIndex={-1}>{trip.label}</h1>
@@ -1305,7 +1305,7 @@ export function TripWorkspace({
           <div className="active-booking-header">
             <div>
               <div className="badge-row">
-                <span className="badge badge-booked">BOOKED</span>
+                <span className="badge badge-booked">Booking</span>
                 <span className="badge badge-active">Active Reservation</span>
               </div>
               <h2 id="active-booking-heading" className="active-booking-title">Active Booking</h2>
@@ -1464,7 +1464,7 @@ export function TripWorkspace({
 
         {hasPlanned && !isTripCanceled && (
           <p className="hint read-only-hint">
-            Trips with Planned alternatives cannot change destination, dates, or traveler count in place.
+            Trips with Planned itineraries cannot change destination, dates, or traveler count in place.
             Use &ldquo;Revise Trip&rdquo; to create a new version.
           </p>
         )}
@@ -1631,10 +1631,10 @@ export function TripWorkspace({
             Alternatives ({trip.alternatives ? trip.alternatives.length : 0})
           </h3>
           <span className="count-pill">
-            {trip.drafts ? trip.drafts.length : 0} Draft alternative{trip.drafts && trip.drafts.length === 1 ? '' : 's'}
+            {trip.drafts ? trip.drafts.length : 0} Draft{trip.drafts && trip.drafts.length === 1 ? '' : 's'}
           </span>
           <span className="count-pill">
-            {plannedAlternatives.length} Planned alternative{plannedAlternatives.length === 1 ? '' : 's'}
+            {plannedAlternatives.length} Planned itinerar{plannedAlternatives.length === 1 ? 'y' : 'ies'}
           </span>
           <div className="alternatives-actions" style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center'}}>
             {plannedAlternatives.length >= 2 && (
@@ -1676,11 +1676,11 @@ export function TripWorkspace({
 
         {plannedAlternatives.length >= 2 ? (
           <p className="hint">
-            Draft alternatives let you explore and compare options. Select 2 or 3 Planned alternatives to compare them side-by-side.
+            Drafts let you explore and compare options. Select 2 or 3 Planned itineraries to compare them side-by-side.
           </p>
         ) : (
           <p className="hint">
-            Draft alternatives let you explore and compare options. Promote at least 2 draft alternatives to Planned to compare them.
+            Drafts let you explore and compare options. Promote at least 2 Drafts to Planned itineraries to compare them.
           </p>
         )}
 

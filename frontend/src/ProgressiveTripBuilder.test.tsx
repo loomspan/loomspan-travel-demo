@@ -854,7 +854,7 @@ describe('Progressive Trip Builder Experience', () => {
 
     // Slot is now empty
     expect(await screen.findByRole('button', {name: 'Add airfare'})).toBeInTheDocument();
-    expect(screen.getByTestId('tally-airfare-price')).toHaveTextContent('—');
+    expect(screen.getByTestId('tally-airfare-price')).toHaveTextContent('Not selected');
   });
 
   it('concurrency conflict (409 VERSION_CONFLICT) displays alert with reload action while preserving user search inputs', async () => {

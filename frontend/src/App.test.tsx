@@ -209,7 +209,7 @@ describe('App identity experience', () => {
     }));
 
     expect(await screen.findByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
-    expect(screen.getByText(/1 Draft alternative/)).toBeInTheDocument();
+    expect(screen.getByText('1 Draft')).toBeInTheDocument();
   });
 
   it('renders Upcoming and Past trips in backend order with clear nested hierarchy and status badges', async () => {
@@ -263,8 +263,8 @@ describe('App identity experience', () => {
     expect(screen.getByRole('heading', {name: 'Past trips (1)'})).toBeInTheDocument();
     expect(screen.getByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
     expect(screen.getByRole('heading', {name: 'Munich — Mar 01–05, 2027'})).toBeInTheDocument();
-    expect(screen.getByText('2 Draft alternatives')).toBeInTheDocument();
-    expect(screen.getByText('1 Planned')).toBeInTheDocument();
+    expect(screen.getByText('2 Drafts')).toBeInTheDocument();
+    expect(screen.getByText('1 Planned itinerary')).toBeInTheDocument();
     expect(screen.getByText('1 Expired')).toBeInTheDocument();
     expect(screen.queryByText(/Booked/)).not.toBeInTheDocument();
   });
@@ -561,7 +561,7 @@ describe('App identity experience', () => {
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     expect(await screen.findByText('Planned itinerary (read-only)')).toBeInTheDocument();
-    expect(screen.getByText(/This planned alternative is snapshot-locked and read-only/)).toBeInTheDocument();
+    expect(screen.getByText(/This planned itinerary is snapshot-locked and read-only/)).toBeInTheDocument();
     expect(screen.getByLabelText('Destination')).toBeDisabled();
     expect(screen.getByLabelText('Departure date')).toBeDisabled();
 
@@ -1305,7 +1305,7 @@ describe('App identity experience', () => {
     render(<App />);
 
     // Upcoming trip and past trip display BOOKED badges
-    const bookedBadges = await screen.findAllByText('BOOKED');
+    const bookedBadges = await screen.findAllByText('Booking');
     expect(bookedBadges.length).toBe(2);
 
     expect(screen.getAllByText(/booking reference:/i).length).toBe(2);

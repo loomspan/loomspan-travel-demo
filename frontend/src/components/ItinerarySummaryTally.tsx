@@ -59,7 +59,7 @@ export function ItinerarySummaryTally({trip, selections}: ItinerarySummaryTallyP
   return (
     <section className="card itinerary-tally" aria-labelledby="tally-heading">
       <div className="tally-header">
-        <h3 id="tally-heading">Trip Itinerary Summary</h3>
+        <h3 id="tally-heading">Draft totals <span className="currency-note">(USD)</span></h3>
         {hasBudget && (
           <span
             className={`badge ${isOverBudget ? 'badge-warning' : 'badge-success'}`}
@@ -74,19 +74,19 @@ export function ItinerarySummaryTally({trip, selections}: ItinerarySummaryTallyP
         <div className="tally-item">
           <span className="tally-item-label">Airfare:</span>
           <span className="tally-item-value" data-testid="tally-airfare-price">
-            {selections.airfare ? formatCents(airfareTotal) : '—'}
+            {selections.airfare ? formatCents(airfareTotal) : 'Not selected'}
           </span>
         </div>
         <div className="tally-item">
           <span className="tally-item-label">Stay:</span>
           <span className="tally-item-value" data-testid="tally-stay-price">
-            {selections.stay ? formatCents(stayTotal) : '—'}
+            {selections.stay ? formatCents(stayTotal) : 'Not selected'}
           </span>
         </div>
         <div className="tally-item">
           <span className="tally-item-label">Rental Car:</span>
           <span className="tally-item-value" data-testid="tally-rental-price">
-            {selections.rental ? formatCents(rentalTotal) : '—'}
+            {selections.rental ? formatCents(rentalTotal) : 'Not selected'}
           </span>
         </div>
       </div>
@@ -96,7 +96,7 @@ export function ItinerarySummaryTally({trip, selections}: ItinerarySummaryTallyP
       <div className="tally-total-row">
         <span className="tally-total-label">Grand Total:</span>
         <span className="tally-total-value" data-testid="tally-grand-total">
-          {formatCents(grandTotal)}
+          {formatCents(grandTotal)} USD
         </span>
       </div>
 
@@ -104,17 +104,17 @@ export function ItinerarySummaryTally({trip, selections}: ItinerarySummaryTallyP
         <div className="tally-budget-section">
           <div className="tally-budget-row">
             <span>Overall Budget:</span>
-            <span data-testid="tally-budget-total">{formatCents(budgetCents)}</span>
+            <span data-testid="tally-budget-total">{formatCents(budgetCents)} USD</span>
           </div>
           {isOverBudget ? (
             <div className="tally-budget-row tally-overage" role="alert">
               <span>Budget Overage:</span>
-              <span data-testid="tally-overage">{formatCents(overageCents)}</span>
+              <span data-testid="tally-overage">{formatCents(overageCents)} USD</span>
             </div>
           ) : (
             <div className="tally-budget-row tally-remaining">
               <span>Remaining Budget:</span>
-              <span data-testid="tally-remaining">{formatCents(remainingCents)}</span>
+              <span data-testid="tally-remaining">{formatCents(remainingCents)} USD</span>
             </div>
           )}
         </div>
