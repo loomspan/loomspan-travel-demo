@@ -153,7 +153,7 @@ public class TripService {
                     draftCount,
                     plannedCount,
                     expiredCount,
-                    0,
+                    trips.activeBookingCount(trip.id()),
                     trips.hasBookingHistory(trip.id()),
                     List.copyOf(alternatives));
 
@@ -573,7 +573,7 @@ public class TripService {
                 drafts, planned, List.copyOf(alternatives), revisionSummary, tripTally);
     }
 
-    private static DraftSelectionResponse selectionResponse(DraftSelections selections) {
+    public static DraftSelectionResponse selectionResponse(DraftSelections selections) {
         if (selections == null) return null;
         AirfareSelection airfare = selections.airfare(); StaySelection stay = selections.stay(); RentalSelection rental = selections.rental();
         return new DraftSelectionResponse(

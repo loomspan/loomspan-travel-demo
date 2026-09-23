@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-interface TripRepository {
+public interface TripRepository {
     Optional<Destination> findSupportedDestination(String key);
 
     void createAggregate(long ownerUserId, UUID tripPublicId, Destination destination, LocalDate startDate,
@@ -20,6 +20,8 @@ interface TripRepository {
     void deleteTrip(long tripId, long ownerUserId);
 
     boolean hasBookingHistory(long tripId);
+
+    int activeBookingCount(long tripId);
 
     boolean advanceVersion(long tripId, long ownerUserId, long expectedVersion);
 

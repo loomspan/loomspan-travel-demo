@@ -42,6 +42,7 @@ public final class TripRequests {
     public record AlternativeDuplicate(long expectedVersion, Long expectedDraftVersion) { }
     public record AlternativeDelete(long expectedVersion, Long expectedDraftVersion, Boolean confirmed) { }
     public record TripDelete(long expectedVersion, int expectedDraftCount, int expectedPlannedCount, Boolean confirmed) { }
+    public record BookingCreate(UUID plannedItineraryId, long expectedVersion, String idempotencyKey) { }
 
     static Create from(JsonNode body) {
         requireObject(body, Set.of("destinationKey", "startDate", "endDate", "travelerCount", "travelerAges", "budgetCents"));
@@ -130,6 +131,18 @@ public final class TripRequests {
                 nonNegativeInt(body.get("expectedDraftCount"), "expectedDraftCount"),
                 nonNegativeInt(body.get("expectedPlannedCount"), "expectedPlannedCount"),
                 confirmed);
+    }
+
+    public static BookingCreate booking(JsonNode body, String headerIdempotencyKey) {
+        requireObject(body, Set.of("plannedItineraryId", "expectedVersion", "idempotencyKey"));
+        UUID plannedItineraryId = uuid(body.get("plannedItineraryId"), "plannedItineraryId");
+        long expectedVersion = version(body.get("expectedVersion"), "expectedVersion");
+        String bodyKey = text(body.get("idempotencyKey"), "idempotencyKey");
+        String idempotencyKey = (bodyKey != null && !bodyKey.isBlank()) ? bodyKey : headerIdempotencyKey;
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw invalid("idempotencyKey", "An idempotency key is required.");
+        }
+        return new BookingCreate(plannedItineraryId, expectedVersion, idempotencyKey);
     }
 
     private static void requireObject(JsonNode body, Set<String> allowed) {
@@ -230,6 +243,16 @@ public final class TripRequests {
             ids.add(id);
         }
         return List.copyOf(ids);
+    }
+
+    private static UUID uuid(JsonNode node, String field) {
+        String text = text(node, field);
+        if (text == null || text.isBlank()) throw invalid(field, "This field is required.");
+        try {
+            return UUID.fromString(text);
+        } catch (IllegalArgumentException ex) {
+            throw invalid(field, "Enter a valid UUID.");
+        }
     }
 
     private static ApiException invalid(String field, String message) {

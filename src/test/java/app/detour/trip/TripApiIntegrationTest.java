@@ -48,7 +48,6 @@ class TripApiIntegrationTest {
     @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private TestClockConfiguration.TestClock testClock;
-    @MockitoSpyBean private TripRepository tripRepository;
 
     @AfterEach
     void resetClock() {
@@ -772,6 +771,8 @@ class TripApiIntegrationTest {
                 .andExpect(jsonPath("$.revisionSummary.removals[0].component").value("airfare"))
                 .andExpect(jsonPath("$.revisionSummary.removals[0].reason").value("Flight seat capacity is insufficient for 3 travelers."))
                 .andExpect(jsonPath("$.drafts[0].selections.airfare").doesNotExist());
+
+        jdbc.update("UPDATE flight_instance SET available_seats = 48 WHERE service_date = DATE '2027-03-10' AND flight_schedule_id = (SELECT id FROM flight_schedule WHERE catalog_key = 'airfare-out-sfo-d1')");
     }
 
     @Test
@@ -1288,20 +1289,29 @@ class TripApiIntegrationTest {
     @Test
     void tripDeletionBlocksWhenBookingHistoryPresent() throws Exception {
         Client owner = register("booked-guard@example.test");
-        MvcResult tripRes = owner.unsafe(post("/api/trips"), "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-15\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
+        MvcResult tripRes = owner.unsafe(post("/api/trips"), "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":500000}").andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(tripRes, "id");
-        long internalTripId = jdbc.queryForObject("SELECT id FROM detour_trip WHERE public_id = ?", Long.class, UUID.fromString(tripId));
+        String draftId = tools.jackson.databind.json.JsonMapper.builder().build().readTree(tripRes.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
 
-        org.mockito.Mockito.doReturn(true).when(tripRepository).hasBookingHistory(internalTripId);
+        insertSfoAirfareSelection(draftId);
+        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}")
+                .andExpect(status().isCreated()).andReturn();
+        String plannedId = tools.jackson.databind.json.JsonMapper.builder().build().readTree(planRes.getResponse().getContentAsString()).get("planned").get(0).get("id").asString();
 
-        owner.unsafe(delete("/api/trips/" + tripId), "{\"expectedVersion\":0,\"expectedDraftCount\":1,\"expectedPlannedCount\":0,\"confirmed\":true}")
+        owner.unsafe(post("/api/trips/{tripId}/bookings", tripId),
+                "{\"plannedItineraryId\":\"" + plannedId + "\",\"expectedVersion\":1,\"idempotencyKey\":\"guard-booking-key\"}")
+                .andExpect(status().isCreated());
+
+        owner.unsafe(delete("/api/trips/" + tripId), "{\"expectedVersion\":2,\"expectedDraftCount\":1,\"expectedPlannedCount\":1,\"confirmed\":true}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CANNOT_DELETE_BOOKED_TRIP"));
 
         mockMvc.perform(get("/api/trips/{tripId}", tripId).session(owner.session).cookie(owner.csrf))
                 .andExpect(status().isOk());
 
-        org.mockito.Mockito.doReturn(false).when(tripRepository).hasBookingHistory(internalTripId);
+        jdbc.update("DELETE FROM detour_booking WHERE trip_id = (SELECT id FROM detour_trip WHERE public_id = ?)", UUID.fromString(tripId));
+        jdbc.update("UPDATE flight_instance SET available_seats = 48 WHERE service_date = DATE '2027-03-10' AND flight_schedule_id = (SELECT id FROM flight_schedule WHERE catalog_key = 'airfare-out-sfo-d1')");
     }
 
     private int count(String table) {

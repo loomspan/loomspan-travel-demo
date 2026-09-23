@@ -68,15 +68,15 @@ An authenticated traveler can confirm a simulated booking for any valid Planned 
 
 ## Acceptance criteria
 
-- [ ] Schema migration `V17__create_booking_schema.sql` cleanly establishes `detour_booking` and snapshot structures with required constraints and indices.
-- [ ] Attempting to book a valid Planned itinerary decrements flight `available_seats`, accommodation `available_inventory`, and inserts active `rental_unit_occupancy` in a single atomic transaction.
-- [ ] If any component has insufficient inventory, the transaction rolls back completely, reserving zero components, and returns HTTP 409 with itemized conflict reasons.
-- [ ] Re-sending a booking request with the same `idempotencyKey` returns the existing booking record without deducting inventory again.
-- [ ] Attempting to book an itinerary on an Expired trip (evaluated at start of departure date in `America/Los_Angeles`) is rejected.
-- [ ] Attempting to book a trip that already has an active booking is rejected with HTTP 409.
-- [ ] Booking produces realistic fictional reference numbers (`DT-XXXXXX`, `FL-XXXXXX`, `HT-XXXXXX`, `RC-XXXXXX`) only for components included in the booking.
-- [ ] Concurrent booking attempts against the final available seat, room night, or car unit result in exactly one successful booking and clean conflict rejection for the other, without negative inventory or deadlocks.
-- [ ] Booking records and component snapshots survive an application restart and are strictly isolated to the authenticated trip owner.
+- [x] Schema migration `V17__create_booking_schema.sql` cleanly establishes `detour_booking` and snapshot structures with required constraints and indices.
+- [x] Attempting to book a valid Planned itinerary decrements flight `available_seats`, accommodation `available_inventory`, and inserts active `rental_unit_occupancy` in a single atomic transaction.
+- [x] If any component has insufficient inventory, the transaction rolls back completely, reserving zero components, and returns HTTP 409 with itemized conflict reasons.
+- [x] Re-sending a booking request with the same `idempotencyKey` returns the existing booking record without deducting inventory again.
+- [x] Attempting to book an itinerary on an Expired trip (evaluated at start of departure date in `America/Los_Angeles`) is rejected.
+- [x] Attempting to book a trip that already has an active booking is rejected with HTTP 409.
+- [x] Booking produces realistic fictional reference numbers (`DT-XXXXXX`, `FL-XXXXXX`, `HT-XXXXXX`, `RC-XXXXXX`) only for components included in the booking.
+- [x] Concurrent booking attempts against the final available seat, room night, or car unit result in exactly one successful booking and clean conflict rejection for the other, without negative inventory or deadlocks.
+- [x] Booking records and component snapshots survive an application restart and are strictly isolated to the authenticated trip owner.
 
 ## Context
 

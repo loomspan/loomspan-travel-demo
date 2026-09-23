@@ -252,7 +252,17 @@ class JdbcTripRepository implements TripRepository {
     @Override public void deleteDraft(long tripId, long draftId) { jdbc.update("DELETE FROM detour_trip_draft WHERE trip_id = ? AND id = ?", tripId, draftId); }
     @Override public void deletePlanned(long tripId, long plannedId) { jdbc.update("DELETE FROM detour_planned_itinerary WHERE trip_id = ? AND id = ?", tripId, plannedId); }
     @Override public void deleteTrip(long tripId, long ownerUserId) { jdbc.update("DELETE FROM detour_trip WHERE id = ? AND owner_user_id = ?", tripId, ownerUserId); }
-    @Override public boolean hasBookingHistory(long tripId) { return false; }
+    @Override
+    public boolean hasBookingHistory(long tripId) {
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM detour_booking WHERE trip_id = ?", Integer.class, tripId);
+        return count != null && count > 0;
+    }
+
+    @Override
+    public int activeBookingCount(long tripId) {
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM detour_booking WHERE trip_id = ? AND status = 'ACTIVE'", Integer.class, tripId);
+        return count != null ? count : 0;
+    }
 
     @Override public void insertDraftCopy(long tripId, UUID publicId, DraftSelections selections) {
         insertDraft(tripId, publicId);

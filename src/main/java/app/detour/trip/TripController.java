@@ -1,10 +1,13 @@
 package app.detour.trip;
 
 import app.detour.airfare.AirfareSearchResponses.AirfareSearchResponse;
+import app.detour.booking.BookingResponse;
+import app.detour.booking.BookingService;
 import app.detour.rental.RentalSearchResponses.RentalSearchResponse;
 import app.detour.stay.StaySearchResponses.StaySearchResponse;
 import app.detour.api.ApiException;
 import app.detour.identity.DetourUserPrincipal;
+import java.util.List;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -14,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,9 +27,11 @@ import tools.jackson.databind.JsonNode;
 @RequestMapping("/api/trips")
 public class TripController {
     private final TripService trips;
+    private final BookingService bookingService;
 
-    TripController(TripService trips) {
+    TripController(TripService trips, BookingService bookingService) {
         this.trips = trips;
+        this.bookingService = bookingService;
     }
 
     @PostMapping
@@ -240,6 +246,34 @@ public class TripController {
     ResponseEntity<Void> deleteTrip(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @RequestBody JsonNode request) {
         trips.deleteTrip(requirePrincipal(principal).userId(), tripId, TripRequests.tripDelete(request));
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{tripId}/bookings")
+    ResponseEntity<BookingResponse> createBooking(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId,
+            @RequestBody JsonNode request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String headerKey) {
+        BookingService.BookingOutcome outcome = bookingService.book(
+                requirePrincipal(principal).userId(),
+                tripId,
+                TripRequests.booking(request, headerKey)
+        );
+        return ResponseEntity.status(outcome.created() ? 201 : 200).body(outcome.response());
+    }
+
+    @GetMapping("/{tripId}/bookings/active")
+    BookingResponse activeBooking(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId) {
+        return bookingService.getActiveBooking(requirePrincipal(principal).userId(), tripId);
+    }
+
+    @GetMapping("/{tripId}/bookings")
+    List<BookingResponse> bookingHistory(
+            @AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId) {
+        return bookingService.getBookingHistory(requirePrincipal(principal).userId(), tripId);
     }
 
     private static DetourUserPrincipal requirePrincipal(DetourUserPrincipal principal) {
