@@ -93,7 +93,7 @@ export function BookingReviewView({
       </div>
 
       <header className="booking-review-header">
-        <p className="eyebrow">SIMULATED BOOKING REVIEW</p>
+        <p className="eyebrow">BOOKING REVIEW</p>
         <h2 id="booking-review-heading">Review Itinerary &amp; Component Snapshots</h2>
         <span className="alternative-id">Itinerary Snapshot ID: {alternative.id}</span>
       </header>

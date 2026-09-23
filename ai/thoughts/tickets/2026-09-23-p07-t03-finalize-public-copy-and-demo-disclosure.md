@@ -15,10 +15,10 @@ First-time visitors understand what DeTour helps them do, and everyone can find 
 
 ## Acceptance criteria
 
-- [ ] Login and registration display a brief, accurate DeTour introduction and retain clear account actions.
-- [ ] The collapsed About this demo tab is available on public and authenticated pages and conveys every required fictional-data, geography, date, and workflow fact.
-- [ ] Keyboard users can open, read, dismiss, and leave the tab predictably, with focus restored on close and the rest of the page usable.
-- [ ] No other general product-level demo explanation appears in routine application screens; booking review still states the transaction is simulated and collects no payment.
+- [x] Login and registration display a brief, accurate DeTour introduction and retain clear account actions.
+- [x] The collapsed About this demo tab is available on public and authenticated pages and conveys every required fictional-data, geography, date, and workflow fact.
+- [x] Keyboard users can open, read, dismiss, and leave the tab predictably, with focus restored on close and the rest of the page usable.
+- [x] No other general product-level demo explanation appears in routine application screens; booking review still states the transaction is simulated and collects no payment.
 
 ## Context
 
@@ -32,3 +32,8 @@ First-time visitors understand what DeTour helps them do, and everyone can find 
 - **Confidence:** medium
 - **Rationale:** The affected public copy and disclosure component are bounded, the required facts are settled, and independent review can catch inaccurate wording or focus behavior.
 - **Reassessment triggers:** Discovery that removing misplaced disclosures requires broad workflow changes or that the panel interaction changes shared navigation behavior.
+
+## Execution notes
+
+- Kept the About panel non-modal so Tab can continue into the page. Opening it focuses its heading; Escape while focus is in the tab, its close button, and its trigger restore focus to the trigger on close. Moving the existing tab before page content in DOM order gives keyboard users a natural path from the panel into the screen without changing shared navigation behavior.
+- Removed redundant simulated-booking eyebrow copy from booking review and confirmation while retaining the required booking-review disclosure. The confirmation disclosure and cancellation clarification describe their specific transactions and remain in place.

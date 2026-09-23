@@ -30,7 +30,7 @@ h1, h2 { color: #12333c; } h1 { margin: 0; font-family: Georgia, serif; font-siz
 .hint, .field-error { margin: .35rem 0 0; font-size: .9rem; }.hint { color: #4c6666; }.field-error { color: #a32929; }.primary { min-height: 2.8rem; padding: .6rem 1rem; border: 0; border-radius: .35rem; color: white; background: #17614f; font-weight: 700; cursor: pointer; }.primary:disabled { opacity: .65; cursor: wait; }
 .profile-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: start; }.identity { padding: 1rem; background: #f0f7f5; border-radius: .5rem; }.identity dd { margin: 0; overflow-wrap: anywhere; }.empty-state { padding: 1rem; border-left: .3rem solid #17614f; background: #f8fbfa; }
 .error-summary, .status { position: fixed; z-index: 2; top: 1rem; left: 50%; width: min(calc(100% - 2rem), 35rem); transform: translateX(-50%); padding: 1rem; border-radius: .5rem; }.error-summary { border: 2px solid #a32929; background: #fff5f5; color: #741b1b; }.error-summary p { margin-bottom: 0; }.status { border: 1px solid #17614f; background: #f0f7f5; color: #12333c; }
-.about-tab { position: fixed; right: 0; top: 30%; max-width: min(23rem, calc(100vw - 1rem)); }.about-tab > button { writing-mode: vertical-rl; min-height: 8rem; border: 0; border-radius: .5rem 0 0 .5rem; background: #12333c; color: white; padding: .9rem; cursor: pointer; }.about-tab.open { padding: 1rem; background: #12333c; color: white; }.about-tab.open > button { writing-mode: initial; min-height: auto; border-radius: .25rem; background: #fff; color: #12333c; }.about-tab h2 { color: white; font-size: 1rem; }.about-tab p { font-size: .9rem; line-height: 1.45; }
+.about-tab { position: fixed; z-index: 6; right: 0; top: 30%; max-width: min(23rem, calc(100vw - 1rem)); }.about-tab > button { writing-mode: vertical-rl; min-height: 8rem; border: 0; border-radius: .5rem 0 0 .5rem; background: #12333c; color: white; padding: .9rem; cursor: pointer; }.about-tab.open { padding: 1rem; max-height: calc(70dvh - 1rem); overflow-y: auto; background: #12333c; color: white; border-radius: .5rem 0 0 .5rem; box-shadow: 0 .5rem 2rem #17383b40; }.about-tab.open > button { writing-mode: initial; min-height: auto; border-radius: .25rem; background: #fff; color: #12333c; }.about-tab h2 { color: white; font-size: 1rem; }.about-tab p { font-size: .9rem; line-height: 1.45; }.about-tab-close { margin-top: .5rem; padding: .5rem .75rem; border: 1px solid white; border-radius: .25rem; background: transparent; color: white; cursor: pointer; }
 :focus-visible { outline: 3px solid #e36d27; outline-offset: 3px; } [hidden] { display: none !important; }
 
 /* Modal styles */
@@ -662,7 +662,7 @@ a:focus-visible, summary:focus-visible { outline: 3px solid #d26521; outline-off
   .password-input { grid-template-columns: 1fr; }
   .about-tab { top: auto; bottom: 0; }
   .about-tab > button { writing-mode: initial; min-height: auto; border-radius: .5rem 0 0 0; }
-  .about-tab.open { inset: auto 0 0 0; max-width: none; }
+  .about-tab.open { inset: auto 0 0 0; max-width: none; max-height: calc(100dvh - 1rem); }
   .profile-heading { flex-direction: column; }
   .trips-header { flex-direction: column; align-items: flex-start; }
   .trip-card-header { flex-direction: column; }

@@ -45,7 +45,7 @@ export function BookingConfirmationView({
         <div className="confirmation-banner-header">
           <span className="success-icon" aria-hidden="true">✓</span>
           <div>
-            <p className="eyebrow">SIMULATED RESERVATION COMPLETE</p>
+            <p className="eyebrow">RESERVATION COMPLETE</p>
             <h2 id="confirmation-heading" className="confirmation-title">Booking Confirmed!</h2>
             <p className="confirmation-booking-ref">
               Booking Reference: <strong className="ref-code">{booking.bookingReference}</strong>
@@ -58,7 +58,7 @@ export function BookingConfirmationView({
       <div className="card component-references-card">
         <h3 className="section-title">Component Confirmation Codes</h3>
         <p className="hint">
-          Use these fictional locator codes when referencing specific travel components.
+          Use these locator codes when referencing specific travel components in this booking.
         </p>
 
         <ul className="component-references-list" aria-label="Component reference codes">

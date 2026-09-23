@@ -98,6 +98,7 @@ export default function App() {
   return <main className="shell">
     {notice?.kind === 'error' && <div className="error-summary" role="alert" tabIndex={-1} ref={errorRef}><strong>We need your attention.</strong><p>{notice.message}</p></div>}
     <StatusRegion message={notice?.kind === 'status' ? notice.message : undefined} />
+    <AboutDemoTab />
     {screen.kind === 'loading' ? <p className="loading">Checking your account…</p> : screen.kind === 'profile'
       ? <ProfileScreen
           email={screen.profile.email}
@@ -110,6 +111,5 @@ export default function App() {
           onRefreshProfile={() => loadProfile(false, false, true)}
         />
       : <AuthScreen onRegister={register} onLogin={login} onFailure={showFailure} />}
-    <AboutDemoTab />
   </main>;
 }

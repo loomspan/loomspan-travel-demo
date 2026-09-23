@@ -58,6 +58,20 @@ describe('App identity experience', () => {
     expect(screen.getByLabelText('Password')).toHaveValue('');
   });
 
+  it('introduces DeTour on both public account forms and keeps clear actions', async () => {
+    fetchMock.mockResolvedValueOnce(json(401, {code: 'UNAUTHENTICATED'}));
+    const user = userEvent.setup(); render(<App />);
+    await screen.findByRole('heading', {name: 'Welcome back'});
+    const introduction = 'Plan a trip your way. Start with airfare, a stay, or a complete itinerary. Save alternatives, compare total costs, and choose what works for you.';
+    expect(screen.getByText(introduction)).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Log in'})).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'About this demo'})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Register'}));
+    expect(screen.getByRole('heading', {name: 'Create your account'})).toBeInTheDocument();
+    expect(screen.getByText(introduction)).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Create account'})).toBeInTheDocument();
+  });
+
   it('does not announce registration success when the new session cannot load', async () => {
     fetchMock.mockResolvedValueOnce(json(401, {code: 'UNAUTHENTICATED'}))
       .mockResolvedValueOnce(json(201, {email: 'ada@example.test'}))
