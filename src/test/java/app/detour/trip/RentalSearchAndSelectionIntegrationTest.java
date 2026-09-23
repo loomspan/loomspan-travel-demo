@@ -100,22 +100,12 @@ class RentalSearchAndSelectionIntegrationTest {
         // SUV: daily total 10300 cents * 4 = 41200 cents
         assertEquals(41200, options.get(5).get("pricing").get("totalPriceCents").asLong());
 
-        // 2. Draft-scoped singular and aliases
-        owner.unsafe(get("/api/trips/{tripId}/drafts/{draftId}/rental?pickupAt={p}&returnAt={r}", tripId, draftId, pickup, ret), null)
-                .andExpect(status().isOk()).andExpect(jsonPath("$.options.length()").value(7));
-        owner.unsafe(get("/api/trips/{tripId}/drafts/{draftId}/cars?pickupAt={p}&returnAt={r}", tripId, draftId, pickup, ret), null)
-                .andExpect(status().isOk()).andExpect(jsonPath("$.options.length()").value(7));
-        owner.unsafe(get("/api/trips/{tripId}/drafts/{draftId}/car?pickupAt={p}&returnAt={r}", tripId, draftId, pickup, ret), null)
+        // 2. Draft-scoped route
+        owner.unsafe(get("/api/trips/{tripId}/drafts/{draftId}/rentals?pickupAt={p}&returnAt={r}", tripId, draftId, pickup, ret), null)
                 .andExpect(status().isOk()).andExpect(jsonPath("$.options.length()").value(7));
 
         // 3. Trip-scoped routes
         owner.unsafe(get("/api/trips/{tripId}/rentals?pickupAt={p}&returnAt={r}", tripId, pickup, ret), null)
-                .andExpect(status().isOk()).andExpect(jsonPath("$.options.length()").value(7));
-        owner.unsafe(get("/api/trips/{tripId}/rental?pickupAt={p}&returnAt={r}", tripId, pickup, ret), null)
-                .andExpect(status().isOk()).andExpect(jsonPath("$.options.length()").value(7));
-        owner.unsafe(get("/api/trips/{tripId}/cars?pickupAt={p}&returnAt={r}", tripId, pickup, ret), null)
-                .andExpect(status().isOk()).andExpect(jsonPath("$.options.length()").value(7));
-        owner.unsafe(get("/api/trips/{tripId}/car?pickupAt={p}&returnAt={r}", tripId, pickup, ret), null)
                 .andExpect(status().isOk()).andExpect(jsonPath("$.options.length()").value(7));
     }
 

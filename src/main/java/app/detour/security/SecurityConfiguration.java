@@ -43,7 +43,7 @@ class SecurityConfiguration {
                 .securityContext(context -> context.securityContextRepository(securityContextRepository).requireExplicitSave(true))
                 .sessionManagement(session -> session.sessionFixation(Customizer.withDefaults()))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/", "/index.html", "/assets/**", "/favicon.ico", "/demo-disclosure/**").permitAll()
+                        .requestMatchers("/", "/index.html", "/assets/**", "/favicon.ico").permitAll()
                         .requestMatchers(HttpMethod.GET, "/profile").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
                         .anyRequest().authenticated())

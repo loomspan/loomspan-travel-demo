@@ -82,7 +82,7 @@ class StaySearchAndSelectionIntegrationTest {
         String tripId = jsonField(tripResult, "id");
         String draftId = JSON.readTree(tripResult.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
 
-        // 1. Draft-scoped plural route
+        // Draft-scoped route
         MvcResult draftResult = owner.unsafe(get("/api/trips/{tripId}/drafts/{draftId}/stays?type=HOTEL", tripId, draftId), null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tripId").value(tripId))
@@ -98,22 +98,13 @@ class StaySearchAndSelectionIntegrationTest {
             assertTrue(opt.get("pricing").get("nightCount").asInt() == 4);
         }
 
-        // 2. Draft-scoped singular route alias
-        owner.unsafe(get("/api/trips/{tripId}/drafts/{draftId}/stay?type=HOTEL", tripId, draftId), null)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.options.length()").value(2));
-
-        // 3. Trip-scoped plural route
+        // Trip-scoped route
         owner.unsafe(get("/api/trips/{tripId}/stays?type=HOTEL", tripId), null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tripId").value(tripId))
                 .andExpect(jsonPath("$.draftId").doesNotExist())
                 .andExpect(jsonPath("$.options.length()").value(2));
 
-        // 4. Trip-scoped singular route alias
-        owner.unsafe(get("/api/trips/{tripId}/stay?type=HOTEL", tripId), null)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.options.length()").value(2));
     }
 
     @Test
@@ -330,7 +321,7 @@ class StaySearchAndSelectionIntegrationTest {
 
         // 4. Also select a stay on the draft
         Long harborUnitId = jdbc.queryForObject("SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-harbor'", Long.class);
-        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":%d,"expectedDraftVersion":%d,"accommodationUnitId":%d}
                 """.formatted(tripVersion, draftVersion, harborUnitId))
                 .andExpect(status().isOk());
@@ -441,7 +432,7 @@ class StaySearchAndSelectionIntegrationTest {
         Long harborUnitId = jdbc.queryForObject("SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-harbor'", Long.class);
 
         // Perform PUT /api/trips/{tripId}/drafts/{draftId}/stay
-        MvcResult selectResult = owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        MvcResult selectResult = owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":0,"expectedDraftVersion":0,"accommodationUnitId":%d}
                 """.formatted(harborUnitId))
                 .andExpect(status().isOk()).andReturn();
@@ -482,13 +473,13 @@ class StaySearchAndSelectionIntegrationTest {
         Long summitUnitId = jdbc.queryForObject("SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit'", Long.class);
 
         // 1. Select Harbor
-        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":0,"expectedDraftVersion":0,"accommodationUnitId":%d}
                 """.formatted(harborUnitId))
                 .andExpect(status().isOk());
 
         // 2. Replace with Summit
-        MvcResult replaceResult = owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        MvcResult replaceResult = owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":1,"expectedDraftVersion":1,"accommodationUnitId":%d}
                 """.formatted(summitUnitId))
                 .andExpect(status().isOk()).andReturn();
@@ -516,13 +507,13 @@ class StaySearchAndSelectionIntegrationTest {
         Long harborUnitId = jdbc.queryForObject("SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-harbor'", Long.class);
 
         // 1. Select Harbor
-        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":0,"expectedDraftVersion":0,"accommodationUnitId":%d}
                 """.formatted(harborUnitId))
                 .andExpect(status().isOk());
 
         // 2. Remove stay selection
-        MvcResult removeResult = owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        MvcResult removeResult = owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":1,"expectedDraftVersion":1}
                 """)
                 .andExpect(status().isOk()).andReturn();
@@ -550,34 +541,34 @@ class StaySearchAndSelectionIntegrationTest {
         Long harborUnitId = jdbc.queryForObject("SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-harbor'", Long.class);
 
         // 1. PUT with stale expectedVersion
-        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":99,"expectedDraftVersion":0,"accommodationUnitId":%d}
                 """.formatted(harborUnitId))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
 
         // 2. PUT with stale expectedDraftVersion
-        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":0,"expectedDraftVersion":99,"accommodationUnitId":%d}
                 """.formatted(harborUnitId))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
 
         // 3. Successful PUT advances versions to 1
-        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":0,"expectedDraftVersion":0,"accommodationUnitId":%d}
                 """.formatted(harborUnitId))
                 .andExpect(status().isOk());
 
         // 4. DELETE with stale expectedVersion
-        owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":99,"expectedDraftVersion":1}
                 """)
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
 
         // 5. DELETE with stale expectedDraftVersion
-        owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":1,"expectedDraftVersion":99}
                 """)
                 .andExpect(status().isConflict())
@@ -606,14 +597,14 @@ class StaySearchAndSelectionIntegrationTest {
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
 
         // 2. Selection mutation on foreign draft returns 404
-        intruder.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        intruder.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":0,"expectedDraftVersion":0,"accommodationUnitId":%d}
                 """.formatted(harborUnitId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
 
         // 3. Removal on foreign draft returns 404
-        intruder.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        intruder.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":0,"expectedDraftVersion":0}
                 """)
                 .andExpect(status().isNotFound())

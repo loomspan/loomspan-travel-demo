@@ -172,7 +172,7 @@ class TripPricingAndTallyIntegrationTest {
         String selectPayload = """
                 {"expectedVersion":0,"expectedDraftVersion":0,"accommodationUnitId":%d,"unitCount":1}
                 """.formatted(unitId);
-        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), selectPayload)
+        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), selectPayload)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tally.airfareTotalCents").value(0))
                 .andExpect(jsonPath("$.tally.stayTotalCents").value(expectedStayTotal))
@@ -208,7 +208,7 @@ class TripPricingAndTallyIntegrationTest {
         String selectPayload = """
                 {"expectedVersion":0,"expectedDraftVersion":0,"rentalUnitId":%d,"pickupAt":"%s","returnAt":"%s"}
                 """.formatted(rentalUnitId, pickupAt, returnAt);
-        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/rental", tripId, draftId), selectPayload)
+        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/rentals", tripId, draftId), selectPayload)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tally.airfareTotalCents").value(0))
                 .andExpect(jsonPath("$.tally.stayTotalCents").value(0))
@@ -269,7 +269,7 @@ class TripPricingAndTallyIntegrationTest {
         draftVersion = JSON.readTree(c1Result.getResponse().getContentAsString()).get("drafts").get(0).get("version").asLong();
 
         // --- Combination 2: Airfare + Stay ---
-        MvcResult c2Result = owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        MvcResult c2Result = owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":%d,"expectedDraftVersion":%d,"accommodationUnitId":%d,"unitCount":1}
                 """.formatted(tripVersion, draftVersion, accommodationUnitId))
                 .andExpect(status().isOk())
@@ -282,7 +282,7 @@ class TripPricingAndTallyIntegrationTest {
         draftVersion = JSON.readTree(c2Result.getResponse().getContentAsString()).get("drafts").get(0).get("version").asLong();
 
         // --- Combination 3: All three (Airfare + Stay + Rental) ---
-        MvcResult c3Result = owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/rental", tripId, draftId), """
+        MvcResult c3Result = owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/rentals", tripId, draftId), """
                 {"expectedVersion":%d,"expectedDraftVersion":%d,"rentalUnitId":%d,"pickupAt":"%s","returnAt":"%s"}
                 """.formatted(tripVersion, draftVersion, rentalUnitId, pickup, returnAt))
                 .andExpect(status().isOk())
@@ -309,7 +309,7 @@ class TripPricingAndTallyIntegrationTest {
         draftVersion = JSON.readTree(c4Result.getResponse().getContentAsString()).get("drafts").get(0).get("version").asLong();
 
         // --- Combination 5: Rental only (remove stay) ---
-        MvcResult c5Result = owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        MvcResult c5Result = owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":%d,"expectedDraftVersion":%d}
                 """.formatted(tripVersion, draftVersion))
                 .andExpect(status().isOk())
@@ -335,7 +335,7 @@ class TripPricingAndTallyIntegrationTest {
         draftVersion = JSON.readTree(c6Result.getResponse().getContentAsString()).get("drafts").get(0).get("version").asLong();
 
         // --- Combination 7: Stay only (remove rental, remove airfare, add stay) ---
-        MvcResult removeRentalRes = owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/rental", tripId, draftId), """
+        MvcResult removeRentalRes = owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/rentals", tripId, draftId), """
                 {"expectedVersion":%d,"expectedDraftVersion":%d}
                 """.formatted(tripVersion, draftVersion))
                 .andExpect(status().isOk()).andReturn();
@@ -349,7 +349,7 @@ class TripPricingAndTallyIntegrationTest {
         tripVersion = JSON.readTree(removeAirfareRes.getResponse().getContentAsString()).get("version").asLong();
         draftVersion = JSON.readTree(removeAirfareRes.getResponse().getContentAsString()).get("drafts").get(0).get("version").asLong();
 
-        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":%d,"expectedDraftVersion":%d,"accommodationUnitId":%d,"unitCount":1}
                 """.formatted(tripVersion, draftVersion, accommodationUnitId))
                 .andExpect(status().isOk())
@@ -431,7 +431,7 @@ class TripPricingAndTallyIntegrationTest {
         JsonNode stayOpt = JSON.readTree(staySearch.getResponse().getContentAsString()).get("options").get(0);
         long unitId = stayOpt.get("accommodationUnitId").asLong();
 
-        MvcResult selectStayRes = owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stay", tripId, draftId), """
+        MvcResult selectStayRes = owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stays", tripId, draftId), """
                 {"expectedVersion":%d,"expectedDraftVersion":%d,"accommodationUnitId":%d,"unitCount":1}
                 """.formatted(tripVersion, draftVersion, unitId))
                 .andExpect(status().isOk()).andReturn();

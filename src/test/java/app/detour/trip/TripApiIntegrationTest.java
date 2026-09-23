@@ -884,8 +884,8 @@ class TripApiIntegrationTest {
         String plannedId = tools.jackson.databind.json.JsonMapper.builder().build()
                 .readTree(plannedResult.getResponse().getContentAsString()).get("planned").get(0).get("id").asString();
 
-        // Duplicate with destinationKey: "destination-muc" using the revisions alias
-        owner.unsafe(post("/api/trips/{tripId}/revisions", tripId),
+        // Duplicate with destinationKey: "destination-muc"
+        owner.unsafe(post("/api/trips/{tripId}/duplicate", tripId),
                 "{\"expectedVersion\":1,\"destinationKey\":\"destination-muc\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000,\"sourcePlannedItineraryIds\":[\"" + plannedId + "\"]}")
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.destinationKey").value("destination-muc"))
