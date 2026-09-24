@@ -19,7 +19,7 @@
   line-height: 1.5;
 }
 * { box-sizing: border-box; } body { margin: 0; min-width: 320px; } button, input { font: inherit; }
-.shell { min-height: 100vh; display: grid; place-items: center; padding: 2rem 5rem; background: radial-gradient(circle at top right, #cce9df, transparent 42%), #eef5f3; }
+.shell { min-height: 100vh; padding: clamp(1rem, 2vw, 2.5rem); background: radial-gradient(circle at top right, #cce9df, transparent 42%), #eef5f3; }
 .card { width: min(100%, 35rem); padding: clamp(1.5rem, 5vw, 3rem); background: #fff; border: 1px solid #c7dcda; border-radius: 1rem; box-shadow: 0 1rem 3rem #17383b1a; }
 .eyebrow { margin: 0 0 .75rem; color: #17614f; font-size: .8rem; font-weight: 700; letter-spacing: .18em; }
 h1, h2 { color: #12333c; } h1 { margin: 0; font-family: Georgia, serif; font-size: clamp(2rem, 6vw, 3.2rem); font-weight: 500; line-height: 1; } h2 { margin-top: 2rem; font-size: 1.15rem; }
@@ -84,7 +84,7 @@ h1, h2 { color: #12333c; } h1 { margin: 0; font-family: Georgia, serif; font-siz
 .delete-button { color: #a32929; text-decoration: underline; }
 
 /* Workspace styles */
-.workspace-card { width: min(100%, 54rem); padding: clamp(1.5rem, 4vw, 2.5rem); margin: 0 auto; }
+.workspace-card { width: min(100%, 90rem); padding: clamp(1.25rem, 2.5vw, 2.5rem); margin: 0 auto; }
 .workspace-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem; }
 .workspace-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; border-bottom: 1px solid #c7dcda; padding-bottom: 1rem; }
 .workspace-header h2 { margin: 0.2rem 0; font-family: Georgia, serif; font-size: clamp(1.5rem, 4vw, 2.2rem); }
@@ -211,8 +211,8 @@ h1, h2 { color: #12333c; } h1 { margin: 0; font-family: Georgia, serif; font-siz
 .slot-highlighted { outline: 3px solid #e36d27; outline-offset: 2px; }
 
 /* Comparison and Booking Review Styles */
-.comparison-workspace-card { width: min(100%, 72rem); }
-.booking-review-workspace-card { width: min(100%, 54rem); }
+.comparison-workspace-card { width: min(100%, 90rem); }
+.booking-review-workspace-card { width: min(100%, 75rem); }
 .comparison-view-container { display: flex; flex-direction: column; gap: 1.5rem; }
 .comparison-top-nav, .booking-review-top-nav { margin-bottom: 0.5rem; }
 .comparison-header, .booking-review-header { border-bottom: 1px solid #c7dcda; padding-bottom: 1rem; }
@@ -631,7 +631,7 @@ a:focus-visible, summary:focus-visible { outline: 3px solid #d26521; outline-off
 .alternative-costs strong { text-align: right; }
 .alternative-costs .alternative-grand-total { margin-top: .35rem; padding-top: .55rem; border-top: 1px solid var(--line); color: var(--ink-strong); font-weight: 700; }
 .alternative-costs .alternative-overage { color: var(--danger); font-weight: 700; }
-.primary-navigation { width: min(100%, 72rem); margin: 0 auto 1rem; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; }
+.primary-navigation { width: min(100%, 90rem); margin: 0 auto 1rem; padding: .75rem clamp(1rem, 2vw, 2rem); display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; }
 .primary-navigation [aria-current="page"] { font-weight: 800; text-decoration: underline; text-underline-offset: .25rem; }
 .navigation-save-status { margin-left: auto; overflow-wrap: anywhere; }
 .save-error { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
@@ -709,4 +709,43 @@ a:focus-visible, summary:focus-visible { outline: 3px solid #d26521; outline-off
     max-height: none;
   }
   .about-tab.open { justify-self: stretch; }
+}
+
+/* Shared page widths: forms stay readable while travel content uses the screen. */
+.auth-card { margin: clamp(1rem, 6vh, 4rem) auto; }
+.profile-card { width: min(100%, 90rem); margin: 0 auto; padding: clamp(1.25rem, 2.5vw, 2.5rem); }
+.home-card { width: min(100%, 75rem); }
+.home-card > p:not(.eyebrow), .empty-state > p { max-width: 70ch; }
+.profile-card > .identity,
+.profile-card > section[aria-labelledby="password-heading"] { max-width: 38rem; }
+.booking-confirmation-workspace-card { width: min(100%, 75rem); }
+.empty-state-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; max-width: 60rem; }
+.empty-state-actions button { min-height: 4rem; }
+
+@media (min-width: 900px) {
+  .trips-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1100px) {
+  .builder-section {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
+    grid-template-areas: "heading heading" "slots tally";
+    gap: 1rem clamp(1.25rem, 2vw, 2rem);
+    align-items: start;
+  }
+  .builder-header { grid-area: heading; margin-bottom: 0; }
+  .builder-section > .itinerary-tally { grid-area: tally; position: sticky; top: 1rem; margin-bottom: 0; }
+  .builder-section > .component-slots-grid { grid-area: slots; }
+  .alternatives-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 520px) {
+  .auth-card, .primary-navigation, .workspace-card, .profile-card { margin-top: 0; }
+  .empty-state-actions { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 720px) {
+  .about-tab { width: max-content; margin-left: auto; }
+  .about-tab.open { width: 100%; }
 }

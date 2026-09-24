@@ -20,7 +20,7 @@ export function EmptyProfileState({
         Trips let you organize and compare travel options from Portland (PDX) to San Francisco, Munich, or Mexico City.
         Create draft alternatives to explore itineraries, autosave your details, and prepare your travel plans.
       </p>
-      <div className="empty-state-actions" style={{display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap'}}>
+      <div className="empty-state-actions">
         <button type="button" className="primary" onClick={handlePlanTrip}>
           Plan Trip
         </button>

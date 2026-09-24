@@ -285,7 +285,7 @@ export function ProfileScreen({
         }}
       />
     </div>}
-    {viewMode === 'home' && <section className="card profile-card" aria-labelledby="home-heading">
+    {viewMode === 'home' && <section className="card profile-card home-card" aria-labelledby="home-heading">
       <p className="eyebrow wordmark">DeTour</p>
       <h1 id="home-heading" tabIndex={-1}>Home</h1>
       <p>Start a Trip from airfare, stay, or a full plan.</p>
