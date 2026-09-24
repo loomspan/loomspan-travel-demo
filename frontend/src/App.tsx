@@ -7,6 +7,7 @@ import {StatusRegion} from './components/StatusRegion';
 
 type Screen = {kind: 'loading'} | {kind: 'public'} | {kind: 'profile'; profile: Profile};
 type Notice = {kind: 'error' | 'status'; message: string; fields?: Record<string, string>};
+const LOGIN_SUCCESS_MESSAGE = 'You are now logged in.';
 
 function failureFor(error: unknown, action: 'login' | 'register' | 'password' | 'logout' | 'profile'): FormFailure {
   if (!(error instanceof IdentityApiError)) return {message: 'Something went wrong. Please try again.'};
@@ -35,7 +36,7 @@ export default function App() {
     try {
       const profile = await identityApi.getProfile();
       if (requestId !== profileRequestId.current) return false;
-      setScreen({kind: 'profile', profile}); if (afterLogin) setNotice({kind: 'status', message: 'You are now logged in.'});
+      setScreen({kind: 'profile', profile}); if (afterLogin) setNotice({kind: 'status', message: LOGIN_SUCCESS_MESSAGE});
       return true;
     } catch (error) {
       if (requestId !== profileRequestId.current) return false;
@@ -49,6 +50,13 @@ export default function App() {
   };
   useEffect(() => { void loadProfile(); }, []);
   useEffect(() => { if (notice?.kind === 'error') errorRef.current?.focus(); }, [notice]);
+  useEffect(() => {
+    if (notice?.kind !== 'status' || notice.message !== LOGIN_SUCCESS_MESSAGE) return;
+    const timer = window.setTimeout(() => {
+      setNotice(current => current?.kind === 'status' && current.message === LOGIN_SUCCESS_MESSAGE ? undefined : current);
+    }, 6000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
   useEffect(() => {
     if (screen.kind !== 'loading' && notice?.kind !== 'error') document.querySelector<HTMLElement>('h1')?.focus();
   }, [screen.kind, notice?.kind]);

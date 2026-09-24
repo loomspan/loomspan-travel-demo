@@ -32,7 +32,7 @@ export function ProfileScreen({
   onRefreshProfile,
 }: ProfileScreenProps) {
   // Navigation mode
-  const [viewMode, setViewMode] = useState<'home' | 'profile' | 'workspace'>('profile');
+  const [viewMode, setViewMode] = useState<'home' | 'profile' | 'workspace'>('home');
   const [activeTrip, setActiveTrip] = useState<TripResponse | null>(null);
   const workspaceRef = useRef<TripWorkspaceHandle>(null);
   const openingSequence = useRef(0);
