@@ -238,6 +238,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
       onPasswordChange={async () => {}}
       onFailure={() => {}}
     />);
+    await user.click(screen.getByRole('button', {name: 'Profile'}));
     await user.click(screen.getByRole('button', {name: `Open trip ${trip.label}`}));
     const choices = screen.getAllByRole('checkbox', {name: /select for comparison/i});
     await user.click(choices[0]);

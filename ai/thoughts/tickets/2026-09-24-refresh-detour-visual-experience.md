@@ -16,11 +16,11 @@ DeTour feels like a polished, image-rich travel product from Home through trip p
 
 ## Acceptance criteria
 
-- [ ] Home shows photo-led Featured destinations cards labeled San Francisco, Munich, and Mexico City; Plan Trip, Airfare, and Stay still open their existing flows.
-- [ ] The approved visual direction is recognizable and consistent across public screens, authenticated planning screens, booking and cancellation screens, and dialogs.
-- [ ] Dropdowns and checkboxes have consistent polished styling and remain usable by mouse, touch, keyboard, and assistive technology, with clear focus, selected, disabled, and error states.
-- [ ] Destination imagery and icons have appropriate accessible text or decorative treatment, render reliably, and do not cause layout shifts or horizontal overflow at supported widths.
-- [ ] Existing trip and booking workflows retain their behavior, and automated regression tests plus responsive and accessibility checks cover the changed experience.
+- [x] Home shows photo-led Featured destinations cards labeled San Francisco, Munich, and Mexico City; Plan Trip, Airfare, and Stay still open their existing flows.
+- [x] The approved visual direction is recognizable and consistent across public screens, authenticated planning screens, booking and cancellation screens, and dialogs.
+- [x] Dropdowns and checkboxes have consistent polished styling and remain usable by mouse, touch, keyboard, and assistive technology, with clear focus, selected, disabled, and error states.
+- [x] Destination imagery and icons have appropriate accessible text or decorative treatment, render reliably, and do not cause layout shifts or horizontal overflow at supported widths.
+- [x] Existing trip and booking workflows retain their behavior, and automated regression tests plus responsive and accessibility checks cover the changed experience.
 
 ## Context
 

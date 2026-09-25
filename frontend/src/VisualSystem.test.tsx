@@ -4,6 +4,7 @@ import {describe, expect, it, vi} from 'vitest';
 // @ts-expect-error Node's fs types are not part of the browser build.
 import {readFileSync} from 'node:fs';
 import {AuthScreen} from './components/AuthScreen';
+import {ActionIcon} from './components/ActionIcon';
 import {ItinerarySummaryTally, formatTallyCents} from './components/ItinerarySummaryTally';
 import type {DraftSelectionResponse, TripResponse} from './api/tripsApi';
 
@@ -32,5 +33,22 @@ describe('DeTour visual language', () => {
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)/);
     expect(css).toMatch(/scroll-behavior: auto !important/);
     expect(css).toMatch(/:focus-visible\s*\{[^}]*outline:/);
+  });
+
+  it('keeps native control states visible in standard and forced colors', () => {
+    const css = readFileSync('src/style.css', 'utf8');
+    expect(css).toMatch(/select:hover:not\(:disabled\)/);
+    expect(css).toMatch(/select:focus-visible, input\[type="checkbox"\]:focus-visible/);
+    expect(css).toMatch(/select:disabled/);
+    expect(css).toMatch(/select\[aria-invalid="true"\], input\[type="checkbox"\]\[aria-invalid="true"\]/);
+    expect(css).toMatch(/input\[type="checkbox"\]:checked/);
+    expect(css).toMatch(/input\[type="checkbox"\]:disabled/);
+    expect(css).toMatch(/@media \(forced-colors: active\)/);
+  });
+
+  it('treats action icons as decorative while text carries the action name', () => {
+    render(<button type="button"><ActionIcon name="airfare" />Airfare</button>);
+    expect(screen.getByRole('button', {name: 'Airfare'})).toBeInTheDocument();
+    expect(document.querySelector('.action-icon')).toHaveAttribute('aria-hidden', 'true');
   });
 });

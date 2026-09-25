@@ -749,3 +749,73 @@ a:focus-visible, summary:focus-visible { outline: 3px solid #d26521; outline-off
   .about-tab { width: max-content; margin-left: auto; }
   .about-tab.open { width: 100%; }
 }
+
+/* DeTour's shared editorial surfaces and travel discovery. */
+:root {
+  --canvas: #f1f6f4;
+  --teal-soft: #e9f5f1;
+  --line: #d3e4df;
+  --radius: .8rem;
+}
+.shell { background: linear-gradient(145deg, #e8f4ef 0, var(--canvas) 30rem, #f8fbfa 100%); }
+.card, .modal { box-shadow: 0 .75rem 2.5rem #17383b10; }
+.profile-card, .workspace-card, .auth-card { border-color: var(--line); }
+.modal { border: 1px solid var(--line); border-radius: 1rem; }
+.primary-navigation { background: var(--ink-strong); border-color: var(--ink-strong); border-radius: .85rem; box-shadow: 0 .65rem 1.7rem #12333c24; }
+.primary-navigation .text-button { display: inline-flex; align-items: center; gap: .45rem; min-height: 2.7rem; padding: .45rem .65rem; color: #e8f6f1; text-decoration: none; border-radius: .4rem; }
+.primary-navigation .text-button:hover, .primary-navigation [aria-current="page"] { background: #ffffff1f; color: #fff; }
+.primary-navigation [aria-current="page"] { text-decoration: underline; text-decoration-color: #9dd8c0; }
+.primary-navigation .navigation-save-status { color: #e8f6f1; }
+.action-icon { width: 1.15em; height: 1.15em; flex: none; vertical-align: -.15em; }
+button > .action-icon { margin-right: .3rem; }
+.primary-navigation button > .action-icon { margin-right: 0; }
+.home-card { padding: 0; overflow: hidden; }
+.home-hero { padding: clamp(1.5rem, 5vw, 4.5rem); background: radial-gradient(circle at 85% 15%, #d3ede3, transparent 42%), linear-gradient(120deg, #e8f5f0, #f7fbf9); }
+.home-hero h1 { font: 700 .78rem/1.3 ui-sans-serif, system-ui, sans-serif; letter-spacing: .16em; text-transform: uppercase; }
+.home-hero p { max-width: 55ch; }
+.home-hero .home-lead { margin: .8rem 0 .55rem; font: 500 clamp(2rem, 4vw, 3.7rem)/1.1 Georgia, serif; color: var(--ink-strong); }
+.home-hero > .primary { margin-top: .7rem; }
+.home-start, .featured-destinations { padding: clamp(1.5rem, 4vw, 3.5rem); }
+.home-start-heading h2, .featured-heading h2 { margin: .2rem 0 1.3rem; font-size: clamp(1.75rem, 3vw, 2.4rem); }
+.home-action-grid, .destination-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(.8rem, 2vw, 1.3rem); }
+.home-action-card { display: flex; flex-direction: column; min-width: 0; padding: clamp(1.15rem, 2vw, 1.7rem); border: 1px solid var(--line); border-radius: .8rem; background: #fff; }
+.home-action-card > .action-icon { width: 2.5rem; height: 2.5rem; padding: .55rem; border-radius: .65rem; background: var(--teal-soft); color: var(--teal-deep); }
+.home-action-card h3 { margin: 1.2rem 0 .15rem; font-size: 1.3rem; }
+.home-action-card p { margin: 0 0 1.3rem; color: var(--muted); }
+.home-action-card button { align-self: flex-start; margin-top: auto; }
+.featured-destinations { padding-top: .4rem; }
+.featured-heading { display: flex; justify-content: space-between; align-items: end; gap: 1rem; }
+.featured-heading > p { max-width: 22rem; color: var(--muted); }
+.destination-card { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: .8rem; background: #fff; box-shadow: 0 .4rem 1rem #17383b0c; }
+.destination-card img { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; object-fit: cover; background: #d7e8e1; }
+.destination-copy { padding: 1rem 1.2rem 1.15rem; }
+.destination-copy h3 { margin: 0; font-size: 1.35rem; }
+.destination-copy p { margin: .1rem 0 0; color: var(--muted); }
+.empty-state { border: 1px solid var(--line); border-left: .3rem solid var(--teal); border-radius: .6rem; }
+
+/* Keep browser-native select and checkbox behavior and make every state visible. */
+select { min-height: 2.85rem; border: 1.5px solid #789795; border-radius: .55rem; padding: .55rem .7rem; background-color: var(--surface); color: var(--ink-strong); cursor: pointer; }
+select:hover:not(:disabled) { border-color: var(--teal); background-color: #f8fcfa; }
+select:focus-visible, input[type="checkbox"]:focus-visible { outline: 3px solid #d26521; outline-offset: 3px; }
+select:disabled { color: #526764; background: #e8eeec; border-color: #aebfba; cursor: not-allowed; opacity: 1; }
+select[aria-invalid="true"], input[type="checkbox"][aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 2px #a3292926; }
+input[type="checkbox"] { appearance: auto; width: 1.25rem; height: 1.25rem; min-height: 1.25rem; padding: 0; margin: .1rem .35rem .1rem 0; flex: none; accent-color: var(--teal); cursor: pointer; }
+input[type="checkbox"]:hover:not(:disabled) { outline: 2px solid #a4cec0; outline-offset: 2px; }
+input[type="checkbox"]:checked { accent-color: var(--teal-deep); }
+input[type="checkbox"]:disabled { opacity: .55; cursor: not-allowed; }
+.checkbox-label { min-height: 2.75rem; gap: .55rem; }
+.checkbox-label input[type="checkbox"] { width: 1.25rem; min-height: 1.25rem; }
+@media (forced-colors: active) {
+  select, input[type="checkbox"] { forced-color-adjust: auto; }
+  .primary-navigation [aria-current="page"] { outline: 1px solid Highlight; }
+}
+@media (max-width: 720px) {
+  .home-action-grid, .destination-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .featured-heading { display: block; }
+}
+@media (max-width: 520px) {
+  .home-action-grid, .destination-grid { grid-template-columns: minmax(0, 1fr); }
+  .home-action-card button { align-self: stretch; }
+  .home-hero, .home-start, .featured-destinations { padding: 1.25rem; }
+  .featured-destinations { padding-top: .25rem; }
+}

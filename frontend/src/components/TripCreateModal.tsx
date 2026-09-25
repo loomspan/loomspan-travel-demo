@@ -180,6 +180,7 @@ export function TripCreateModal({isOpen, mode = 'PLAN_TRIP', onClose, onSuccess}
               id="trip-destination"
               value={destinationKey}
               onChange={(e) => setDestinationKey(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.destinationKey)}
               aria-describedby={fieldErrors.destinationKey ? 'trip-destination-error' : undefined}
             >
               {SUPPORTED_DESTINATIONS.map((dest) => (

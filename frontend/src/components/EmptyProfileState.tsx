@@ -1,3 +1,5 @@
+import {ActionIcon} from './ActionIcon';
+
 type EmptyProfileStateProps = {
   onPlanTrip?: () => void;
   onStartPlanTrip?: () => void;
@@ -22,21 +24,21 @@ export function EmptyProfileState({
       </p>
       <div className="empty-state-actions">
         <button type="button" className="primary" onClick={handlePlanTrip}>
-          Plan Trip
+          <ActionIcon name="trip" />Plan Trip
         </button>
         <button
           type="button"
           className="secondary"
           onClick={onStartAirfare ?? handlePlanTrip}
         >
-          Airfare
+          <ActionIcon name="airfare" />Airfare
         </button>
         <button
           type="button"
           className="secondary"
           onClick={onStartStay ?? handlePlanTrip}
         >
-          Stay
+          <ActionIcon name="stay" />Stay
         </button>
       </div>
     </section>

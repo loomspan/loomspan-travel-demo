@@ -2,6 +2,8 @@ import {FormEvent, useEffect, useRef, useState} from 'react';
 import {PasswordField, passwordRangeError} from './PasswordField';
 import type {FormFailure} from './AuthScreen';
 import {EmptyProfileState} from './EmptyProfileState';
+import {FeaturedDestinations} from './FeaturedDestinations';
+import {ActionIcon} from './ActionIcon';
 import {TripListSection} from './TripListSection';
 import {TripCreateModal} from './TripCreateModal';
 import {TripWorkspace, type TripWorkspaceHandle} from './TripWorkspace';
@@ -247,13 +249,13 @@ export function ProfileScreen({
   return (
     <>
     <nav className="card primary-navigation" aria-label="Primary navigation">
-      <button type="button" className="text-button" aria-current={viewMode === 'home' ? 'page' : undefined} onClick={() => navigateTo('home')}>Home</button>
-      <button type="button" className="text-button" aria-current={viewMode === 'profile' ? 'page' : undefined} onClick={() => navigateTo('profile')}>Profile</button>
-      {activeTrip && <button type="button" className="text-button" aria-current={viewMode === 'workspace' ? 'page' : undefined} onClick={() => void handleOpenTrip(activeTrip.id)}>Trip: {activeTrip.label}</button>}
+      <button type="button" className="text-button" aria-current={viewMode === 'home' ? 'page' : undefined} onClick={() => navigateTo('home')}><ActionIcon name="home" />Home</button>
+      <button type="button" className="text-button" aria-current={viewMode === 'profile' ? 'page' : undefined} onClick={() => navigateTo('profile')}><ActionIcon name="profile" />Profile</button>
+      {activeTrip && <button type="button" className="text-button" aria-current={viewMode === 'workspace' ? 'page' : undefined} onClick={() => void handleOpenTrip(activeTrip.id)}><ActionIcon name="trip" />Trip: {activeTrip.label}</button>}
       <button type="button" className="text-button" disabled={logoutPending} onClick={() => {
         if (workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and log out?')) return;
         void onLogout();
-      }}>{logoutPending ? 'Logging out…' : 'Log out'}</button>
+      }}><ActionIcon name="logout" />{logoutPending ? 'Logging out…' : 'Log out'}</button>
       {activeTrip && <span className={`navigation-save-status status-${saveState}`}>{tripDirty ? saveState === 'conflict' ? 'Trip has a save conflict' : saveState === 'error' ? 'Trip changes not saved' : 'Trip changes pending' : saveState === 'saved' ? 'Trip saved' : ''}</span>}
     </nav>
     {openingTripId && <p className="card" role="status">Opening Trip…</p>}
@@ -286,11 +288,22 @@ export function ProfileScreen({
       />
     </div>}
     {viewMode === 'home' && <section className="card profile-card home-card" aria-labelledby="home-heading">
-      <p className="eyebrow wordmark">DeTour</p>
-      <h1 id="home-heading" tabIndex={-1}>Home</h1>
-      <p>Start a Trip from airfare, stay, or a full plan.</p>
-      <EmptyProfileState onStartPlanTrip={() => startCreateTrip('PLAN_TRIP')} onStartAirfare={() => startCreateTrip('AIRFARE')} onStartStay={() => startCreateTrip('STAY')} />
-      {activeTrip && <button type="button" className="primary" onClick={() => void handleOpenTrip(activeTrip.id)}>Return to {activeTrip.label}</button>}
+      <div className="home-hero">
+        <p className="eyebrow wordmark">DeTour</p>
+        <h1 id="home-heading" tabIndex={-1}>Home</h1>
+        <p className="home-lead">A little farther feels closer from here.</p>
+        <p>Build a full trip or begin with the part you know. Your next journey starts in one place.</p>
+        {activeTrip && <button type="button" className="primary" onClick={() => void handleOpenTrip(activeTrip.id)}>Return to {activeTrip.label}</button>}
+      </div>
+      <section className="home-start" aria-labelledby="home-start-heading">
+        <div className="home-start-heading"><p className="eyebrow">MAKE IT YOURS</p><h2 id="home-start-heading">Start planning</h2></div>
+        <div className="home-action-grid">
+          <article className="home-action-card"><ActionIcon name="trip" /><h3>Plan the whole trip</h3><p>Bring your travel details together and compare the possibilities.</p><button type="button" className="primary" onClick={() => startCreateTrip('PLAN_TRIP')}>Plan Trip</button></article>
+          <article className="home-action-card"><ActionIcon name="airfare" /><h3>Find your flight</h3><p>Start with airfare and build the rest when you are ready.</p><button type="button" className="secondary" onClick={() => startCreateTrip('AIRFARE')}>Airfare</button></article>
+          <article className="home-action-card"><ActionIcon name="stay" /><h3>Choose your stay</h3><p>Begin with a place to land, then make it a journey.</p><button type="button" className="secondary" onClick={() => startCreateTrip('STAY')}>Stay</button></article>
+        </div>
+      </section>
+      <FeaturedDestinations />
     </section>}
     {viewMode === 'profile' && <section className="card profile-card" aria-labelledby="profile-heading">
       <div className="profile-heading">

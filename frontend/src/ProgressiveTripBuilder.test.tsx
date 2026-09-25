@@ -3,6 +3,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
+import {identityApi, type Profile} from './api/identityApi';
 import {
   ItinerarySummaryTally,
   formatCents,
@@ -53,18 +54,36 @@ function createMockTrip(overrides: Partial<TripResponse> = {}): TripResponse {
 
 describe('Progressive Trip Builder Experience', () => {
   const fetchMock = vi.fn();
+  let lastProfile: Profile | undefined;
+  const getProfile = identityApi.getProfile;
 
   beforeEach(() => {
     vi.stubGlobal('fetch', fetchMock);
     document.cookie = 'XSRF-TOKEN=secret-token; path=/';
     window.history.replaceState({}, '', '/profile');
+    lastProfile = undefined;
+    vi.spyOn(identityApi, 'getProfile').mockImplementation(async () => {
+      const profile = await getProfile();
+      lastProfile = profile;
+      return profile;
+    });
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     document.cookie = 'XSRF-TOKEN=; max-age=0; path=/';
     fetchMock.mockReset();
   });
+
+  async function showProfile() {
+    await screen.findByRole('heading', {name: 'Home'});
+    if (!lastProfile) throw new Error('Expected a loaded profile before navigating');
+    // Profile navigation refreshes data; replay the loaded profile so queued workflow responses stay intact.
+    vi.mocked(identityApi.getProfile).mockResolvedValueOnce(lastProfile);
+    await userEvent.setup().click(screen.getByRole('button', {name: 'Profile'}));
+    return screen.findByText(lastProfile.email);
+  }
 
   it('keeps the active Draft through Home and Profile and returns to the same saved tally', async () => {
     const user = userEvent.setup();
@@ -80,6 +99,7 @@ describe('Progressive Trip Builder Experience', () => {
     })).mockResolvedValueOnce(json(200, trip));
 
     render(<App />);
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
     expect(await screen.findByRole('heading', {name: 'Progressive Trip Builder'})).toBeInTheDocument();
     const draftTotal = screen.getByRole('heading', {name: /Draft totals/});
@@ -109,6 +129,7 @@ describe('Progressive Trip Builder Experience', () => {
     const getTrip = vi.spyOn(tripsApi, 'getTrip').mockReturnValueOnce(pendingTrip);
     render(<App />);
     const user = userEvent.setup();
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
     expect(screen.getByText('Opening Trip…')).toBeInTheDocument();
     await user.click(screen.getByRole('button', {name: 'Home'}));
@@ -118,12 +139,20 @@ describe('Progressive Trip Builder Experience', () => {
     getTrip.mockRestore();
   });
 
-  it('offers Plan Trip, Airfare, and Stay entry points on Home without creating a Draft on navigation', async () => {
+  it('shows three informational Featured destinations and preserves Home trip entry actions', async () => {
     const user = userEvent.setup();
     fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [], past: []}));
     render(<App />);
-    await screen.findByText('ada@example.test');
+    await screen.findByRole('heading', {name: 'Home'});
     await user.click(screen.getByRole('button', {name: 'Home'}));
+    const featured = screen.getByRole('region', {name: 'Featured destinations'});
+    for (const [city, landmark] of [['San Francisco', /Golden Gate Bridge/], ['Munich', /Marienplatz/], ['Mexico City', /Palacio de Bellas Artes/]] as const) {
+      const entry = within(featured).getByText(city).closest('article');
+      expect(entry).not.toBeNull();
+      expect(within(entry!).getByRole('img', {name: landmark})).toHaveAttribute('src', expect.stringMatching(/^\/images\/destinations\//));
+      expect(within(entry!).queryByRole('button')).not.toBeInTheDocument();
+      expect(within(entry!).queryByRole('link')).not.toBeInTheDocument();
+    }
     for (const [name, title] of [['Plan Trip', /plan a new trip/i], ['Airfare', /plan a trip with airfare/i], ['Stay', /plan a trip with stay/i]] as const) {
       await user.click(screen.getByRole('button', {name}));
       expect(screen.getByRole('dialog', {name: title})).toBeInTheDocument();
@@ -185,7 +214,7 @@ describe('Progressive Trip Builder Experience', () => {
     );
 
     render(<App />);
-    await screen.findByText('ada@example.test');
+    await screen.findByRole('heading', {name: 'Home'});
 
     const airfareBtn = screen.getByRole('button', {name: 'Airfare'});
     await user.click(airfareBtn);
@@ -261,7 +290,7 @@ describe('Progressive Trip Builder Experience', () => {
     );
 
     render(<App />);
-    await screen.findByText('ada@example.test');
+    await screen.findByRole('heading', {name: 'Home'});
 
     const stayBtn = screen.getByRole('button', {name: 'Stay'});
     await user.click(stayBtn);
@@ -339,7 +368,7 @@ describe('Progressive Trip Builder Experience', () => {
     );
 
     render(<App />);
-    await screen.findByText('ada@example.test');
+    await screen.findByRole('heading', {name: 'Home'});
 
     const planBtn = screen.getByRole('button', {name: 'Plan Trip'});
     await user.click(planBtn);
@@ -404,7 +433,7 @@ describe('Progressive Trip Builder Experience', () => {
     );
 
     render(<App />);
-    await screen.findByText('ada@example.test');
+    await showProfile();
 
     // Open existing trip
     fetchMock.mockResolvedValueOnce(json(200, createMockTrip()));
@@ -458,7 +487,7 @@ describe('Progressive Trip Builder Experience', () => {
     );
 
     render(<App />);
-    await screen.findByText('ada@example.test');
+    await showProfile();
 
     fetchMock.mockResolvedValueOnce(json(200, createMockTrip()));
     await user.click(screen.getByRole('button', {name: /open trip/i}));
@@ -627,7 +656,7 @@ describe('Progressive Trip Builder Experience', () => {
     );
 
     render(<App />);
-    await screen.findByText('ada@example.test');
+    await showProfile();
 
     fetchMock.mockResolvedValueOnce(json(200, createMockTrip()));
     await user.click(screen.getByRole('button', {name: /open trip/i}));
@@ -747,7 +776,7 @@ describe('Progressive Trip Builder Experience', () => {
     );
 
     render(<App />);
-    await screen.findByText('ada@example.test');
+    await showProfile();
 
     fetchMock.mockResolvedValueOnce(json(200, tripIneligible));
     await user.click(screen.getByRole('button', {name: /open trip/i}));
@@ -929,7 +958,7 @@ describe('Progressive Trip Builder Experience', () => {
     );
 
     render(<App />);
-    await screen.findByText('ada@example.test');
+    await showProfile();
 
     fetchMock.mockResolvedValueOnce(json(200, tripWithAirfare));
     await user.click(screen.getByRole('button', {name: /open trip/i}));
@@ -997,7 +1026,7 @@ describe('Progressive Trip Builder Experience', () => {
     );
 
     render(<App />);
-    await screen.findByText('ada@example.test');
+    await showProfile();
 
     fetchMock.mockResolvedValueOnce(json(200, createMockTrip()));
     await user.click(screen.getByRole('button', {name: /open trip/i}));
@@ -1221,7 +1250,7 @@ describe('Progressive Trip Builder Experience', () => {
     );
 
     render(<App />);
-    await screen.findByText('ada@example.test');
+    await showProfile();
 
     fetchMock.mockResolvedValueOnce(json(200, tripWithAirfare));
     await user.click(screen.getByRole('button', {name: /open trip/i}));

@@ -2,20 +2,40 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
+import {identityApi, type Profile} from './api/identityApi';
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), {status, headers: {'Content-Type': 'application/json'}});
 const noContent = () => new Response(null, {status: 204});
 
 describe('App identity experience', () => {
   const fetchMock = vi.fn();
-  beforeEach(() => { vi.stubGlobal('fetch', fetchMock); document.cookie = 'XSRF-TOKEN=token; path=/'; window.history.replaceState({}, '', '/profile'); });
-  afterEach(() => { vi.unstubAllGlobals(); document.cookie = 'XSRF-TOKEN=; max-age=0; path=/'; fetchMock.mockReset(); });
+  let lastProfile: Profile | undefined;
+  const getProfile = identityApi.getProfile;
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchMock); document.cookie = 'XSRF-TOKEN=token; path=/'; window.history.replaceState({}, '', '/profile');
+    lastProfile = undefined;
+    vi.spyOn(identityApi, 'getProfile').mockImplementation(async () => {
+      const profile = await getProfile();
+      lastProfile = profile;
+      return profile;
+    });
+  });
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); document.cookie = 'XSRF-TOKEN=; max-age=0; path=/'; fetchMock.mockReset(); });
+
+  async function showProfile() {
+    await screen.findByRole('heading', {name: 'Home'});
+    if (!lastProfile) throw new Error('Expected a loaded profile before navigating');
+    // Keep each test's queued trip/API responses for its workflow, while following the real Home → Profile navigation.
+    vi.mocked(identityApi.getProfile).mockResolvedValueOnce(lastProfile);
+    await userEvent.setup().click(screen.getByRole('button', {name: 'Profile'}));
+    return screen.findByText(lastProfile.email);
+  }
 
   it('restores the authenticated profile from the existing server session', async () => {
     fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test'}));
     render(<App />);
     expect(screen.getByText('Checking your account…')).toBeInTheDocument();
-    expect(await screen.findByText('ada@example.test')).toBeInTheDocument();
+    expect(await showProfile()).toBeInTheDocument();
     expect(screen.getByText('Your profile is ready')).toBeInTheDocument();
     expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
@@ -25,7 +45,7 @@ describe('App identity experience', () => {
   it('moves focus to Home and Profile headings when primary navigation changes views', async () => {
     fetchMock.mockImplementation(() => Promise.resolve(json(200, {email: 'ada@example.test', upcoming: [], past: []})));
     const user = userEvent.setup(); render(<App />);
-    await screen.findByRole('heading', {name: 'Your profile'});
+    await showProfile();
     await user.click(screen.getByRole('button', {name: 'Home'}));
     await waitFor(() => expect(screen.getByRole('heading', {name: 'Home'})).toHaveFocus());
     await user.click(screen.getByRole('button', {name: 'Profile'}));
@@ -46,13 +66,13 @@ describe('App identity experience', () => {
     await user.type(screen.getByLabelText('Email address'), 'ada@example.test');
     await user.type(screen.getByLabelText('Password'), 'aaaaaaaaaaaa');
     await user.click(screen.getByRole('button', {name: 'Create account'}));
-    await screen.findByText('ada@example.test');
+    await showProfile();
     await user.click(screen.getByRole('button', {name: 'Log out'}));
     await screen.findByRole('heading', {name: 'Welcome back'});
     await user.type(screen.getByLabelText('Email address'), 'ada@example.test');
     await user.type(screen.getByLabelText('Password'), 'aaaaaaaaaaaa');
     await user.click(screen.getByRole('button', {name: 'Log in'}));
-    await screen.findByText('ada@example.test');
+    await showProfile();
     expect(localSpy).not.toHaveBeenCalled(); expect(sessionSpy).not.toHaveBeenCalled();
   });
 
@@ -132,7 +152,7 @@ describe('App identity experience', () => {
   it('changes a password only after server success and provides an accessible disclosure', async () => {
     fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test'})).mockResolvedValueOnce(noContent());
     const user = userEvent.setup(); render(<App />);
-    await screen.findByText('ada@example.test');
+    await showProfile();
     await user.type(screen.getByLabelText('Current password'), 'aaaaaaaaaaaa');
     await user.type(screen.getByLabelText('New password'), 'bbbbbbbbbbbb');
     await user.click(screen.getByRole('button', {name: 'Update password'}));
@@ -148,7 +168,7 @@ describe('App identity experience', () => {
     fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test'}))
       .mockResolvedValueOnce(json(403, {code: 'CSRF_INVALID'}));
     const user = userEvent.setup(); render(<App />);
-    await screen.findByText('ada@example.test');
+    await showProfile();
     await user.click(screen.getByRole('button', {name: 'Log out'}));
     expect(await screen.findByRole('alert')).toHaveTextContent('security check');
     expect(screen.getByText('ada@example.test')).toBeInTheDocument();
@@ -161,7 +181,7 @@ describe('App identity experience', () => {
       .mockImplementationOnce(() => new Promise<Response>((resolve) => { completePasswordChange = resolve; }))
       .mockResolvedValueOnce(noContent());
     const user = userEvent.setup(); render(<App />);
-    await screen.findByText('ada@example.test');
+    await showProfile();
     await user.type(screen.getByLabelText('Current password'), 'aaaaaaaaaaaa');
     await user.type(screen.getByLabelText('New password'), 'bbbbbbbbbbbb');
     await user.click(screen.getByRole('button', {name: 'Update password'}));
@@ -220,7 +240,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
-    expect(await screen.findByText('ada@example.test')).toBeInTheDocument();
+    expect(await showProfile()).toBeInTheDocument();
 
     const planTripButton = screen.getByRole('button', {name: 'Plan Trip'});
     expect(planTripButton).toBeInTheDocument();
@@ -296,6 +316,7 @@ describe('App identity experience', () => {
     }));
 
     render(<App />);
+    await showProfile();
     expect(await screen.findByRole('heading', {name: 'Upcoming trips (1)'})).toBeInTheDocument();
     expect(screen.getByRole('heading', {name: 'Past trips (1)'})).toBeInTheDocument();
     expect(screen.getByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
@@ -376,6 +397,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     expect(await screen.findByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
@@ -449,6 +471,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     expect(await screen.findByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
@@ -489,6 +512,7 @@ describe('App identity experience', () => {
       .mockResolvedValueOnce(json(200, {...trip, version: 1, budgetCents: 250000}));
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
     await user.type(screen.getByLabelText('Budget (USD)'), '2500');
     expect(await screen.findByRole('button', {name: 'Retry save'})).toBeInTheDocument();
@@ -517,6 +541,7 @@ describe('App identity experience', () => {
       .mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'));
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
     await user.type(screen.getByLabelText('Budget (USD)'), '2500');
     expect(await screen.findByRole('button', {name: 'Retry save'})).toBeInTheDocument();
@@ -543,6 +568,7 @@ describe('App identity experience', () => {
       .mockResolvedValueOnce(json(200, {...trip, version: 1, budgetCents: 250000}));
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
     await user.type(screen.getByLabelText('Budget (USD)'), '2500');
     await waitFor(() => expect(fetchMock.mock.calls.some((call) => call[1]?.method === 'PUT')).toBe(true));
@@ -567,6 +593,7 @@ describe('App identity experience', () => {
     }], past: []})).mockResolvedValueOnce(json(200, trip)).mockImplementationOnce(() => pendingSave);
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
     const budget = screen.getByLabelText('Budget (USD)');
     await user.type(budget, '2500');
@@ -630,6 +657,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
     expect(await screen.findByLabelText('Budget (USD)')).toBeInTheDocument();
 
@@ -699,6 +727,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     expect(await screen.findByText('Planned itinerary (read-only)')).toBeInTheDocument();
@@ -760,6 +789,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     expect(await screen.findByRole('heading', {name: 'Revision changes applied'})).toBeInTheDocument();
@@ -800,6 +830,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     expect(await screen.findByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', {name: 'Delete trip San Francisco — Mar 10–14, 2027'}));
@@ -848,6 +879,7 @@ describe('App identity experience', () => {
     }));
 
     render(<App />);
+    await showProfile();
     expect(await screen.findByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
     expect(screen.queryByRole('button', {name: 'Delete trip San Francisco — Mar 10–14, 2027'})).not.toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Cancel trip San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
@@ -899,6 +931,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: 'Delete trip San Francisco — Mar 10–14, 2027'}));
 
     await user.click(screen.getByRole('button', {name: 'Delete trip'}));
@@ -967,6 +1000,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     await user.type(screen.getByLabelText('Budget (USD)'), '1500.00');
@@ -1024,6 +1058,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     expect(screen.queryByRole('button', {name: 'Delete trip San Francisco — Mar 10–14, 2027'})).not.toBeInTheDocument();
@@ -1072,6 +1107,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     // Change return date to be before departure date
@@ -1191,6 +1227,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     const reviseBtn = screen.getByRole('button', {name: 'Revise Trip'});
@@ -1270,6 +1307,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     const deleteBtn = await screen.findByRole('button', {name: 'Delete trip San Francisco — Mar 10–14, 2027'});
     await user.click(deleteBtn);
 
@@ -1323,6 +1361,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     const travelersInput = screen.getByLabelText('Travelers');
@@ -1389,6 +1428,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
+    await showProfile();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     // Verify h1 landmark
@@ -1444,6 +1484,7 @@ describe('App identity experience', () => {
     }));
 
     render(<App />);
+    await showProfile();
 
     // Upcoming trip and past trip display BOOKED badges
     const bookedBadges = await screen.findAllByText('Booking');
