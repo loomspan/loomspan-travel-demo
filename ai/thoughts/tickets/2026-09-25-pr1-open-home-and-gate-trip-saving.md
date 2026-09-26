@@ -15,12 +15,12 @@ Visitors can see DeTour's Home page and begin entering trip details before loggi
 
 ## Acceptance criteria
 
-- [ ] A new signed-out visitor lands on Home with visible Log in and Trips navigation and can read public Home content without an authentication prompt.
-- [ ] A signed-out visitor can enter the trip-start details; no Trip or Working plan is persisted before successful authentication and continuation.
-- [ ] Login or registration from Start planning returns to the entered trip form with its values intact and creates exactly one owned Trip when the user continues; canceling authentication creates none.
-- [ ] Direct login returns the user to the intended page, and an authenticated visitor can navigate to Home, Trips, and Profile.
-- [ ] An expired session during a save leaves the edited values available, displays that saving failed, and succeeds only after login and an explicit retry.
-- [ ] Anonymous Trip, option, component, and booking API requests remain rejected; authenticated owner checks and CSRF behavior still pass.
+- [x] A new signed-out visitor lands on Home with visible Log in and Trips navigation and can read public Home content without an authentication prompt.
+- [x] A signed-out visitor can enter the trip-start details; no Trip or Working plan is persisted before successful authentication and continuation.
+- [x] Login or registration from Start planning returns to the entered trip form with its values intact and creates exactly one owned Trip when the user continues; canceling authentication creates none.
+- [x] Direct login returns the user to the intended page, and an authenticated visitor can navigate to Home, Trips, and Profile.
+- [x] An expired session during a save leaves the edited values available, displays that saving failed, and succeeds only after login and an explicit retry.
+- [x] Anonymous Trip, option, component, and booking API requests remain rejected; authenticated owner checks and CSRF behavior still pass.
 
 ## Context
 

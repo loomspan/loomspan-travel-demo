@@ -23,10 +23,12 @@ describe('tripsApi client', () => {
     fetchMock.mockResolvedValueOnce(json(201, {id: 'trip-1'}));
 
     const result = await tripsApi.createTrip({
+      name: 'Spring trip',
       destinationKey: 'destination-sfo',
       startDate: '2027-03-10',
       endDate: '2027-03-14',
       travelerCount: 2,
+      travelerAges: [25, 25],
     });
 
     expect(result).toEqual({id: 'trip-1'});
@@ -38,10 +40,12 @@ describe('tripsApi client', () => {
         'X-XSRF-TOKEN': 'secret-token',
       },
       body: JSON.stringify({
+        name: 'Spring trip',
         destinationKey: 'destination-sfo',
         startDate: '2027-03-10',
         endDate: '2027-03-14',
         travelerCount: 2,
+        travelerAges: [25, 25],
       }),
     });
   });

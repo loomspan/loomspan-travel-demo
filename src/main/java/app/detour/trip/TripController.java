@@ -55,6 +55,16 @@ public class TripController {
         return trips.replaceSharedDetails(requirePrincipal(principal).userId(), tripId, TripRequests.update(request));
     }
 
+    @PutMapping("/{tripId}/name")
+    TripResponse rename(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @RequestBody JsonNode request) {
+        return trips.rename(requirePrincipal(principal).userId(), tripId, TripRequests.rename(request));
+    }
+
+    @PutMapping("/{tripId}/working-dates")
+    TripResponse workingDates(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @RequestBody JsonNode request) {
+        return trips.changeWorkingDates(requirePrincipal(principal).userId(), tripId, TripRequests.workingDates(request));
+    }
+
     @PostMapping("/{tripId}/duplicate")
     ResponseEntity<TripResponse> duplicateTrip(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @RequestBody JsonNode request) {
         return ResponseEntity.status(201).body(trips.duplicateTrip(requirePrincipal(principal).userId(), tripId, TripRequests.revision(request)));

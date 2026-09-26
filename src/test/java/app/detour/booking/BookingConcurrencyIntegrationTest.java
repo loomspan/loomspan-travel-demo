@@ -61,7 +61,7 @@ class BookingConcurrencyIntegrationTest {
         Client userB = register("concurr-flight-b@example.test");
 
         MvcResult tripARes = userA.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":1,\"travelerAges\":[30],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":1,\"travelerAges\":[30],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripAId = jsonField(tripARes, "id");
         String draftAId = getDraftId(tripARes, 0);
@@ -72,7 +72,7 @@ class BookingConcurrencyIntegrationTest {
         String plannedAId = getPlannedId(planARes, 0);
 
         MvcResult tripBRes = userB.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":1,\"travelerAges\":[30],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":1,\"travelerAges\":[30],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripBId = jsonField(tripBRes, "id");
         String draftBId = getDraftId(tripBRes, 0);
@@ -121,7 +121,7 @@ class BookingConcurrencyIntegrationTest {
         Client userB = register("concurr-stay-b@example.test");
 
         MvcResult tripARes = userA.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripAId = jsonField(tripARes, "id");
         String draftAId = getDraftId(tripARes, 0);
@@ -133,7 +133,7 @@ class BookingConcurrencyIntegrationTest {
         String plannedAId = getPlannedId(planARes, 0);
 
         MvcResult tripBRes = userB.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripBId = jsonField(tripBRes, "id");
         String draftBId = getDraftId(tripBRes, 0);
@@ -183,7 +183,7 @@ class BookingConcurrencyIntegrationTest {
         Client userB = register("concurr-rental-b@example.test");
 
         MvcResult tripARes = userA.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripAId = jsonField(tripARes, "id");
         String draftAId = getDraftId(tripARes, 0);
@@ -195,7 +195,7 @@ class BookingConcurrencyIntegrationTest {
         String plannedAId = getPlannedId(planARes, 0);
 
         MvcResult tripBRes = userB.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripBId = jsonField(tripBRes, "id");
         String draftBId = getDraftId(tripBRes, 0);
@@ -241,7 +241,7 @@ class BookingConcurrencyIntegrationTest {
         Client user = register("concurr-idemp@example.test");
 
         MvcResult tripRes = user.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(tripRes, "id");
         String draftId = getDraftId(tripRes, 0);
@@ -298,7 +298,7 @@ class BookingConcurrencyIntegrationTest {
         Client user = register("concurr-dup-cancel@example.test");
 
         MvcResult tripRes = user.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(tripRes, "id");
         String draftId = getDraftId(tripRes, 0);
@@ -376,7 +376,7 @@ class BookingConcurrencyIntegrationTest {
         Client user = register("concurr-cancel-rebook@example.test");
 
         MvcResult tripRes = user.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(tripRes, "id");
         String draftId = getDraftId(tripRes, 0);

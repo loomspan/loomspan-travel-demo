@@ -396,6 +396,13 @@ public class JdbcBookingRepository implements BookingRepository {
         return count != null && count > 0;
     }
 
+    @Override
+    public boolean isPlannedItineraryBooked(long plannedItineraryId) {
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM detour_booking WHERE planned_itinerary_id = ?", Integer.class, plannedItineraryId);
+        return count != null && count > 0;
+    }
+
     private static BookingRecord mapBookingRecord(ResultSet rs) throws SQLException {
         Long rentalOccupancyId = rs.getObject("rental_occupancy_id") != null ? rs.getLong("rental_occupancy_id") : null;
         Long plannedItineraryId = rs.getObject("planned_itinerary_id") != null ? rs.getLong("planned_itinerary_id") : null;

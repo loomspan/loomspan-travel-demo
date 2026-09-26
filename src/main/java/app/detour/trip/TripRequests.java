@@ -15,9 +15,11 @@ public final class TripRequests {
     private TripRequests() {
     }
 
-    public record Create(String destinationKey, LocalDate startDate, LocalDate endDate, Integer travelerCount,
+    public record Create(String name, String destinationKey, LocalDate startDate, LocalDate endDate, Integer travelerCount,
             List<Integer> travelerAges, JsonNode budgetCents) {
     }
+    public record Rename(long expectedVersion, String name) { }
+    public record WorkingDates(long expectedVersion, long expectedDraftVersion, LocalDate startDate, LocalDate endDate) { }
 
     public record SharedDetailsUpdate(long expectedVersion, String destinationKey, LocalDate startDate, LocalDate endDate,
             Integer travelerCount, List<Integer> travelerAges, JsonNode budgetCents) { }
@@ -46,10 +48,22 @@ public final class TripRequests {
     public record Cancel(long expectedVersion) { }
 
     static Create from(JsonNode body) {
-        requireObject(body, Set.of("destinationKey", "startDate", "endDate", "travelerCount", "travelerAges", "budgetCents"));
-        return new Create(text(body.get("destinationKey"), "destinationKey"),
+        requireObject(body, Set.of("name", "destinationKey", "startDate", "endDate", "travelerCount", "travelerAges", "budgetCents"));
+        return new Create(text(body.get("name"), "name"), text(body.get("destinationKey"), "destinationKey"),
                 date(body.get("startDate"), "startDate"), date(body.get("endDate"), "endDate"), integer(body.get("travelerCount"), "travelerCount"),
                 ages(body.get("travelerAges")), body.get("budgetCents"));
+    }
+
+    static Rename rename(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion", "name"));
+        return new Rename(version(body.get("expectedVersion"), "expectedVersion"), text(body.get("name"), "name"));
+    }
+
+    static WorkingDates workingDates(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion", "expectedDraftVersion", "startDate", "endDate"));
+        return new WorkingDates(version(body.get("expectedVersion"), "expectedVersion"),
+                version(body.get("expectedDraftVersion"), "expectedDraftVersion"),
+                date(body.get("startDate"), "startDate"), date(body.get("endDate"), "endDate"));
     }
 
     static SharedDetailsUpdate update(JsonNode body) {

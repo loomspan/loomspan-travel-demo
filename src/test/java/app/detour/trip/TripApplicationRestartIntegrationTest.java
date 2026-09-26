@@ -12,17 +12,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 
 class TripApplicationRestartIntegrationTest {
-    @TempDir Path temporaryDirectory;
 
     @Test
     void persistsTripAndDraftAcrossApplicationRestart() throws Exception {
-        String databaseUrl = "jdbc:h2:file:" + temporaryDirectory.resolve("trip-" + UUID.randomUUID()).toAbsolutePath().toString().replace('\\', '/')
+        String databaseUrl = "jdbc:h2:file:" + Path.of("target", "trip-" + UUID.randomUUID()).toAbsolutePath().toString().replace('\\', '/')
                 + ";DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000";
         String sessionCookie;
         String tripId;
@@ -39,7 +37,7 @@ class TripApplicationRestartIntegrationTest {
             assertEquals(201, registration.statusCode());
             sessionCookie = cookie(registration, "JSESSIONID");
             HttpResponse<String> created = request(base, "POST", "/api/trips", sessionCookie + "|" + csrf,
-                    "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").send();
+                    "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").send();
             assertEquals(201, created.statusCode());
             var body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(created.body());
             tripId = body.get("id").asString();
@@ -65,11 +63,11 @@ class TripApplicationRestartIntegrationTest {
             plannedId = promotedBody.get("planned").get(0).get("id").asString();
             copiedFare = promotedBody.get("planned").get(0).get("selections").get("airfare").get("outboundBaseFareCents").asLong();
 
-            HttpResponse<String> duplicated = request(base, "POST", "/api/trips/" + tripId + "/alternatives/" + plannedId + "/duplicate", sessionCookie + "|" + csrf,
-                    "{\"expectedVersion\":1}").send();
+            HttpResponse<String> duplicated = request(base, "POST", "/api/trips/" + tripId + "/drafts/" + draftId + "/plan", sessionCookie + "|" + csrf,
+                    "{\"expectedVersion\":1,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}").send();
             assertEquals(201, duplicated.statusCode());
             var dupBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(duplicated.body());
-            duplicatedDraftId = dupBody.get("drafts").get(1).get("id").asString();
+            duplicatedDraftId = dupBody.get("planned").get(1).get("id").asString();
 
             // Mutate catalog to verify restart does not reload live catalog
             jdbc.update("UPDATE flight_instance SET base_fare_cents = base_fare_cents + 10000");
@@ -90,14 +88,13 @@ class TripApplicationRestartIntegrationTest {
             var body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(detail.body());
             assertEquals(tripId, body.get("id").asString());
             assertEquals(2, body.get("version").asInt());
-            assertEquals(1, body.get("planned").size());
+            assertEquals(2, body.get("planned").size());
             assertEquals(plannedId, body.get("planned").get(0).get("id").asString());
             assertEquals(copiedFare, body.get("planned").get(0).get("selections").get("airfare").get("outboundBaseFareCents").asLong());
             assertEquals("Summit Family Suites", body.get("planned").get(0).get("selections").get("stay").get("propertyName").asString());
-            assertEquals(2, body.get("drafts").size());
+            assertEquals(1, body.get("drafts").size());
             assertEquals(draftId, body.get("drafts").get(0).get("id").asString());
-            assertEquals(duplicatedDraftId, body.get("drafts").get(1).get("id").asString());
-            assertEquals(0, body.get("drafts").get(1).get("version").asInt());
+            assertEquals(duplicatedDraftId, body.get("planned").get(1).get("id").asString());
         } finally {
             second.close();
         }
@@ -105,7 +102,7 @@ class TripApplicationRestartIntegrationTest {
 
     @Test
     void persistsSelectiveDuplicationAcrossRestart() throws Exception {
-        String databaseUrl = "jdbc:h2:file:" + temporaryDirectory.resolve("trip-dup-" + UUID.randomUUID()).toAbsolutePath().toString().replace('\\', '/')
+        String databaseUrl = "jdbc:h2:file:" + Path.of("target", "trip-dup-" + UUID.randomUUID()).toAbsolutePath().toString().replace('\\', '/')
                 + ";DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000";
         String sessionCookie;
         String originalTripId;
@@ -124,7 +121,7 @@ class TripApplicationRestartIntegrationTest {
             sessionCookie = cookie(registration, "JSESSIONID");
 
             HttpResponse<String> created = request(base, "POST", "/api/trips", sessionCookie + "|" + csrf,
-                    "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").send();
+                    "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").send();
             assertEquals(201, created.statusCode());
             var body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(created.body());
             originalTripId = body.get("id").asString();
@@ -159,7 +156,7 @@ class TripApplicationRestartIntegrationTest {
             assertEquals(0, dupBody.get("version").asInt());
             assertEquals(75000, dupBody.get("budgetCents").asLong());
             assertEquals(1, dupBody.get("drafts").size());
-            assertEquals(0, dupBody.get("planned").size());
+            assertEquals(1, dupBody.get("planned").size());
             newDraftId = dupBody.get("drafts").get(0).get("id").asString();
 
             // Mutate catalog base fare to ensure restart does not reload live catalog
@@ -185,10 +182,10 @@ class TripApplicationRestartIntegrationTest {
             assertEquals(0, dupBody.get("version").asInt());
             assertEquals(75000, dupBody.get("budgetCents").asLong());
             assertEquals(1, dupBody.get("drafts").size());
-            assertEquals(0, dupBody.get("planned").size());
+            assertEquals(1, dupBody.get("planned").size());
             assertEquals(newDraftId, dupBody.get("drafts").get(0).get("id").asString());
             assertEquals(0, dupBody.get("drafts").get(0).get("version").asInt());
-            var draftSelections = dupBody.get("drafts").get(0).get("selections");
+            var draftSelections = dupBody.get("planned").get(0).get("selections");
             org.junit.jupiter.api.Assertions.assertTrue(draftSelections.get("airfare").get("outboundFlightInstanceId").asLong() > 0);
             org.junit.jupiter.api.Assertions.assertTrue(draftSelections.get("airfare").get("returnFlightInstanceId").asLong() > 0);
             org.junit.jupiter.api.Assertions.assertTrue(draftSelections.get("stay").get("accommodationUnitId").asLong() > 0);
@@ -210,7 +207,7 @@ class TripApplicationRestartIntegrationTest {
 
     @Test
     void upcomingAndPastDeriveCorrectlyAcrossRestartWithoutMutation() throws Exception {
-        String databaseUrl = "jdbc:h2:file:" + temporaryDirectory.resolve("temporal-restart-" + UUID.randomUUID()).toAbsolutePath().toString().replace('\\', '/')
+        String databaseUrl = "jdbc:h2:file:" + Path.of("target", "temporal-restart-" + UUID.randomUUID()).toAbsolutePath().toString().replace('\\', '/')
                 + ";DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000";
         String tripId;
         String sessionCookie;
@@ -227,7 +224,7 @@ class TripApplicationRestartIntegrationTest {
 
             // Trip ends on March 5, 2027
             HttpResponse<String> created = request(base, "POST", "/api/trips", sessionCookie + "|" + csrf,
-                    "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-02\",\"endDate\":\"2027-03-05\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").send();
+                    "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-02\",\"endDate\":\"2027-03-05\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").send();
             assertEquals(201, created.statusCode());
             var body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(created.body());
             tripId = body.get("id").asString();

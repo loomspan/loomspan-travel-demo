@@ -6,9 +6,10 @@ type AuthScreenProps = {
   onRegister: (email: string, password: string) => Promise<void>;
   onLogin: (email: string, password: string) => Promise<void>;
   onFailure: (failure: FormFailure) => void;
+  onCancel?: () => void;
 };
 
-export function AuthScreen({onRegister, onLogin, onFailure}: AuthScreenProps) {
+export function AuthScreen({onRegister, onLogin, onFailure, onCancel}: AuthScreenProps) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -50,6 +51,7 @@ export function AuthScreen({onRegister, onLogin, onFailure}: AuthScreenProps) {
       <div className="field"><label htmlFor="email">Email address</label><input id="email" name="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} aria-invalid={Boolean(fieldErrors.email)} aria-describedby={fieldErrors.email ? 'email-error' : undefined} required />{fieldErrors.email && <p id="email-error" className="field-error">{fieldErrors.email}</p>}</div>
       <PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} error={fieldErrors.password} />
       <button className="primary" type="submit" disabled={pending}>{pending ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account'}</button>
+      {onCancel && <button type="button" className="text-button" onClick={onCancel} disabled={pending}>Cancel</button>}
     </form>
   </section>;
 }

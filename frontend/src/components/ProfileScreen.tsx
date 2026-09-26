@@ -2,10 +2,10 @@ import {FormEvent, useEffect, useRef, useState} from 'react';
 import {PasswordField, passwordRangeError} from './PasswordField';
 import type {FormFailure} from './AuthScreen';
 import {EmptyProfileState} from './EmptyProfileState';
-import {FeaturedDestinations} from './FeaturedDestinations';
 import {ActionIcon} from './ActionIcon';
 import {TripListSection} from './TripListSection';
-import {TripCreateModal} from './TripCreateModal';
+import {HomeScreen, type StartMode} from './HomeScreen';
+import {TripStartForm, emptyTripStartDraft, type TripStartDraft} from './TripStartForm';
 import {TripWorkspace, type TripWorkspaceHandle} from './TripWorkspace';
 import {ConfirmDeleteModal, type DeleteTarget} from './ConfirmDeleteModal';
 import {CancelTripModal} from './CancelTripModal';
@@ -21,6 +21,11 @@ type ProfileScreenProps = {
   onPasswordChange: (currentPassword: string, newPassword: string) => Promise<void>;
   onFailure: (failure: FormFailure) => void;
   onRefreshProfile?: () => Promise<boolean | void>;
+  initialDestination?: 'home' | 'trips';
+  initialStartMode?: StartMode;
+  tripDraft?: TripStartDraft;
+  onTripDraftChange?: (draft: TripStartDraft) => void;
+  onAuthenticationRequired?: () => void;
 };
 
 export function ProfileScreen({
@@ -32,9 +37,15 @@ export function ProfileScreen({
   onPasswordChange,
   onFailure,
   onRefreshProfile,
+  initialDestination = 'home',
+  initialStartMode = 'PLAN_TRIP',
+  tripDraft = emptyTripStartDraft,
+  onTripDraftChange = () => {},
+  onAuthenticationRequired = () => {},
 }: ProfileScreenProps) {
   // Navigation mode
-  const [viewMode, setViewMode] = useState<'home' | 'profile' | 'workspace'>('home');
+  const [viewMode, setViewMode] = useState<'home' | 'trips' | 'profile' | 'workspace'>(initialDestination);
+  const [startMode, setStartMode] = useState<StartMode>(initialStartMode);
   const [activeTrip, setActiveTrip] = useState<TripResponse | null>(null);
   const workspaceRef = useRef<TripWorkspaceHandle>(null);
   const openingSequence = useRef(0);
@@ -47,14 +58,13 @@ export function ProfileScreen({
     const timer = window.setTimeout(() => {
       const heading = viewMode === 'workspace'
         ? document.querySelector<HTMLElement>('#workspace-heading, #comparison-heading, #booking-review-heading, #confirmation-heading')
-        : document.getElementById(viewMode === 'home' ? 'home-heading' : 'profile-heading');
+        : document.getElementById(viewMode === 'home' ? 'home-heading' : viewMode === 'trips' ? 'trips-heading' : 'profile-heading');
       heading?.focus();
     }, 0);
     return () => window.clearTimeout(timer);
   }, [viewMode, activeTrip?.id]);
 
   // Modals state
-  const [createModalMode, setCreateModalMode] = useState<'PLAN_TRIP' | 'AIRFARE' | 'STAY' | null>(null);
   const [entryContext, setEntryContext] = useState<{
     mode: 'PLAN_TRIP' | 'AIRFARE' | 'STAY';
     accommodationType?: AccommodationType;
@@ -129,10 +139,11 @@ export function ProfileScreen({
 
   const startCreateTrip = (mode: 'PLAN_TRIP' | 'AIRFARE' | 'STAY') => {
     if (workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and start another Trip?')) return;
-    setCreateModalMode(mode);
+    setStartMode(mode);
+    setViewMode('trips');
   };
 
-  const navigateTo = (destination: 'home' | 'profile') => {
+  const navigateTo = (destination: 'home' | 'trips' | 'profile') => {
     openingSequence.current += 1;
     setOpeningTripId(null);
     setOpenError(null);
@@ -250,6 +261,7 @@ export function ProfileScreen({
     <>
     <nav className="card primary-navigation" aria-label="Primary navigation">
       <button type="button" className="text-button" aria-current={viewMode === 'home' ? 'page' : undefined} onClick={() => navigateTo('home')}><ActionIcon name="home" />Home</button>
+      <button type="button" className="text-button" aria-current={viewMode === 'trips' ? 'page' : undefined} onClick={() => navigateTo('trips')}><ActionIcon name="trip" />Trips</button>
       <button type="button" className="text-button" aria-current={viewMode === 'profile' ? 'page' : undefined} onClick={() => navigateTo('profile')}><ActionIcon name="profile" />Profile</button>
       {activeTrip && <button type="button" className="text-button" aria-current={viewMode === 'workspace' ? 'page' : undefined} onClick={() => void handleOpenTrip(activeTrip.id)}><ActionIcon name="trip" />Trip: {activeTrip.label}</button>}
       <button type="button" className="text-button" disabled={logoutPending} onClick={() => {
@@ -271,6 +283,7 @@ export function ProfileScreen({
         temporalStatus={temporalStatus}
         isExpired={isExpired}
         onSaveStatusChange={(status, dirty) => { setSaveState(status); setTripDirty(dirty); }}
+        onAuthenticationRequired={onAuthenticationRequired}
         onBack={() => {
           setViewMode('profile');
           if (onRefreshProfile) void onRefreshProfile();
@@ -287,24 +300,14 @@ export function ProfileScreen({
         }}
       />
     </div>}
-    {viewMode === 'home' && <section className="card profile-card home-card" aria-labelledby="home-heading">
-      <div className="home-hero">
-        <p className="eyebrow wordmark">DeTour</p>
-        <h1 id="home-heading" tabIndex={-1}>Home</h1>
-        <p className="home-lead">A little farther feels closer from here.</p>
-        <p>Build a full trip or begin with the part you know. Your next journey starts in one place.</p>
-        {activeTrip && <button type="button" className="primary" onClick={() => void handleOpenTrip(activeTrip.id)}>Return to {activeTrip.label}</button>}
-      </div>
-      <section className="home-start" aria-labelledby="home-start-heading">
-        <div className="home-start-heading"><p className="eyebrow">MAKE IT YOURS</p><h2 id="home-start-heading">Start planning</h2></div>
-        <div className="home-action-grid">
-          <article className="home-action-card"><ActionIcon name="trip" /><h3>Plan the whole trip</h3><p>Bring your travel details together and compare the possibilities.</p><button type="button" className="primary" onClick={() => startCreateTrip('PLAN_TRIP')}>Plan Trip</button></article>
-          <article className="home-action-card"><ActionIcon name="airfare" /><h3>Find your flight</h3><p>Start with airfare and build the rest when you are ready.</p><button type="button" className="secondary" onClick={() => startCreateTrip('AIRFARE')}>Airfare</button></article>
-          <article className="home-action-card"><ActionIcon name="stay" /><h3>Choose your stay</h3><p>Begin with a place to land, then make it a journey.</p><button type="button" className="secondary" onClick={() => startCreateTrip('STAY')}>Stay</button></article>
-        </div>
-      </section>
-      <FeaturedDestinations />
-    </section>}
+    {viewMode === 'home' && <HomeScreen onStart={startCreateTrip} onReturn={activeTrip ? {label: activeTrip.label, open: () => void handleOpenTrip(activeTrip.id)} : undefined} />}
+    {viewMode === 'trips' && <TripStartForm draft={tripDraft} onChange={onTripDraftChange} mode={startMode} authenticated onAuthenticationRequired={onAuthenticationRequired} onSuccess={(createdTrip, mode, accommodationType) => {
+      openingSequence.current += 1;
+      setEntryContext({mode, accommodationType});
+      setActiveTrip(createdTrip);
+      setViewMode('workspace');
+      if (onRefreshProfile) void onRefreshProfile();
+    }} />}
     {viewMode === 'profile' && <section className="card profile-card" aria-labelledby="profile-heading">
       <div className="profile-heading">
         <div>
@@ -364,23 +367,6 @@ export function ProfileScreen({
       </section>
 
     </section>}
-      {/* Plan Trip Creation Modal */}
-      <TripCreateModal
-        isOpen={createModalMode !== null}
-        mode={createModalMode ?? 'PLAN_TRIP'}
-        onClose={() => setCreateModalMode(null)}
-        onSuccess={(createdTrip, mode, accommodationType) => {
-          openingSequence.current += 1;
-          setOpeningTripId(null);
-          setOpenError(null);
-          setCreateModalMode(null);
-          setEntryContext({mode, accommodationType});
-          setActiveTrip(createdTrip);
-          setViewMode('workspace');
-          if (onRefreshProfile) void onRefreshProfile();
-        }}
-      />
-
       {/* Delete Confirmation Modal */}
       <ConfirmDeleteModal
         isOpen={Boolean(deleteTarget)}

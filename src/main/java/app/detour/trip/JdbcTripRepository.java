@@ -37,10 +37,10 @@ class JdbcTripRepository implements TripRepository {
         KeyHolder keys = new GeneratedKeyHolder();
         jdbc.update(c -> {
             PreparedStatement s = c.prepareStatement("""
-                    INSERT INTO detour_trip (public_id, owner_user_id, catalog_destination_id, start_date, end_date, traveler_count, budget_cents, display_label, version)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)""", Statement.RETURN_GENERATED_KEYS);
+                    INSERT INTO detour_trip (public_id, owner_user_id, catalog_destination_id, start_date, end_date, traveler_count, budget_cents, display_label, name, version)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)""", Statement.RETURN_GENERATED_KEYS);
             s.setObject(1, tripPublicId); s.setLong(2, ownerUserId); s.setLong(3, destination.id()); s.setObject(4, startDate); s.setObject(5, endDate);
-            s.setInt(6, travelerCount); if (budgetCents == null) s.setNull(7, java.sql.Types.BIGINT); else s.setLong(7, budgetCents); s.setString(8, label); return s;
+            s.setInt(6, travelerCount); if (budgetCents == null) s.setNull(7, java.sql.Types.BIGINT); else s.setLong(7, budgetCents); s.setString(8, label); s.setString(9, label); return s;
         }, keys);
         Number key = keys.getKeys() == null ? null : (Number) keys.getKeys().get("ID");
         if (key == null) throw new IllegalStateException("Trip insert did not return a key");
@@ -54,7 +54,7 @@ class JdbcTripRepository implements TripRepository {
     @Override public Optional<Trip> findByPublicIdAndOwnerUserId(UUID publicId, long ownerUserId) {
         return jdbc.query("""
                 SELECT trip.id, trip.public_id, trip.owner_user_id, destination.id AS destination_id, destination.catalog_key, destination.name AS destination_name,
-                       trip.start_date, trip.end_date, trip.traveler_count, trip.budget_cents, trip.display_label, trip.status, trip.version
+                       trip.start_date, trip.end_date, trip.traveler_count, trip.budget_cents, trip.display_label, trip.name, trip.status, trip.version
                 FROM detour_trip trip JOIN catalog_destination destination ON destination.id = trip.catalog_destination_id
                 WHERE trip.public_id = ? AND trip.owner_user_id = ?""", (r, n) -> loadTrip(r.getLong("id"), r, ownerUserId), publicId, ownerUserId).stream().findFirst();
     }
@@ -62,7 +62,7 @@ class JdbcTripRepository implements TripRepository {
     @Override public List<Trip> findAllByOwnerUserId(long ownerUserId) {
         return jdbc.query("""
                 SELECT trip.id, trip.public_id, trip.owner_user_id, destination.id AS destination_id, destination.catalog_key, destination.name AS destination_name,
-                       trip.start_date, trip.end_date, trip.traveler_count, trip.budget_cents, trip.display_label, trip.status, trip.version
+                       trip.start_date, trip.end_date, trip.traveler_count, trip.budget_cents, trip.display_label, trip.name, trip.status, trip.version
                 FROM detour_trip trip JOIN catalog_destination destination ON destination.id = trip.catalog_destination_id
                 WHERE trip.owner_user_id = ?
                 ORDER BY trip.start_date ASC, trip.id ASC""", (r, n) -> loadTrip(r.getLong("id"), r, ownerUserId), ownerUserId);
@@ -73,18 +73,24 @@ class JdbcTripRepository implements TripRepository {
         List<Integer> knownAges = ages.stream().allMatch(java.util.Objects::nonNull) ? List.copyOf(ages) : null;
         LocalDate startDate = row.getObject("start_date", LocalDate.class);
         LocalDate endDate = row.getObject("end_date", LocalDate.class);
-        List<TripDraft> drafts = jdbc.query("SELECT id, public_id, version FROM detour_trip_draft WHERE trip_id = ? ORDER BY id", (r, n) -> {
-            long draftId = r.getLong("id"); return new TripDraft(draftId, r.getObject("public_id", UUID.class), r.getLong("version"), loadDraftSelections(draftId, startDate, endDate));
+        List<TripDraft> drafts = jdbc.query("SELECT id, public_id, version, start_date, end_date FROM detour_trip_draft WHERE trip_id = ? ORDER BY id", (r, n) -> {
+            long draftId = r.getLong("id");
+            LocalDate draftStart = r.getObject("start_date", LocalDate.class);
+            LocalDate draftEnd = r.getObject("end_date", LocalDate.class);
+            return new TripDraft(draftId, r.getObject("public_id", UUID.class), r.getLong("version"),
+                    loadDraftSelections(draftId, draftStart, draftEnd), draftStart, draftEnd);
         }, tripId);
-        List<PlannedItinerary> planned = jdbc.query("SELECT id, public_id FROM detour_planned_itinerary WHERE trip_id = ? ORDER BY id", (r, n) -> {
-            long plannedId = r.getLong("id"); return new PlannedItinerary(plannedId, r.getObject("public_id", UUID.class), loadPlannedSelections(plannedId));
+        List<PlannedItinerary> planned = jdbc.query("SELECT id, public_id, name, start_date, end_date, version FROM detour_planned_itinerary WHERE trip_id = ? ORDER BY id", (r, n) -> {
+            long plannedId = r.getLong("id"); return new PlannedItinerary(plannedId, r.getObject("public_id", UUID.class),
+                    loadPlannedSelections(plannedId), r.getString("name"), r.getObject("start_date", LocalDate.class),
+                    r.getObject("end_date", LocalDate.class), r.getLong("version"));
         }, tripId);
         Long budget = (Long) row.getObject("budget_cents");
         String status = row.getString("status");
         return new Trip(tripId, row.getObject("public_id", UUID.class), ownerUserId,
                 new Destination(row.getLong("destination_id"), row.getString("catalog_key"), row.getString("destination_name")),
                 startDate, endDate, row.getInt("traveler_count"), knownAges,
-                budget, row.getString("display_label"), status, row.getLong("version"), List.copyOf(drafts), List.copyOf(planned));
+                budget, row.getString("name"), status, row.getLong("version"), List.copyOf(drafts), List.copyOf(planned));
     }
 
     private DraftSelections loadDraftSelections(long draftId, LocalDate startDate, LocalDate endDate) {
@@ -220,6 +226,29 @@ class JdbcTripRepository implements TripRepository {
     }
 
     @Override public boolean advanceVersion(long tripId, long ownerUserId, long expectedVersion) { return jdbc.update("UPDATE detour_trip SET version = version + 1 WHERE id = ? AND owner_user_id = ? AND version = ?", tripId, ownerUserId, expectedVersion) == 1; }
+    @Override public void rename(long tripId, String name) {
+        jdbc.update("UPDATE detour_trip SET name = ?, display_label = ? WHERE id = ?", name, name, tripId);
+    }
+    @Override public void updateWorkingDates(long tripId, long draftId, LocalDate startDate, LocalDate endDate) {
+        jdbc.update("UPDATE detour_trip_draft SET start_date = ?, end_date = ?, version = version + 1 WHERE id = ? AND trip_id = ?", startDate, endDate, draftId, tripId);
+        jdbc.update("UPDATE detour_trip SET start_date = ?, end_date = ? WHERE id = ?", startDate, endDate, tripId);
+    }
+    @Override public boolean advanceVersionForOption(long tripId, long ownerUserId, long expectedVersion,
+            long optionId, long expectedOptionVersion) {
+        return jdbc.update("""
+                UPDATE detour_trip SET version = version + 1 WHERE id = ? AND owner_user_id = ? AND version = ?
+                AND EXISTS (SELECT 1 FROM detour_planned_itinerary WHERE id = ? AND trip_id = ? AND version = ?)
+                AND NOT EXISTS (SELECT 1 FROM detour_booking WHERE planned_itinerary_id = ?)
+                """, tripId, ownerUserId, expectedVersion, optionId, tripId, expectedOptionVersion, optionId) == 1
+                && jdbc.update("UPDATE detour_planned_itinerary SET version = version + 1 WHERE id = ? AND trip_id = ? AND version = ?",
+                    optionId, tripId, expectedOptionVersion) == 1;
+    }
+    @Override public void renameOption(long optionId, String name) {
+        jdbc.update("UPDATE detour_planned_itinerary SET name = ? WHERE id = ?", name, optionId);
+    }
+    @Override public void updateOptionDates(long optionId, LocalDate startDate, LocalDate endDate) {
+        jdbc.update("UPDATE detour_planned_itinerary SET start_date = ?, end_date = ? WHERE id = ?", startDate, endDate, optionId);
+    }
     @Override public boolean advanceVersionForDraft(long tripId, long ownerUserId, long expectedVersion, long draftId, long expectedDraftVersion) { return jdbc.update("UPDATE detour_trip SET version = version + 1 WHERE id = ? AND owner_user_id = ? AND version = ? AND EXISTS (SELECT 1 FROM detour_trip_draft WHERE id = ? AND trip_id = ? AND version = ?)", tripId, ownerUserId, expectedVersion, draftId, tripId, expectedDraftVersion) == 1; }
 
     @Override public boolean advanceVersionForDraftMutation(long tripId, long ownerUserId, long expectedVersion, long draftId, long expectedDraftVersion) {
@@ -245,11 +274,12 @@ class JdbcTripRepository implements TripRepository {
     }
 
     @Override public void replaceSharedDetails(long tripId, Destination destination, LocalDate startDate, LocalDate endDate, int travelerCount, List<Integer> ages, Long budget, String label) {
-        jdbc.update("UPDATE detour_trip SET catalog_destination_id = ?, start_date = ?, end_date = ?, traveler_count = ?, budget_cents = ?, display_label = ? WHERE id = ?", destination.id(), startDate, endDate, travelerCount, budget, label, tripId);
+        jdbc.update("UPDATE detour_trip SET catalog_destination_id = ?, start_date = ?, end_date = ?, traveler_count = ?, budget_cents = ?, display_label = ?, name = ? WHERE id = ?", destination.id(), startDate, endDate, travelerCount, budget, label, label, tripId);
+        jdbc.update("UPDATE detour_trip_draft SET start_date = ?, end_date = ? WHERE trip_id = ?", startDate, endDate, tripId);
         jdbc.update("DELETE FROM detour_trip_traveler WHERE trip_id = ?", tripId);
         for (int ordinal = 0; ordinal < travelerCount; ordinal++) jdbc.update("INSERT INTO detour_trip_traveler (trip_id, traveler_ordinal, age) VALUES (?, ?, ?)", tripId, ordinal + 1, ages.get(ordinal));
     }
-    @Override public void insertDraft(long tripId, UUID publicId) { jdbc.update("INSERT INTO detour_trip_draft (public_id, trip_id, version) VALUES (?, ?, 0)", publicId, tripId); }
+    @Override public void insertDraft(long tripId, UUID publicId) { jdbc.update("INSERT INTO detour_trip_draft (public_id, trip_id, version, start_date, end_date) SELECT ?, id, 0, start_date, end_date FROM detour_trip WHERE id = ?", publicId, tripId); }
     @Override public void deleteDraft(long tripId, long draftId) { jdbc.update("DELETE FROM detour_trip_draft WHERE trip_id = ? AND id = ?", tripId, draftId); }
     @Override public void deletePlanned(long tripId, long plannedId) { jdbc.update("DELETE FROM detour_planned_itinerary WHERE trip_id = ? AND id = ?", tripId, plannedId); }
     @Override public void deleteTrip(long tripId, long ownerUserId) { jdbc.update("DELETE FROM detour_trip WHERE id = ? AND owner_user_id = ?", tripId, ownerUserId); }
@@ -292,13 +322,23 @@ class JdbcTripRepository implements TripRepository {
     }
     @Override
     public void insertPlanned(long tripId, UUID publicId, DraftSelections s) {
+        LocalDate start = jdbc.queryForObject("SELECT start_date FROM detour_trip_draft WHERE trip_id = ?", LocalDate.class, tripId);
+        LocalDate end = jdbc.queryForObject("SELECT end_date FROM detour_trip_draft WHERE trip_id = ?", LocalDate.class, tripId);
+        int ordinal = jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_itinerary WHERE trip_id = ?", Integer.class, tripId) + 1;
+        insertPlanned(tripId, publicId, "Option " + ordinal, start, end, s);
+    }
+    @Override
+    public void insertPlanned(long tripId, UUID publicId, String name, LocalDate startDate, LocalDate endDate, DraftSelections s) {
         KeyHolder keys = new GeneratedKeyHolder();
         jdbc.update(c -> {
             PreparedStatement p = c.prepareStatement(
-                    "INSERT INTO detour_planned_itinerary (public_id, trip_id) VALUES (?, ?)",
+                    "INSERT INTO detour_planned_itinerary (public_id, trip_id, name, start_date, end_date, version) VALUES (?, ?, ?, ?, ?, 0)",
                     Statement.RETURN_GENERATED_KEYS);
             p.setObject(1, publicId);
             p.setLong(2, tripId);
+            p.setString(3, name);
+            p.setObject(4, startDate);
+            p.setObject(5, endDate);
             return p;
         }, keys);
         Number key = keys.getKeys() == null ? null : (Number) keys.getKeys().get("ID");

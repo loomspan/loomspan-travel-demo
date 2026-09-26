@@ -58,4 +58,6 @@ public interface BookingRepository {
     boolean hasBookingHistory(long tripId);
 
     boolean isPlannedItineraryActivelyBooked(long plannedItineraryId);
+
+    boolean isPlannedItineraryBooked(long plannedItineraryId);
 }

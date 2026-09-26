@@ -13,4 +13,6 @@ public record Trip(long id, UUID publicId, long ownerUserId, Destination destina
             List<TripDraft> drafts, List<PlannedItinerary> planned) {
         this(id, publicId, ownerUserId, destination, startDate, endDate, travelerCount, travelerAges, budgetCents, label, "ACTIVE", version, drafts, planned);
     }
+
+    public String name() { return label; }
 }

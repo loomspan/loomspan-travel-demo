@@ -3,9 +3,12 @@ import {identityApi, IdentityApiError, type Profile} from './api/identityApi';
 import {AboutDemoTab} from './components/AboutDemoTab';
 import {AuthScreen, type FormFailure} from './components/AuthScreen';
 import {ProfileScreen} from './components/ProfileScreen';
+import {HomeScreen, type StartMode} from './components/HomeScreen';
+import {TripStartForm, emptyTripStartDraft, type TripStartDraft} from './components/TripStartForm';
+import {ActionIcon} from './components/ActionIcon';
 import {StatusRegion} from './components/StatusRegion';
 
-type Screen = {kind: 'loading'} | {kind: 'public'} | {kind: 'profile'; profile: Profile};
+type Screen = {kind: 'public'} | {kind: 'profile'; profile: Profile};
 type Notice = {kind: 'error' | 'status'; message: string; fields?: Record<string, string>};
 const LOGIN_SUCCESS_MESSAGE = 'You are now logged in.';
 
@@ -22,7 +25,11 @@ function failureFor(error: unknown, action: 'login' | 'register' | 'password' | 
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>({kind: 'loading'});
+  const [screen, setScreen] = useState<Screen>({kind: 'public'});
+  const [publicDestination, setPublicDestination] = useState<'home' | 'trips'>('home');
+  const [startMode, setStartMode] = useState<StartMode>('PLAN_TRIP');
+  const [tripDraft, setTripDraft] = useState<TripStartDraft>(emptyTripStartDraft);
+  const [authActive, setAuthActive] = useState(false);
   const [notice, setNotice] = useState<Notice | undefined>();
   const errorRef = useRef<HTMLDivElement>(null);
   const profileRequestId = useRef(0);
@@ -36,15 +43,21 @@ export default function App() {
     try {
       const profile = await identityApi.getProfile();
       if (requestId !== profileRequestId.current) return false;
-      setScreen({kind: 'profile', profile}); if (afterLogin) setNotice({kind: 'status', message: LOGIN_SUCCESS_MESSAGE});
+      setScreen({kind: 'profile', profile});
+      setAuthActive(false);
+      if (afterLogin) setNotice({kind: 'status', message: LOGIN_SUCCESS_MESSAGE});
       return true;
     } catch (error) {
       if (requestId !== profileRequestId.current) return false;
       const failure = failureFor(error, 'profile');
-      if (!preserveAuthenticatedOnFailure || (error instanceof IdentityApiError && error.code === 'UNAUTHENTICATED')) {
+      if (preserveAuthenticatedOnFailure && error instanceof IdentityApiError && error.code === 'UNAUTHENTICATED') {
+        setAuthActive(true);
+        showFailure(failure);
+      } else if (!preserveAuthenticatedOnFailure) {
         setScreen({kind: 'public'});
       }
-      if (reportUnauthenticated || !(error instanceof IdentityApiError) || error.code !== 'UNAUTHENTICATED') showFailure(failure);
+      if (!(preserveAuthenticatedOnFailure && error instanceof IdentityApiError && error.code === 'UNAUTHENTICATED') &&
+          (reportUnauthenticated || !(error instanceof IdentityApiError) || error.code !== 'UNAUTHENTICATED')) showFailure(failure);
       return false;
     }
   };
@@ -58,8 +71,8 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [notice]);
   useEffect(() => {
-    if (screen.kind !== 'loading' && notice?.kind !== 'error') document.querySelector<HTMLElement>('h1')?.focus();
-  }, [screen.kind, notice?.kind]);
+    if (notice?.kind !== 'error') document.querySelector<HTMLElement>('h1')?.focus();
+  }, [screen.kind, publicDestination, authActive, notice?.kind]);
 
   const register = async (email: string, password: string) => {
     try { await identityApi.register(email, password); if (await loadProfile(false, true)) setNotice({kind: 'status', message: 'Your account is ready.'}); }
@@ -76,12 +89,12 @@ export default function App() {
     try {
       await identityApi.logout();
       ++profileRequestId.current; ++sessionEpoch.current;
-      setScreen({kind: 'public'}); setNotice({kind: 'status', message: 'You have logged out.'});
+      setScreen({kind: 'public'}); setAuthActive(false); setPublicDestination('home'); setTripDraft(emptyTripStartDraft); setNotice({kind: 'status', message: 'You have logged out.'});
     } catch (error) {
       const failure = failureFor(error, 'logout');
       if (error instanceof IdentityApiError && error.code === 'UNAUTHENTICATED') {
         ++profileRequestId.current; ++sessionEpoch.current;
-        setScreen({kind: 'public'});
+        setScreen({kind: 'public'}); setAuthActive(false); setTripDraft(emptyTripStartDraft);
       }
       showFailure(failure);
     } finally {
@@ -98,7 +111,7 @@ export default function App() {
     }
     catch (error) {
       if (actionEpoch !== sessionEpoch.current) return;
-      if (error instanceof IdentityApiError && error.code === 'UNAUTHENTICATED') { ++sessionEpoch.current; setScreen({kind: 'public'}); }
+      if (error instanceof IdentityApiError && error.code === 'UNAUTHENTICATED') { ++sessionEpoch.current; setAuthActive(true); }
       throw failureFor(error, 'password');
     }
   };
@@ -115,8 +128,10 @@ export default function App() {
     </div>}
     <StatusRegion message={notice?.kind === 'status' ? notice.message : undefined} />
     <AboutDemoTab />
-    {screen.kind === 'loading' ? <p className="loading">Checking your account…</p> : screen.kind === 'profile'
-      ? <ProfileScreen
+    {screen.kind === 'profile'
+      ? <div hidden={authActive}>
+        <ProfileScreen
+          key={screen.profile.email}
           email={screen.profile.email}
           upcoming={screen.profile.upcoming}
           past={screen.profile.past}
@@ -125,7 +140,22 @@ export default function App() {
           onPasswordChange={changePassword}
           onFailure={showFailure}
           onRefreshProfile={() => loadProfile(false, false, true)}
+          initialDestination={publicDestination}
+          initialStartMode={startMode}
+          tripDraft={tripDraft}
+          onTripDraftChange={setTripDraft}
+          onAuthenticationRequired={() => { showFailure({message: 'Your session has ended. Please log in again. Your unsaved changes are still here.'}); setAuthActive(true); }}
         />
-      : <AuthScreen onRegister={register} onLogin={login} onFailure={showFailure} />}
+        </div>
+      : !authActive && <>
+        <nav className="card primary-navigation" aria-label="Primary navigation">
+          <button type="button" className="text-button" aria-current={publicDestination === 'home' ? 'page' : undefined} onClick={() => setPublicDestination('home')}><ActionIcon name="home" />Home</button>
+          <button type="button" className="text-button" aria-current={publicDestination === 'trips' ? 'page' : undefined} onClick={() => setPublicDestination('trips')}><ActionIcon name="trip" />Trips</button>
+          <button type="button" className="text-button" onClick={() => setAuthActive(true)}><ActionIcon name="profile" />Log in</button>
+        </nav>
+        {publicDestination === 'home' ? <HomeScreen onStart={mode => { setStartMode(mode); setPublicDestination('trips'); }} />
+          : <TripStartForm draft={tripDraft} onChange={setTripDraft} mode={startMode} authenticated={false} onAuthenticationRequired={() => setAuthActive(true)} onSuccess={() => {}} />}
+      </>}
+    {authActive && <AuthScreen onRegister={register} onLogin={login} onFailure={showFailure} onCancel={screen.kind === 'public' ? () => setAuthActive(false) : undefined} />}
   </main>;
 }

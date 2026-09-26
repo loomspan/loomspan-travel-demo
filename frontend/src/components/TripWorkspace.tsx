@@ -50,6 +50,7 @@ type TripWorkspaceProps = {
   onLogout?: () => Promise<void>;
   logoutPending?: boolean;
   onSaveStatusChange?: (status: 'idle' | 'saving' | 'saved' | 'error' | 'conflict', dirty: boolean) => void;
+  onAuthenticationRequired?: () => void;
 };
 
 export type TripWorkspaceHandle = {
@@ -89,6 +90,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
   onLogout,
   logoutPending = false,
   onSaveStatusChange,
+  onAuthenticationRequired,
 }: TripWorkspaceProps, ref) {
   const [trip, setTrip] = useState<TripResponse>(initialTrip);
   const [destinationKey, setDestinationKey] = useState(initialTrip.destinationKey);
@@ -480,7 +482,11 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       setAutosaveMessage(pendingSaveRef.current ? 'Saving latest changes…' : 'All changes saved.');
     } catch (err) {
       if (err instanceof IdentityApiError) {
-        if (err.code === 'VERSION_CONFLICT') {
+        if (err.code === 'UNAUTHENTICATED') {
+          setAutosaveStatus('error');
+          setAutosaveMessage('Your session has ended. Your edited details have not been saved. Log in, then retry save.');
+          onAuthenticationRequired?.();
+        } else if (err.code === 'VERSION_CONFLICT') {
           setAutosaveStatus('conflict');
           setAutosaveMessage('The Trip has changed on the server. Reload before saving.');
         } else if (err.code === 'IMMUTABLE_TRIP') {
@@ -511,7 +517,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         }, 300);
       }
     }
-  }, [trip.id, trip.version, destinationKey, startDate, endDate, travelerCountInput, validateInputs, isDirty, autosaveStatus, isTripCanceled]);
+  }, [trip.id, trip.version, destinationKey, startDate, endDate, travelerCountInput, validateInputs, isDirty, autosaveStatus, isTripCanceled, onAuthenticationRequired]);
 
   const executeAutosaveRef = useRef(executeAutosave);
   useEffect(() => {

@@ -171,19 +171,21 @@ class RentalSearchAndSelectionIntegrationTest {
                 .andExpect(jsonPath("$.options.length()").value(7)) // Inventory still browsable
                 .andReturn();
 
-        // Also test trip with null traveler ages
+        // Simulate a legacy Trip whose traveler ages were unknown before the V19 upgrade.
         MvcResult noAgesTrip = owner.unsafe(post("/api/trips"), """
                 {
+                    "name": "Legacy ages",
                     "destinationKey": "destination-sfo",
                     "startDate": "2027-03-02",
                     "endDate": "2027-03-06",
                     "travelerCount": 2,
-                    "travelerAges": null,
+                    "travelerAges": [25, 25],
                     "budgetCents": 100000
                 }
                 """).andExpect(status().isCreated()).andReturn();
         String noAgesTripId = jsonField(noAgesTrip, "id");
         String noAgesDraftId = JSON.readTree(noAgesTrip.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
+        jdbc.update("UPDATE detour_trip_traveler SET age = NULL WHERE trip_id = (SELECT id FROM detour_trip WHERE public_id = ?)", UUID.fromString(noAgesTripId));
 
         owner.unsafe(get("/api/trips/{tripId}/drafts/{draftId}/rentals?pickupAt=2027-03-02T10:00:00-08:00&returnAt=2027-03-06T10:00:00-08:00", noAgesTripId, noAgesDraftId), null)
                 .andExpect(status().isOk())
@@ -628,10 +630,11 @@ class RentalSearchAndSelectionIntegrationTest {
 
     private static String tripJson(String destinationKey, String startDate, String endDate, List<Integer> ages, Long budgetCents) {
         String budgetStr = budgetCents == null ? "null" : budgetCents.toString();
-        String agesStr = ages == null ? "null" : ages.toString();
+        String agesStr = ages == null ? "[30, 30]" : ages.toString();
         int count = ages == null ? 2 : ages.size();
         return """
                 {
+                    "name": "Test trip",
                     "destinationKey": "%s",
                     "startDate": "%s",
                     "endDate": "%s",

@@ -52,8 +52,12 @@ public class BookingTransactionExecutor {
 
     @Transactional
     public BookingResponse executeBookingTransaction(long ownerUserId, Trip trip, TripRequests.BookingCreate request) {
-        // 1. Expiration check
-        Instant departureMidnight = trip.startDate().atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant();
+        // A Saved option owns its travel dates, independent of the Working plan.
+        PlannedItinerary planned = trip.planned().stream()
+                .filter(p -> p.publicId().equals(request.plannedItineraryId()))
+                .findFirst()
+                .orElseThrow(this::notFound);
+        Instant departureMidnight = planned.startDate().atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant();
         if (!clock.instant().isBefore(departureMidnight)) {
             throw new ApiException(400, "TRIP_EXPIRED", "Cannot book an expired trip.");
         }
@@ -74,11 +78,6 @@ public class BookingTransactionExecutor {
         }
 
         // 4. Resolve Planned Itinerary
-        PlannedItinerary planned = trip.planned().stream()
-                .filter(p -> p.publicId().equals(request.plannedItineraryId()))
-                .findFirst()
-                .orElseThrow(this::notFound);
-
         // 5. Reservable components check
         DraftSelections selections = planned.selections();
         if (selections == null || (selections.airfare() == null && selections.stay() == null && selections.rental() == null)) {
@@ -105,8 +104,8 @@ public class BookingTransactionExecutor {
         // Lock & check Stay
         if (selections.stay() != null) {
             StaySelection stay = selections.stay();
-            LocalDate minDate = stay.nights().stream().map(StayNight::date).min(LocalDate::compareTo).orElse(trip.startDate());
-            LocalDate maxDate = stay.nights().stream().map(StayNight::date).max(LocalDate::compareTo).map(d -> d.plusDays(1)).orElse(trip.endDate());
+            LocalDate minDate = stay.nights().stream().map(StayNight::date).min(LocalDate::compareTo).orElse(planned.startDate());
+            LocalDate maxDate = stay.nights().stream().map(StayNight::date).max(LocalDate::compareTo).map(d -> d.plusDays(1)).orElse(planned.endDate());
             var stayLocks = bookingRepository.lockStayNightlyInventory(stay.accommodationUnitId(), minDate, maxDate);
             Map<LocalDate, Integer> stayMap = stayLocks.stream()
                     .collect(Collectors.toMap(BookingRepository.StayNightlyLock::nightDate, BookingRepository.StayNightlyLock::availableInventory));
@@ -208,13 +207,7 @@ public class BookingTransactionExecutor {
             throw new ApiException(400, "VALIDATION_FAILED", "A request body is required.", Map.of("request", "A request body is required."));
         }
 
-        // 1. Expiration check: booking cannot be canceled if the trip is Expired (isExpired(startDate) in America/Los_Angeles). Reject with HTTP 400.
-        Instant departureMidnight = trip.startDate().atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant();
-        if (!clock.instant().isBefore(departureMidnight)) {
-            throw new ApiException(400, "TRIP_EXPIRED", "Cannot cancel a booking on an expired trip.");
-        }
-
-        // 2. Trip canceled check
+        // 1. Trip canceled check
         if ("CANCELED".equals(trip.status())) {
             throw new ApiException(409, "TRIP_CANCELED", "This trip has been canceled.");
         }
@@ -227,6 +220,11 @@ public class BookingTransactionExecutor {
         // 4. Lock and retrieve the booking row for the trip
         BookingRecord record = bookingRepository.findBookingRecordByTripIdAndPublicIdForUpdate(trip.id(), bookingPublicId)
                 .orElseThrow(this::notFound);
+
+        LocalDate bookedStart = bookedStartDate(record, trip);
+        if (!clock.instant().isBefore(bookedStart.atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant())) {
+            throw new ApiException(400, "TRIP_EXPIRED", "Cannot cancel a booking on an expired trip.");
+        }
 
         // 5. Verify status = 'ACTIVE'
         if (!"ACTIVE".equals(record.status())) {
@@ -258,8 +256,10 @@ public class BookingTransactionExecutor {
             throw new ApiException(400, "VALIDATION_FAILED", "A request body is required.", Map.of("request", "A request body is required."));
         }
 
-        // 1. Expiration check: Allowed only before the trip becomes Expired (!isExpired(startDate)).
-        Instant departureMidnight = trip.startDate().atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant();
+        // An active booking belongs to its Saved option, whose dates may differ from Working.
+        Optional<BookingRecord> activeBooking = bookingRepository.findActiveBookingRecordByTripIdForUpdate(trip.id());
+        LocalDate cancellationStart = activeBooking.map(record -> bookedStartDate(record, trip)).orElse(trip.startDate());
+        Instant departureMidnight = cancellationStart.atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant();
         if (!clock.instant().isBefore(departureMidnight)) {
             throw new ApiException(400, "TRIP_EXPIRED", "Cannot cancel an expired trip.");
         }
@@ -280,7 +280,6 @@ public class BookingTransactionExecutor {
         }
 
         // 5. If the trip has an ACTIVE booking:
-        Optional<BookingRecord> activeBooking = bookingRepository.findActiveBookingRecordByTripIdForUpdate(trip.id());
         if (activeBooking.isPresent()) {
             BookingRecord record = activeBooking.get();
             restoreInventory(record, trip);
@@ -318,8 +317,13 @@ public class BookingTransactionExecutor {
         // Stay: increment available_inventory = available_inventory + unit_count for every reserved night in accommodation_nightly_inventory
         if (selections.stay() != null) {
             StaySelection stay = selections.stay();
-            LocalDate minDate = stay.nights().stream().map(StayNight::date).min(LocalDate::compareTo).orElse(trip.startDate());
-            LocalDate maxDate = stay.nights().stream().map(StayNight::date).max(LocalDate::compareTo).map(d -> d.plusDays(1)).orElse(trip.endDate());
+            PlannedItinerary bookedOption = trip.planned().stream()
+                    .filter(p -> record.plannedItineraryId() != null && p.id() == record.plannedItineraryId())
+                    .findFirst().orElse(null);
+            LocalDate minDate = stay.nights().stream().map(StayNight::date).min(LocalDate::compareTo)
+                    .orElse(bookedOption != null ? bookedOption.startDate() : trip.startDate());
+            LocalDate maxDate = stay.nights().stream().map(StayNight::date).max(LocalDate::compareTo).map(d -> d.plusDays(1))
+                    .orElse(bookedOption != null ? bookedOption.endDate() : trip.endDate());
             bookingRepository.lockStayNightlyInventory(stay.accommodationUnitId(), minDate, maxDate);
             for (StayNight night : stay.nights()) {
                 bookingRepository.incrementStayInventory(stay.accommodationUnitId(), night.date(), stay.unitCount());
@@ -330,6 +334,12 @@ public class BookingTransactionExecutor {
         if (record.rentalOccupancyId() != null) {
             bookingRepository.releaseRentalOccupancy(record.rentalOccupancyId());
         }
+    }
+
+    private LocalDate bookedStartDate(BookingRecord record, Trip trip) {
+        return trip.planned().stream()
+                .filter(p -> record.plannedItineraryId() != null && p.id() == record.plannedItineraryId())
+                .map(PlannedItinerary::startDate).findFirst().orElse(trip.startDate());
     }
 
     private ApiException notFound() {

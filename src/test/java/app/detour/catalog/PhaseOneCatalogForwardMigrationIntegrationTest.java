@@ -9,15 +9,12 @@ import java.time.OffsetDateTime;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 class PhaseOneCatalogForwardMigrationIntegrationTest {
-    @TempDir
-    Path temporaryDirectory;
 
     @Test
     void migratesVersionTwoIdentityDatabaseForwardWithoutDataLoss() throws Exception {
-        String url = "jdbc:h2:file:" + temporaryDirectory.resolve("phase-one").toAbsolutePath().toString().replace('\\', '/') + ";DB_CLOSE_ON_EXIT=FALSE";
+        String url = "jdbc:h2:file:" + Path.of("target", "phase-one-" + java.util.UUID.randomUUID()).toAbsolutePath().toString().replace('\\', '/') + ";DB_CLOSE_ON_EXIT=FALSE";
         Flyway.configure().dataSource(url, "sa", "").locations("classpath:db/migration")
                 .target(MigrationVersion.fromVersion("2")).load().migrate();
         OffsetDateTime createdAt = OffsetDateTime.parse("2027-01-01T10:15:30-08:00");
@@ -30,7 +27,7 @@ class PhaseOneCatalogForwardMigrationIntegrationTest {
         }
         Flyway fullLineage = Flyway.configure().dataSource(url, "sa", "").locations("classpath:db/migration").load();
         fullLineage.migrate();
-        assertEquals("18", fullLineage.info().current().getVersion().getVersion());
+        assertEquals("19", fullLineage.info().current().getVersion().getVersion());
         try (var connection = DriverManager.getConnection(url, "sa", "");
              var query = connection.prepareStatement("SELECT password_hash, created_at FROM detour_user WHERE canonical_email = ?")) {
             query.setString(1, "phase-one@example.test");

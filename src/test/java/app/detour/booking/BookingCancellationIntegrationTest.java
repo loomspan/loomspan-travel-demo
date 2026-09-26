@@ -233,7 +233,7 @@ class BookingCancellationIntegrationTest {
     void cancelingTripWithoutBookingHistoryRejectedWithHttp400() throws Exception {
         Client owner = register("cancel-trip-unbooked@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
 
@@ -247,6 +247,21 @@ class BookingCancellationIntegrationTest {
                 "SELECT status FROM detour_trip WHERE public_id = ?",
                 String.class, UUID.fromString(tripId));
         assertEquals("ACTIVE", tripStatus);
+    }
+
+    @Test
+    void rejectsTripCancellationAfterBookedOptionDepartsEvenIfWorkingDatesAreLater() throws Exception {
+        Client owner = register("dated-option-cancel@example.test");
+        TripFixture fixture = createTripWithBooking(owner);
+        jdbc.update("UPDATE detour_trip SET start_date = DATE '2027-03-20', end_date = DATE '2027-03-24' WHERE public_id = ?",
+                UUID.fromString(fixture.tripId));
+        jdbc.update("UPDATE detour_trip_draft SET start_date = DATE '2027-03-20', end_date = DATE '2027-03-24' WHERE trip_id = (SELECT id FROM detour_trip WHERE public_id = ?)",
+                UUID.fromString(fixture.tripId));
+        testClock.setInstant(LocalDate.of(2027, 3, 15).atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant());
+
+        owner.unsafe(post("/api/trips/{tripId}/cancel", fixture.tripId), "{\"expectedVersion\":2}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TRIP_EXPIRED"));
     }
 
     @Test
@@ -286,98 +301,94 @@ class BookingCancellationIntegrationTest {
         Client owner = register("mutations-on-canceled@example.test");
         TripFixture fixture = createTripWithBooking(owner);
 
-        // Add an extra draft before canceling so we can test draft mutations
-        MvcResult draftRes = owner.unsafe(post("/api/trips/{tripId}/drafts", fixture.tripId),
-                "{\"expectedVersion\":2}")
-                .andExpect(status().isCreated()).andReturn();
-        String draftId = getDraftId(draftRes, 1);
+        String draftId = fixture.draftId;
 
-        // Cancel the trip (expectedVersion is now 3)
+        // Cancel the trip (expectedVersion is 2)
         owner.unsafe(post("/api/trips/{tripId}/cancel", fixture.tripId),
-                "{\"expectedVersion\":3}")
+                "{\"expectedVersion\":2}")
                 .andExpect(status().isOk());
 
         // 1. replaceSharedDetails -> 409 TRIP_CANCELED
         owner.unsafe(put("/api/trips/{tripId}", fixture.tripId),
-                "{\"expectedVersion\":4,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"expectedVersion\":3,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRIP_CANCELED"));
 
         // 2. createDraft -> 409 TRIP_CANCELED
         owner.unsafe(post("/api/trips/{tripId}/drafts", fixture.tripId),
-                "{\"expectedVersion\":4}")
+                "{\"expectedVersion\":3}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRIP_CANCELED"));
 
         // 3. duplicateDraft -> 409 TRIP_CANCELED
         owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/duplicate", fixture.tripId, draftId),
-                "{\"expectedVersion\":4,\"expectedDraftVersion\":0}")
+                "{\"expectedVersion\":3,\"expectedDraftVersion\":0}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRIP_CANCELED"));
 
         // 4. deleteDraft -> 409 TRIP_CANCELED
         owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}", fixture.tripId, draftId),
-                "{\"expectedVersion\":4,\"expectedDraftVersion\":0}")
+                "{\"expectedVersion\":3,\"expectedDraftVersion\":0}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRIP_CANCELED"));
 
         // 5. promoteDraft -> 409 TRIP_CANCELED
         owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", fixture.tripId, draftId),
-                "{\"expectedVersion\":4,\"expectedDraftVersion\":0}")
+                "{\"expectedVersion\":3,\"expectedDraftVersion\":0}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRIP_CANCELED"));
 
         // 6. duplicateAlternative -> 409 TRIP_CANCELED
         owner.unsafe(post("/api/trips/{tripId}/alternatives/{altId}/duplicate", fixture.tripId, fixture.plannedId),
-                "{\"expectedVersion\":4}")
+                "{\"expectedVersion\":3}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRIP_CANCELED"));
 
         // 7. deleteAlternative -> 409 TRIP_CANCELED
         owner.unsafe(delete("/api/trips/{tripId}/alternatives/{altId}", fixture.tripId, fixture.plannedId),
-                "{\"expectedVersion\":4,\"confirmed\":true}")
+                "{\"expectedVersion\":3,\"confirmed\":true}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRIP_CANCELED"));
 
         // 8. selectDraftAirfare -> 409 TRIP_CANCELED
         owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/airfare", fixture.tripId, draftId),
-                "{\"expectedVersion\":4,\"expectedDraftVersion\":0,\"outboundFlightInstanceId\":1,\"returnFlightInstanceId\":2}")
+                "{\"expectedVersion\":3,\"expectedDraftVersion\":0,\"outboundFlightInstanceId\":1,\"returnFlightInstanceId\":2}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRIP_CANCELED"));
 
         // 9. removeDraftAirfare -> 409 TRIP_CANCELED
         owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/airfare", fixture.tripId, draftId),
-                "{\"expectedVersion\":4,\"expectedDraftVersion\":0}")
+                "{\"expectedVersion\":3,\"expectedDraftVersion\":0}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRIP_CANCELED"));
 
         // 10. selectDraftStay -> 409 TRIP_CANCELED
         owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/stays", fixture.tripId, draftId),
-                "{\"expectedVersion\":4,\"expectedDraftVersion\":0,\"accommodationUnitId\":1,\"unitCount\":1}")
+                "{\"expectedVersion\":3,\"expectedDraftVersion\":0,\"accommodationUnitId\":1,\"unitCount\":1}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRIP_CANCELED"));
 
         // 11. removeDraftStay -> 409 TRIP_CANCELED
         owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/stays", fixture.tripId, draftId),
-                "{\"expectedVersion\":4,\"expectedDraftVersion\":0}")
+                "{\"expectedVersion\":3,\"expectedDraftVersion\":0}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRIP_CANCELED"));
 
         // 12. selectDraftRental -> 409 TRIP_CANCELED
         owner.unsafe(put("/api/trips/{tripId}/drafts/{draftId}/rentals", fixture.tripId, draftId),
-                "{\"expectedVersion\":4,\"expectedDraftVersion\":0,\"rentalUnitId\":1,\"pickupAt\":\"2027-03-10T10:00:00Z\",\"returnAt\":\"2027-03-14T15:00:00Z\"}")
+                "{\"expectedVersion\":3,\"expectedDraftVersion\":0,\"rentalUnitId\":1,\"pickupAt\":\"2027-03-10T10:00:00Z\",\"returnAt\":\"2027-03-14T15:00:00Z\"}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRIP_CANCELED"));
 
         // 13. removeDraftRental -> 409 TRIP_CANCELED
         owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/rentals", fixture.tripId, draftId),
-                "{\"expectedVersion\":4,\"expectedDraftVersion\":0}")
+                "{\"expectedVersion\":3,\"expectedDraftVersion\":0}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRIP_CANCELED"));
 
         // 14. createBooking -> 409 TRIP_CANCELED
         owner.unsafe(post("/api/trips/{tripId}/bookings", fixture.tripId),
-                "{\"plannedItineraryId\":\"" + fixture.plannedId + "\",\"expectedVersion\":4,\"idempotencyKey\":\"attempt-booking\"}")
+                "{\"plannedItineraryId\":\"" + fixture.plannedId + "\",\"expectedVersion\":3,\"idempotencyKey\":\"attempt-booking\"}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("TRIP_CANCELED"));
     }
@@ -416,11 +427,11 @@ class BookingCancellationIntegrationTest {
         Client owner = register("delete-active-booked-alt@example.test");
         TripFixture fixture = createTripWithBooking(owner);
 
-        // Attempt to delete actively booked planned alternative -> 409 CANNOT_DELETE_ACTIVE_BOOKED_ALTERNATIVE
+        // A booked Saved option is immutable.
         owner.unsafe(delete("/api/trips/{tripId}/alternatives/{altId}", fixture.tripId, fixture.plannedId),
                 "{\"expectedVersion\":2,\"confirmed\":true}")
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("CANNOT_DELETE_ACTIVE_BOOKED_ALTERNATIVE"));
+                .andExpect(jsonPath("$.code").value("CANNOT_DELETE_BOOKED_ALTERNATIVE"));
 
         // Planned alternative remains
         int plannedCount = jdbc.queryForObject(
@@ -430,7 +441,7 @@ class BookingCancellationIntegrationTest {
     }
 
     @Test
-    void deletingUnbookedPlannedAlternativeSucceedsAndPreservesHistoricalCanceledBookings() throws Exception {
+    void canceledBookingStillRetainsItsSavedOptionReference() throws Exception {
         Client owner = register("delete-unbooked-alt-preserves-booking@example.test");
         TripFixture fixture = createTripWithBooking(owner);
 
@@ -439,23 +450,23 @@ class BookingCancellationIntegrationTest {
                 "{\"expectedVersion\":2}")
                 .andExpect(status().isOk());
 
-        // Delete the formerly-booked planned alternative
+        // A canceled Booking still retains its immutable Saved option.
         owner.unsafe(delete("/api/trips/{tripId}/alternatives/{altId}", fixture.tripId, fixture.plannedId),
                 "{\"expectedVersion\":3,\"confirmed\":true}")
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.planned.length()").value(0));
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CANNOT_DELETE_BOOKED_ALTERNATIVE"));
 
-        // Verify planned itinerary record deleted
+        // Planned and Booking identifiers survive cancellation.
         int plannedCount = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM detour_planned_itinerary WHERE public_id = ?",
                 Integer.class, UUID.fromString(fixture.plannedId));
-        assertEquals(0, plannedCount);
+        assertEquals(1, plannedCount);
 
-        // Verify booking row preserved with planned_itinerary_id set to NULL
+        // Verify Booking still resolves the Planned foreign key.
         Long dbPlannedFk = jdbc.queryForObject(
                 "SELECT planned_itinerary_id FROM detour_booking WHERE public_id = ?",
                 Long.class, UUID.fromString(fixture.bookingId));
-        org.junit.jupiter.api.Assertions.assertNull(dbPlannedFk);
+        org.junit.jupiter.api.Assertions.assertNotNull(dbPlannedFk);
 
         // Verify snapshots preserved
         int staySnapshots = jdbc.queryForObject(
@@ -527,7 +538,7 @@ class BookingCancellationIntegrationTest {
 
     private TripFixture createTripWithBooking(Client client) throws Exception {
         MvcResult created = client.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);

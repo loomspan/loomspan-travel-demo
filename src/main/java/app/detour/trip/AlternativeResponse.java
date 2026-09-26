@@ -6,14 +6,22 @@ import java.util.List;
 import java.util.UUID;
 
 /** Deliberately component-level facts only: no canonical total or availability decision. */
-public record AlternativeResponse(UUID id, String lifecycle, Long version, DraftSelectionResponse selections, ItineraryTallyResponse tally) {
+public record AlternativeResponse(UUID id, String lifecycle, Long version, DraftSelectionResponse selections, ItineraryTallyResponse tally,
+        String name, LocalDate startDate, LocalDate endDate) {
+    public AlternativeResponse(UUID id, String lifecycle, Long version, DraftSelectionResponse selections, ItineraryTallyResponse tally) {
+        this(id, lifecycle, version, selections, tally, null, null, null);
+    }
     public AlternativeResponse(UUID id, String lifecycle, Long version, DraftSelectionResponse selections) {
-        this(id, lifecycle, version, selections, null);
+        this(id, lifecycle, version, selections, null, null, null, null);
     }
 }
-record PlannedResponse(UUID id, DraftSelectionResponse selections, ItineraryTallyResponse tally) {
+record PlannedResponse(UUID id, DraftSelectionResponse selections, ItineraryTallyResponse tally,
+        String name, LocalDate startDate, LocalDate endDate, long version) {
+    public PlannedResponse(UUID id, DraftSelectionResponse selections, ItineraryTallyResponse tally) {
+        this(id, selections, tally, null, null, null, 0);
+    }
     public PlannedResponse(UUID id, DraftSelectionResponse selections) {
-        this(id, selections, null);
+        this(id, selections, null, null, null, null, 0);
     }
 }
 

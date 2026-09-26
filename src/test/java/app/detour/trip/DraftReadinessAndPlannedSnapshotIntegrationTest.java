@@ -58,7 +58,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
     void readinessEndpointReturnsCompleteStatusForReadyDraftWithinBudget() throws Exception {
         Client owner = register("ready-within-budget@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -80,7 +80,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
         Client owner = register("missing-readiness@example.test");
         // Trip with minors only, null budget, and no components
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[16,14],\"budgetCents\":null}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[16,14],\"budgetCents\":null}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -107,7 +107,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
     void rejectsPromotionWhenCatalogComponentsAreSoldOutOrUnavailable() throws Exception {
         Client owner = register("sold-out-check@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -141,7 +141,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
         // 3. Stay capacity exceeded
         Client capacityOwner = register("stay-capacity-check@example.test");
         MvcResult capacityTrip = capacityOwner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":5,\"travelerAges\":[30,28,25,20,19],\"budgetCents\":500000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":5,\"travelerAges\":[30,28,25,20,19],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String capTripId = jsonField(capacityTrip, "id");
         String capDraftId = getDraftId(capacityTrip, 0);
@@ -155,7 +155,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
         // 4. Rental driver age < 25
         Client rentalAgeOwner = register("rental-driver-age@example.test");
         MvcResult under25Trip = rentalAgeOwner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[24,22],\"budgetCents\":500000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[24,22],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String under25TripId = jsonField(under25Trip, "id");
         String under25DraftId = getDraftId(under25Trip, 0);
@@ -169,7 +169,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
         // 5. Rental pickup date outside trip interval
         Client rentalDateOwner = register("rental-dates@example.test");
         MvcResult dateTrip = rentalDateOwner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[30,25],\"budgetCents\":500000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[30,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String dateTripId = jsonField(dateTrip, "id");
         String dateDraftId = getDraftId(dateTrip, 0);
@@ -184,7 +184,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
         // 6. Rental active occupancy overlap
         Client rentalOccOwner = register("rental-occupancy@example.test");
         MvcResult occTrip = rentalOccOwner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[30,25],\"budgetCents\":500000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[30,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String occTripId = jsonField(occTrip, "id");
         String occDraftId = getDraftId(occTrip, 0);
@@ -205,7 +205,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
     void enforcesBudgetOverageAcknowledgmentOnPromotion() throws Exception {
         Client owner = register("overage-enforcement@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":50000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":50000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -232,7 +232,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
     void allowsPromotionWhenBudgetOverageIsExplicitlyAcknowledged() throws Exception {
         Client owner = register("overage-acknowledged@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":50000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":50000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -252,7 +252,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
     void invalidatesOverageAcknowledgmentOnSubsequentEdits() throws Exception {
         Client owner = register("invalidation-test@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":50000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":50000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -282,7 +282,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
     void persistsCompleteDescriptiveFactsIntoPlannedSnapshotV16() throws Exception {
         Client owner = register("v16-facts@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -339,7 +339,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
     void plannedSnapshotIsUnaffectedByCatalogEditsOrDraftDeletion() throws Exception {
         Client owner = register("snapshot-stability@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -363,15 +363,15 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
         jdbc.update("UPDATE accommodation_property SET name = 'Completely Changed Hotel'");
         jdbc.update("UPDATE rental_vehicle_class SET daily_base_price_cents = daily_base_price_cents + 8888");
 
-        // Delete source draft
+        // A Trip always retains its Working plan; the Saved snapshot remains independent.
         owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}", tripId, draftId),
                 "{\"expectedVersion\":1,\"expectedDraftVersion\":0}")
-                .andExpect(status().isOk());
+                .andExpect(status().isConflict());
 
         // Re-fetch trip: planned snapshot retains exact original frozen facts
         owner.unsafe(get("/api/trips/{tripId}", tripId), null)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.drafts.length()").value(0))
+                .andExpect(jsonPath("$.drafts.length()").value(1))
                 .andExpect(jsonPath("$.planned.length()").value(1))
                 .andExpect(jsonPath("$.planned[0].id").value(plannedId))
                 .andExpect(jsonPath("$.planned[0].selections.airfare.outboundBaseFareCents").value(origFare))
@@ -383,7 +383,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
     void rejectsInPlaceMutationOnPlannedSnapshotWithImmutableAlternative() throws Exception {
         Client owner = register("immutable-alternative@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -402,18 +402,18 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("IMMUTABLE_ALTERNATIVE"));
 
-        // Duplication of Planned alternative creates a new mutable Draft
+        // Duplication cannot create a second Working plan.
         owner.unsafe(post("/api/trips/{tripId}/alternatives/{alternativeId}/duplicate", tripId, plannedId),
                 "{\"expectedVersion\":1}")
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.drafts.length()").value(2));
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("WORKING_PLAN_EXISTS"));
     }
 
     @Test
     void disallowsPromotionOfExpiredTrip() throws Exception {
         Client owner = register("expired-promotion@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -442,7 +442,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
         Client second = login("race-owner-1@example.test");
 
         MvcResult created = first.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -480,7 +480,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
         Client userB = register("user-b-isolation@example.test");
 
         MvcResult tripA = userA.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripAId = jsonField(tripA, "id");
         String draftAId = getDraftId(tripA, 0);

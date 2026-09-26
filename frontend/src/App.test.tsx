@@ -24,6 +24,8 @@ describe('App identity experience', () => {
 
   async function showProfile() {
     await screen.findByRole('heading', {name: 'Home'});
+    await waitFor(() => expect(lastProfile).toBeDefined());
+    await screen.findByRole('button', {name: 'Profile'});
     if (!lastProfile) throw new Error('Expected a loaded profile before navigating');
     // Keep each test's queued trip/API responses for its workflow, while following the real Home → Profile navigation.
     vi.mocked(identityApi.getProfile).mockResolvedValueOnce(lastProfile);
@@ -34,7 +36,7 @@ describe('App identity experience', () => {
   it('restores the authenticated profile from the existing server session', async () => {
     fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test'}));
     render(<App />);
-    expect(screen.getByText('Checking your account…')).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'Home'})).toBeInTheDocument();
     expect(await showProfile()).toBeInTheDocument();
     expect(screen.getByText('Your profile is ready')).toBeInTheDocument();
     expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
@@ -61,6 +63,7 @@ describe('App identity experience', () => {
       .mockResolvedValueOnce(json(200, {email: 'ada@example.test'}));
     const localSpy = vi.spyOn(window.localStorage, 'setItem'); const sessionSpy = vi.spyOn(window.sessionStorage, 'setItem');
     const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', {name: 'Log in'}));
     await screen.findByRole('heading', {name: 'Welcome back'});
     await user.click(screen.getByRole('button', {name: 'Register'}));
     await user.type(screen.getByLabelText('Email address'), 'ada@example.test');
@@ -68,6 +71,8 @@ describe('App identity experience', () => {
     await user.click(screen.getByRole('button', {name: 'Create account'}));
     await showProfile();
     await user.click(screen.getByRole('button', {name: 'Log out'}));
+    await screen.findByRole('heading', {name: 'Home'});
+    await user.click(screen.getByRole('button', {name: 'Log in'}));
     await screen.findByRole('heading', {name: 'Welcome back'});
     await user.type(screen.getByLabelText('Email address'), 'ada@example.test');
     await user.type(screen.getByLabelText('Password'), 'aaaaaaaaaaaa');
@@ -79,6 +84,7 @@ describe('App identity experience', () => {
   it('clears the active password when switching between public account forms', async () => {
     fetchMock.mockResolvedValueOnce(json(401, {code: 'UNAUTHENTICATED'}));
     const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', {name: 'Log in'}));
     await screen.findByRole('heading', {name: 'Welcome back'});
     await user.type(screen.getByLabelText('Password'), 'aaaaaaaaaaaa');
     await user.click(screen.getByRole('button', {name: 'Register'}));
@@ -92,6 +98,7 @@ describe('App identity experience', () => {
   it('focuses an actionable validation summary with links to invalid registration fields', async () => {
     fetchMock.mockResolvedValueOnce(json(401, {code: 'UNAUTHENTICATED'}));
     const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', {name: 'Log in'}));
     await user.click(await screen.findByRole('button', {name: 'Register'}));
     await user.click(screen.getByRole('button', {name: 'Create account'}));
     const summary = await screen.findByRole('alert');
@@ -104,6 +111,7 @@ describe('App identity experience', () => {
   it('introduces DeTour on both public account forms and keeps clear actions', async () => {
     fetchMock.mockResolvedValueOnce(json(401, {code: 'UNAUTHENTICATED'}));
     const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', {name: 'Log in'}));
     await screen.findByRole('heading', {name: 'Welcome back'});
     const introduction = 'Plan a trip your way. Start with airfare, a stay, or a complete itinerary. Save alternatives, compare total costs, and choose what works for you.';
     expect(screen.getByText(introduction)).toBeInTheDocument();
@@ -120,6 +128,7 @@ describe('App identity experience', () => {
       .mockResolvedValueOnce(json(201, {email: 'ada@example.test'}))
       .mockResolvedValueOnce(json(401, {code: 'UNAUTHENTICATED'}));
     const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', {name: 'Log in'}));
     await screen.findByRole('heading', {name: 'Welcome back'});
     await user.click(screen.getByRole('button', {name: 'Register'}));
     await user.type(screen.getByLabelText('Email address'), 'ada@example.test');
@@ -132,6 +141,7 @@ describe('App identity experience', () => {
   it('shows safe failures and keeps protected data hidden when session is invalid', async () => {
     fetchMock.mockResolvedValueOnce(json(401, {code: 'UNAUTHENTICATED'})).mockRejectedValueOnce(new TypeError('offline'));
     const user = userEvent.setup(); render(<App />);
+    await user.click(screen.getByRole('button', {name: 'Log in'}));
     await screen.findByRole('heading', {name: 'Welcome back'});
     await user.type(screen.getByLabelText('Email address'), 'ada@example.test');
     await user.type(screen.getByLabelText('Password'), 'aaaaaaaaaaaa');
@@ -187,7 +197,7 @@ describe('App identity experience', () => {
     await user.click(screen.getByRole('button', {name: 'Update password'}));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     await user.click(screen.getByRole('button', {name: 'Log out'}));
-    await screen.findByRole('heading', {name: 'Welcome back'});
+    await screen.findByRole('heading', {name: 'Home'});
     completePasswordChange!(noContent());
     await waitFor(() => expect(screen.queryByText('Your password has been updated.')).not.toBeInTheDocument());
     expect(screen.getByRole('status')).toHaveTextContent('You have logged out.');
@@ -246,22 +256,27 @@ describe('App identity experience', () => {
     expect(planTripButton).toBeInTheDocument();
     await user.click(planTripButton);
 
-    expect(screen.getByRole('dialog', {name: 'Plan a new trip'})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'Trips'})).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Trip name'), 'Spring break');
     await user.selectOptions(screen.getByLabelText('Destination'), 'destination-sfo');
     await user.type(screen.getByLabelText('Departure date'), '2027-03-10');
     await user.type(screen.getByLabelText('Return date'), '2027-03-14');
     await user.clear(screen.getByLabelText('Travelers'));
     await user.type(screen.getByLabelText('Travelers'), '2');
+    await user.type(screen.getByLabelText('Traveler 1 age'), '30');
+    await user.type(screen.getByLabelText('Traveler 2 age'), '12');
 
-    await user.click(screen.getByRole('button', {name: 'Create trip'}));
+    await user.click(screen.getByRole('button', {name: 'Start planning'}));
 
     expect(fetchMock).toHaveBeenCalledWith('/api/trips', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({
+        name: 'Spring break',
         destinationKey: 'destination-sfo',
         startDate: '2027-03-10',
         endDate: '2027-03-14',
         travelerCount: 2,
+        travelerAges: [30, 12],
       }),
     }));
 
@@ -1132,15 +1147,12 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
+    await screen.findByRole('button', {name: 'Profile'});
     const planTripBtn = await screen.findByRole('button', {name: 'Plan Trip'});
     await user.click(planTripBtn);
-
-    const dialog = screen.getByRole('dialog', {name: 'Plan a new trip'});
-    expect(dialog).toBeInTheDocument();
-
-    await user.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(planTripBtn).toHaveFocus();
+    expect(screen.getByRole('heading', {name: 'Trips'})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Home'}));
+    expect(screen.getByRole('heading', {name: 'Home'})).toHaveFocus();
   });
 
   it('opens TripRevisionModal for trip with planned alternatives, creates revised trip, updates workspace, and displays revision summary', async () => {
@@ -1441,7 +1453,7 @@ describe('App identity experience', () => {
 
     await user.click(logoutBtn);
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', expect.objectContaining({method: 'POST'}));
-    expect(await screen.findByRole('heading', {name: 'Welcome back'})).toBeInTheDocument();
+    expect(await screen.findByRole('heading', {name: 'Home'})).toBeInTheDocument();
   });
 
   it('displays BOOKED status badge and primary booking reference on profile screen for booked trips', async () => {

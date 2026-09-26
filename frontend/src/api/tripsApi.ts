@@ -2,6 +2,9 @@ import {request} from './identityApi';
 
 export type AlternativeProfileSummary = {
   id: string;
+  name?: string;
+  startDate?: string;
+  endDate?: string;
   lifecycle: 'DRAFT' | 'PLANNED' | string;
   version: number | null;
   status: 'DRAFT' | 'PLANNED' | 'EXPIRED' | string;
@@ -10,6 +13,7 @@ export type AlternativeProfileSummary = {
 
 export type TripProfileSummary = {
   id: string;
+  name?: string;
   destinationKey: string;
   destinationName: string;
   startDate: string;
@@ -349,6 +353,8 @@ export type DraftSelectionResponse = {
 
 export type DraftResponse = {
   id: string;
+  startDate?: string;
+  endDate?: string;
   version: number;
   selections: DraftSelectionResponse;
   tally?: ItineraryTallyResponse;
@@ -356,12 +362,19 @@ export type DraftResponse = {
 
 export type PlannedResponse = {
   id: string;
+  name?: string;
+  startDate?: string;
+  endDate?: string;
+  version?: number;
   selections: DraftSelectionResponse;
   tally?: ItineraryTallyResponse;
 };
 
 export type AlternativeResponse = {
   id: string;
+  name?: string;
+  startDate?: string;
+  endDate?: string;
   lifecycle: 'DRAFT' | 'PLANNED' | string;
   version: number | null;
   selections: DraftSelectionResponse;
@@ -392,6 +405,9 @@ export type RevisionSummaryResponse = {
 
 export type TripResponse = {
   id: string;
+  name?: string;
+  workingPlan?: DraftResponse | null;
+  savedOptions?: PlannedResponse[];
   destinationKey: string;
   destinationName: string;
   originAirportCode: string;
@@ -412,11 +428,12 @@ export type TripResponse = {
 };
 
 export type CreateTripRequest = {
+  name: string;
   destinationKey: string;
   startDate: string;
   endDate: string;
   travelerCount: number;
-  travelerAges?: number[] | null;
+  travelerAges: number[];
   budgetCents?: number | null;
 };
 
@@ -512,6 +529,7 @@ function cleanCreateBookingPayload(p: CreateBookingRequest): Record<string, unkn
 
 function cleanCreatePayload(p: CreateTripRequest): Record<string, unknown> {
   const body: Record<string, unknown> = {
+    name: p.name,
     destinationKey: p.destinationKey,
     startDate: p.startDate,
     endDate: p.endDate,

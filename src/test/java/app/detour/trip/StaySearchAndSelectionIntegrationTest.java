@@ -622,6 +622,7 @@ class StaySearchAndSelectionIntegrationTest {
         String budgetStr = budgetCents == null ? "null" : budgetCents.toString();
         return """
                 {
+                    "name": "Test trip",
                     "destinationKey": "%s",
                     "startDate": "%s",
                     "endDate": "%s",

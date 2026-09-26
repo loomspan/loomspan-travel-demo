@@ -28,10 +28,12 @@ function validateDates(startDate: string, endDate: string): string | undefined {
 }
 
 export function TripCreateModal({isOpen, mode = 'PLAN_TRIP', onClose, onSuccess}: TripCreateModalProps) {
+  const [name, setName] = useState('');
   const [destinationKey, setDestinationKey] = useState('destination-sfo');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [travelerCount, setTravelerCount] = useState('1');
+  const [ages, setAges] = useState<string[]>(['']);
   const [accommodationType, setAccommodationType] = useState<AccommodationType>('HOTEL');
   const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -94,6 +96,7 @@ export function TripCreateModal({isOpen, mode = 'PLAN_TRIP', onClose, onSuccess}
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const errors: Record<string, string> = {};
+    if (!name.trim()) errors.name = 'Enter a trip name.';
     if (!destinationKey) errors.destinationKey = 'Select a destination.';
     const dateError = validateDates(startDate, endDate);
     if (dateError) {
@@ -102,6 +105,9 @@ export function TripCreateModal({isOpen, mode = 'PLAN_TRIP', onClose, onSuccess}
     const count = parseInt(travelerCount, 10);
     if (isNaN(count) || count < 1 || count > 8) {
       errors.travelerCount = 'Traveler count must be between 1 and 8.';
+    }
+    if (ages.slice(0, count).length !== count || ages.slice(0, count).some(age => !/^\d+$/.test(age) || Number(age) > 120)) {
+      errors.travelerAges = 'Enter an age between 0 and 120 for each traveler.';
     }
 
     if (Object.keys(errors).length > 0) {
@@ -115,10 +121,12 @@ export function TripCreateModal({isOpen, mode = 'PLAN_TRIP', onClose, onSuccess}
 
     try {
       const trip = await tripsApi.createTrip({
+        name: name.trim(),
         destinationKey,
         startDate,
         endDate,
         travelerCount: count,
+        travelerAges: ages.slice(0, count).map(Number),
       });
       onSuccess(trip, mode, mode === 'STAY' ? accommodationType : undefined);
       onClose();
@@ -169,6 +177,7 @@ export function TripCreateModal({isOpen, mode = 'PLAN_TRIP', onClose, onSuccess}
         )}
 
         <form onSubmit={handleSubmit} noValidate>
+          <div className="field"><label htmlFor="trip-name">Trip name</label><input id="trip-name" value={name} onChange={e => setName(e.target.value)} />{fieldErrors.name && <p className="field-error">{fieldErrors.name}</p>}</div>
           <div className="field">
             <label htmlFor="trip-origin">Origin</label>
             <input id="trip-origin" value="Portland (PDX)" readOnly disabled />
@@ -254,11 +263,11 @@ export function TripCreateModal({isOpen, mode = 'PLAN_TRIP', onClose, onSuccess}
               min="1"
               max="8"
               value={travelerCount}
-              onChange={(e) => setTravelerCount(e.target.value)}
+              onChange={(e) => { setTravelerCount(e.target.value); const next = Number(e.target.value); if (Number.isInteger(next) && next >= 1 && next <= 8) setAges(Array.from({length: next}, (_, i) => ages[i] ?? '')); }}
               aria-describedby={fieldErrors.travelerCount ? 'trip-traveler-count-error' : 'trip-traveler-count-hint'}
             />
             <p className="hint" id="trip-traveler-count-hint">
-              1 to 8 travelers. Ages and budget can be configured after creation.
+              1 to 8 travelers. Enter an age for each traveler.
             </p>
             {fieldErrors.travelerCount && (
               <p className="field-error" id="trip-traveler-count-error">
@@ -266,6 +275,9 @@ export function TripCreateModal({isOpen, mode = 'PLAN_TRIP', onClose, onSuccess}
               </p>
             )}
           </div>
+          {Number.isInteger(Number(travelerCount)) && Number(travelerCount) >= 1 && Number(travelerCount) <= 8 &&
+            Array.from({length: Number(travelerCount)}, (_, i) => <div className="field" key={i}><label htmlFor={`trip-age-${i}`}>Traveler {i + 1} age</label><input id={`trip-age-${i}`} type="number" min="0" max="120" value={ages[i] ?? ''} onChange={e => { const next = [...ages]; next[i] = e.target.value; setAges(next); }} /></div>)}
+          {fieldErrors.travelerAges && <p className="field-error">{fieldErrors.travelerAges}</p>}
 
           <div className="modal-actions">
             <button type="button" className="text-button" onClick={onClose} disabled={pending}>

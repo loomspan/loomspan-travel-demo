@@ -11,18 +11,15 @@ import java.nio.file.Path;
 import java.util.UUID;
 import app.detour.DetourApplication;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
 
 class ApplicationRestartIntegrationTest {
-    @TempDir
-    Path temporaryDirectory;
 
     @Test
     void persistsAccountButRejectsPreRestartSession() throws Exception {
-        String databaseUrl = "jdbc:h2:file:" + temporaryDirectory.resolve("identity-" + UUID.randomUUID()).toAbsolutePath().toString().replace('\\', '/')
+        String databaseUrl = "jdbc:h2:file:" + Path.of("target", "identity-" + UUID.randomUUID()).toAbsolutePath().toString().replace('\\', '/')
                 + ";DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000";
         ConfigurableApplicationContext first = start(databaseUrl);
         String sessionCookie;

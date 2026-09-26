@@ -597,6 +597,7 @@ class AirfareSearchAndSelectionIntegrationTest {
     private static String tripJson(String destinationKey, String startDate, String endDate, int travelerCount) {
         return """
                 {
+                    "name": "Test trip",
                     "destinationKey": "%s",
                     "startDate": "%s",
                     "endDate": "%s",

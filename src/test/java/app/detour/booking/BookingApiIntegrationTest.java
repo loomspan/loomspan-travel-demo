@@ -59,7 +59,7 @@ class BookingApiIntegrationTest {
     void booksValidPlannedItineraryAndDecrementsAllComponents() throws Exception {
         Client owner = register("booking-red-test@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -101,7 +101,7 @@ class BookingApiIntegrationTest {
     void booksAllThreeComponentsAndPopulatesAllReferences() throws Exception {
         Client owner = register("all-three@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -134,7 +134,7 @@ class BookingApiIntegrationTest {
     void idempotentReplayReturnsExistingBookingWithoutDoubleDecrement() throws Exception {
         Client owner = register("idemp-body@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -173,7 +173,7 @@ class BookingApiIntegrationTest {
     void supportsIdempotencyKeyViaHttpHeader() throws Exception {
         Client owner = register("idemp-header@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -200,10 +200,46 @@ class BookingApiIntegrationTest {
     }
 
     @Test
+    void booksAndCancelsUsingSavedOptionDatesWhenWorkingDatesHavePassed() throws Exception {
+        Client owner = register("dated-option-booking@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"),
+                "{\"name\":\"Two date choices\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                .andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(created, "id");
+        String draftId = getDraftId(created, 0);
+        insertSfoRentalSelection(draftId);
+        MvcResult saved = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated()).andReturn();
+        String optionId = getPlannedId(saved, 0);
+
+        // Model a Saved option with its own dates and matching frozen rental facts.
+        jdbc.update("UPDATE detour_planned_itinerary SET name = 'Late March', start_date = DATE '2027-03-20', end_date = DATE '2027-03-24' WHERE public_id = ?",
+                UUID.fromString(optionId));
+        jdbc.update("""
+                UPDATE detour_planned_rental_snapshot
+                SET pickup_at = TIMESTAMP WITH TIME ZONE '2027-03-20 10:00:00+00',
+                    return_at = TIMESTAMP WITH TIME ZONE '2027-03-24 15:00:00+00'
+                WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)
+                """, UUID.fromString(optionId));
+
+        testClock.setInstant(LocalDate.parse("2027-03-15").atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant());
+        owner.unsafe(post("/api/trips/{tripId}/bookings", tripId),
+                "{\"plannedItineraryId\":\"" + optionId + "\",\"expectedVersion\":1,\"idempotencyKey\":\"late-march-booking\"}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
+
+        owner.unsafe(post("/api/trips/{tripId}/cancel", tripId), "{\"expectedVersion\":2}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELED"))
+                .andExpect(jsonPath("$.booking.status").value("CANCELED"));
+    }
+
+    @Test
     void rejectsBookingOnExpiredTrip() throws Exception {
         Client owner = register("expired-trip@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -228,7 +264,7 @@ class BookingApiIntegrationTest {
     void rejectsSecondActiveBookingOnTrip() throws Exception {
         Client owner = register("already-booked@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -244,19 +280,9 @@ class BookingApiIntegrationTest {
                 "{\"plannedItineraryId\":\"" + plannedId + "\",\"expectedVersion\":1,\"idempotencyKey\":\"booking-1\"}")
                 .andExpect(status().isCreated());
 
-        // Create a second draft and plan it
-        MvcResult secondDraftRes = owner.unsafe(post("/api/trips/{tripId}/drafts", tripId), "{\"expectedVersion\":2}")
-                .andExpect(status().isCreated()).andReturn();
-        String secondDraftId = getDraftId(secondDraftRes, 1);
-        insertSfoStaySelection(secondDraftId);
-        MvcResult secondPlanRes = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, secondDraftId),
-                "{\"expectedVersion\":3,\"expectedDraftVersion\":0}")
-                .andExpect(status().isCreated()).andReturn();
-        String secondPlannedId = getPlannedId(secondPlanRes, 1);
-
-        // Attempting second booking with different idempotency key fails with 409 ALREADY_BOOKED
+        // Attempting a second booking with a different idempotency key fails.
         owner.unsafe(post("/api/trips/{tripId}/bookings", tripId),
-                "{\"plannedItineraryId\":\"" + secondPlannedId + "\",\"expectedVersion\":4,\"idempotencyKey\":\"booking-2\"}")
+                "{\"plannedItineraryId\":\"" + plannedId + "\",\"expectedVersion\":2,\"idempotencyKey\":\"booking-2\"}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("ALREADY_BOOKED"));
     }
@@ -265,7 +291,7 @@ class BookingApiIntegrationTest {
     void rejectsBookingOnVersionMismatch() throws Exception {
         Client owner = register("version-conflict@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -287,13 +313,13 @@ class BookingApiIntegrationTest {
     void rejectsBookingWhenPlannedItineraryHasNoComponents() throws Exception {
         Client owner = register("no-components@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         long internalTripId = jdbc.queryForObject("SELECT id FROM detour_trip WHERE public_id = ?", Long.class, UUID.fromString(tripId));
 
         UUID emptyPlannedPublicId = UUID.randomUUID();
-        jdbc.update("INSERT INTO detour_planned_itinerary (public_id, trip_id) VALUES (?, ?)", emptyPlannedPublicId, internalTripId);
+        jdbc.update("INSERT INTO detour_planned_itinerary (public_id, trip_id, name, start_date, end_date) VALUES (?, ?, 'Empty option', DATE '2027-03-10', DATE '2027-03-14')", emptyPlannedPublicId, internalTripId);
 
         owner.unsafe(post("/api/trips/{tripId}/bookings", tripId),
                 "{\"plannedItineraryId\":\"" + emptyPlannedPublicId + "\",\"expectedVersion\":0,\"idempotencyKey\":\"empty-plan\"}")
@@ -305,7 +331,7 @@ class BookingApiIntegrationTest {
     void rollsBackCompletelyWhenAirfareInventoryExhausted() throws Exception {
         Client owner = register("exhaust-air@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -348,7 +374,7 @@ class BookingApiIntegrationTest {
     void rollsBackCompletelyWhenStayInventoryExhausted() throws Exception {
         Client owner = register("exhaust-stay@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -386,7 +412,7 @@ class BookingApiIntegrationTest {
     void rollsBackCompletelyWhenRentalOccupancyOverlaps() throws Exception {
         Client owner = register("exhaust-rental@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -425,7 +451,7 @@ class BookingApiIntegrationTest {
     void reportsMultipleExhaustedComponentsSimultaneously() throws Exception {
         Client owner = register("multi-exhaust@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
@@ -464,7 +490,7 @@ class BookingApiIntegrationTest {
         Client userB = register("owner-b@example.test");
 
         MvcResult createdA = userA.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripAId = jsonField(createdA, "id");
         String draftAId = getDraftId(createdA, 0);
@@ -496,7 +522,7 @@ class BookingApiIntegrationTest {
     void retrievesActiveBookingAndHistoryAndUpdatesProfile() throws Exception {
         Client owner = register("profile-and-active@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);

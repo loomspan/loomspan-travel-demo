@@ -29,6 +29,17 @@ public interface TripRepository {
 
     boolean advanceVersion(long tripId, long ownerUserId, long expectedVersion);
 
+    void rename(long tripId, String name);
+
+    void updateWorkingDates(long tripId, long draftId, LocalDate startDate, LocalDate endDate);
+
+    boolean advanceVersionForOption(long tripId, long ownerUserId, long expectedVersion,
+            long optionId, long expectedOptionVersion);
+
+    void renameOption(long optionId, String name);
+
+    void updateOptionDates(long optionId, LocalDate startDate, LocalDate endDate);
+
     boolean advanceVersionForDraft(long tripId, long ownerUserId, long expectedVersion, long draftId,
             long expectedDraftVersion);
 
@@ -47,6 +58,9 @@ public interface TripRepository {
     void insertDraftCopy(long tripId, UUID publicId, DraftSelections selections);
 
     void insertPlanned(long tripId, UUID publicId, DraftSelections selections);
+
+    void insertPlanned(long tripId, UUID publicId, String name, LocalDate startDate, LocalDate endDate,
+            DraftSelections selections);
 
     void deletePlanned(long tripId, long plannedId);
 

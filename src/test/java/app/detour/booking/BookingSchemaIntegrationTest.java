@@ -38,13 +38,13 @@ class BookingSchemaIntegrationTest {
 
         UUID tripPublicId = UUID.randomUUID();
         jdbc.update(
-                "INSERT INTO detour_trip (public_id, owner_user_id, catalog_destination_id, start_date, end_date, traveler_count, budget_cents, display_label, version) " +
-                "VALUES (?, ?, (SELECT id FROM catalog_destination LIMIT 1), DATE '2027-03-10', DATE '2027-03-14', 2, 500000, 'Test Trip', 0)",
+                "INSERT INTO detour_trip (public_id, owner_user_id, catalog_destination_id, start_date, end_date, traveler_count, budget_cents, display_label, name, version) " +
+                "VALUES (?, ?, (SELECT id FROM catalog_destination LIMIT 1), DATE '2027-03-10', DATE '2027-03-14', 2, 500000, 'Test Trip', 'Test Trip', 0)",
                 tripPublicId, userId);
         tripId = jdbc.queryForObject("SELECT id FROM detour_trip WHERE public_id = ?", Long.class, tripPublicId);
 
         UUID plannedPublicId = UUID.randomUUID();
-        jdbc.update("INSERT INTO detour_planned_itinerary (public_id, trip_id) VALUES (?, ?)", plannedPublicId, tripId);
+        jdbc.update("INSERT INTO detour_planned_itinerary (public_id, trip_id, name, start_date, end_date) VALUES (?, ?, 'Option 1', DATE '2027-03-10', DATE '2027-03-14')", plannedPublicId, tripId);
         plannedId = jdbc.queryForObject("SELECT id FROM detour_planned_itinerary WHERE public_id = ?", Long.class, plannedPublicId);
     }
 
@@ -87,13 +87,13 @@ class BookingSchemaIntegrationTest {
 
         UUID otherTripPublicId = UUID.randomUUID();
         jdbc.update(
-                "INSERT INTO detour_trip (public_id, owner_user_id, catalog_destination_id, start_date, end_date, traveler_count, budget_cents, display_label, version) " +
-                "VALUES (?, ?, (SELECT id FROM catalog_destination LIMIT 1), DATE '2027-03-10', DATE '2027-03-14', 2, 500000, 'Other Trip', 0)",
+                "INSERT INTO detour_trip (public_id, owner_user_id, catalog_destination_id, start_date, end_date, traveler_count, budget_cents, display_label, name, version) " +
+                "VALUES (?, ?, (SELECT id FROM catalog_destination LIMIT 1), DATE '2027-03-10', DATE '2027-03-14', 2, 500000, 'Other Trip', 'Other Trip', 0)",
                 otherTripPublicId, userId);
         long otherTripId = jdbc.queryForObject("SELECT id FROM detour_trip WHERE public_id = ?", Long.class, otherTripPublicId);
 
         UUID otherPlannedPublicId = UUID.randomUUID();
-        jdbc.update("INSERT INTO detour_planned_itinerary (public_id, trip_id) VALUES (?, ?)", otherPlannedPublicId, otherTripId);
+        jdbc.update("INSERT INTO detour_planned_itinerary (public_id, trip_id, name, start_date, end_date) VALUES (?, ?, 'Option 1', DATE '2027-03-10', DATE '2027-03-14')", otherPlannedPublicId, otherTripId);
         long otherPlannedId = jdbc.queryForObject("SELECT id FROM detour_planned_itinerary WHERE public_id = ?", Long.class, otherPlannedPublicId);
 
         insertBooking(tripId, plannedId, "DT-KEY001", "ACTIVE", 10000L, "shared-idempotency-key");

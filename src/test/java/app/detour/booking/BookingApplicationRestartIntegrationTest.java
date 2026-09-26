@@ -9,22 +9,18 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 
 class BookingApplicationRestartIntegrationTest {
-    @TempDir Path temporaryDirectory;
-
     @Test
     void persistsBookingAndSnapshotsAcrossApplicationRestart() throws Exception {
-        String databaseUrl = "jdbc:h2:file:" + temporaryDirectory.resolve("booking-" + UUID.randomUUID()).toAbsolutePath().toString().replace('\\', '/')
+        String databaseUrl = "jdbc:h2:file:./target/booking-restart-" + UUID.randomUUID()
                 + ";DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000";
         String sessionCookie;
         String tripId;
@@ -45,7 +41,7 @@ class BookingApplicationRestartIntegrationTest {
             sessionCookie = cookie(registration, "JSESSIONID");
 
             HttpResponse<String> created = request(base, "POST", "/api/trips", sessionCookie + "|" + csrf,
-                    "{\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}").send();
+                    "{\"name\":\"Booking trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}").send();
             assertEquals(201, created.statusCode());
             var body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(created.body());
             tripId = body.get("id").asString();
