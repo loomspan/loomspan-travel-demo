@@ -238,7 +238,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
       onPasswordChange={async () => {}}
       onFailure={() => {}}
     />);
-    await user.click(screen.getByRole('button', {name: 'Profile'}));
+    await user.click(screen.getByRole('button', {name: 'Trips'}));
     await user.click(screen.getByRole('button', {name: `Open trip ${trip.label}`}));
     const choices = screen.getAllByRole('checkbox', {name: /select for comparison/i});
     await user.click(choices[0]);
@@ -247,7 +247,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     await waitFor(() => expect(screen.getByRole('heading', {name: 'Comparing 2 Planned itineraries'})).toHaveFocus());
     await user.click(screen.getByRole('button', {name: 'Home'}));
     await waitFor(() => expect(screen.getByRole('heading', {name: 'Home'})).toHaveFocus());
-    await user.click(screen.getByRole('button', {name: `Trip: ${trip.label}`}));
+    await user.click(screen.getByRole('button', {name: `Return to ${trip.label}`}));
     await waitFor(() => expect(screen.getByRole('heading', {name: 'Comparing 2 Planned itineraries'})).toHaveFocus());
   });
 

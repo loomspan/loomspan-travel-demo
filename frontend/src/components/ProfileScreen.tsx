@@ -1,7 +1,6 @@
 import {FormEvent, useEffect, useRef, useState} from 'react';
 import {PasswordField, passwordRangeError} from './PasswordField';
 import type {FormFailure} from './AuthScreen';
-import {EmptyProfileState} from './EmptyProfileState';
 import {ActionIcon} from './ActionIcon';
 import {TripListSection} from './TripListSection';
 import {HomeScreen, type StartMode} from './HomeScreen';
@@ -44,7 +43,8 @@ export function ProfileScreen({
   onAuthenticationRequired = () => {},
 }: ProfileScreenProps) {
   // Navigation mode
-  const [viewMode, setViewMode] = useState<'home' | 'trips' | 'profile' | 'workspace'>(initialDestination);
+  const [viewMode, setViewMode] = useState<'home' | 'trips' | 'profile'>(initialDestination);
+  const [showWorkspace, setShowWorkspace] = useState(false);
   const [startMode, setStartMode] = useState<StartMode>(initialStartMode);
   const [activeTrip, setActiveTrip] = useState<TripResponse | null>(null);
   const workspaceRef = useRef<TripWorkspaceHandle>(null);
@@ -56,13 +56,13 @@ export function ProfileScreen({
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      const heading = viewMode === 'workspace'
+      const heading = viewMode === 'trips' && showWorkspace
         ? document.querySelector<HTMLElement>('#workspace-heading, #comparison-heading, #booking-review-heading, #confirmation-heading')
         : document.getElementById(viewMode === 'home' ? 'home-heading' : viewMode === 'trips' ? 'trips-heading' : 'profile-heading');
       heading?.focus();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [viewMode, activeTrip?.id]);
+  }, [viewMode, showWorkspace, activeTrip?.id]);
 
   // Modals state
   const [entryContext, setEntryContext] = useState<{
@@ -115,7 +115,7 @@ export function ProfileScreen({
 
   const handleOpenTrip = async (tripId: string) => {
     if (activeTrip?.id === tripId) {
-      setViewMode('workspace');
+      setViewMode('trips'); setShowWorkspace(true);
       await workspaceRef.current?.refreshIfClean();
       return;
     }
@@ -128,7 +128,7 @@ export function ProfileScreen({
       if (sequence !== openingSequence.current) return;
       setEntryContext(null);
       setActiveTrip(trip);
-      setViewMode('workspace');
+      setViewMode('trips'); setShowWorkspace(true);
     } catch (err) {
       if (sequence !== openingSequence.current) return;
       setOpenError({tripId, message: err instanceof IdentityApiError ? err.message : 'Could not open trip.'});
@@ -140,7 +140,7 @@ export function ProfileScreen({
   const startCreateTrip = (mode: 'PLAN_TRIP' | 'AIRFARE' | 'STAY') => {
     if (workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and start another Trip?')) return;
     setStartMode(mode);
-    setViewMode('trips');
+    setViewMode('trips'); setShowWorkspace(false);
   };
 
   const navigateTo = (destination: 'home' | 'trips' | 'profile') => {
@@ -148,7 +148,7 @@ export function ProfileScreen({
     setOpeningTripId(null);
     setOpenError(null);
     setViewMode(destination);
-    if (destination === 'profile' && onRefreshProfile) void onRefreshProfile();
+    if (destination === 'trips') { setShowWorkspace(false); if (onRefreshProfile) void onRefreshProfile(); }
   };
 
   const handlePromptDeleteTrip = (trip: TripProfileSummary) => {
@@ -167,6 +167,19 @@ export function ProfileScreen({
   const handlePromptCancelTrip = (trip: TripProfileSummary) => {
     setCancelTripError(undefined);
     setCancelTripTarget(trip);
+  };
+
+  const handleRenameTrip = async (trip: TripProfileSummary, name: string) => {
+    if (activeTrip?.id === trip.id && workspaceRef.current?.hasUnsavedChanges()) {
+      throw new Error('Save or discard your Working plan changes before renaming this trip.');
+    }
+    const updated = await tripsApi.renameTrip(trip.id, {expectedVersion: trip.version, name});
+    if (activeTrip?.id === trip.id) setActiveTrip(updated);
+    if (onRefreshProfile) {
+      const refreshed = await onRefreshProfile();
+      if (refreshed === false) throw new Error('Trip renamed, but the list could not refresh. Reload to see the latest name.');
+    }
+    if (activeTrip?.id === trip.id) await workspaceRef.current?.refreshIfClean();
   };
 
   const handleConfirmCancelTrip = async () => {
@@ -252,8 +265,6 @@ export function ProfileScreen({
     }
   };
 
-  const hasTrips = upcoming.length > 0 || past.length > 0;
-
   const isExpired = activeTripSummary ? activeTripSummary.expiredAlternativeCount > 0 : false;
   const temporalStatus = activeTripSummary ? activeTripSummary.temporalStatus : 'UPCOMING';
 
@@ -263,7 +274,6 @@ export function ProfileScreen({
       <button type="button" className="text-button" aria-current={viewMode === 'home' ? 'page' : undefined} onClick={() => navigateTo('home')}><ActionIcon name="home" />Home</button>
       <button type="button" className="text-button" aria-current={viewMode === 'trips' ? 'page' : undefined} onClick={() => navigateTo('trips')}><ActionIcon name="trip" />Trips</button>
       <button type="button" className="text-button" aria-current={viewMode === 'profile' ? 'page' : undefined} onClick={() => navigateTo('profile')}><ActionIcon name="profile" />Profile</button>
-      {activeTrip && <button type="button" className="text-button" aria-current={viewMode === 'workspace' ? 'page' : undefined} onClick={() => void handleOpenTrip(activeTrip.id)}><ActionIcon name="trip" />Trip: {activeTrip.label}</button>}
       <button type="button" className="text-button" disabled={logoutPending} onClick={() => {
         if (workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and log out?')) return;
         void onLogout();
@@ -272,7 +282,7 @@ export function ProfileScreen({
     </nav>
     {openingTripId && <p className="card" role="status">Opening Trip…</p>}
     {openError && <div className="card" role="alert"><p>{openError.message}</p><button type="button" onClick={() => void handleOpenTrip(openError.tripId)}>Retry opening Trip</button></div>}
-    {activeTrip && <div hidden={viewMode !== 'workspace'}>
+    {activeTrip && <div hidden={viewMode !== 'trips' || !showWorkspace}>
       <TripWorkspace
         ref={workspaceRef}
         key={activeTrip.id}
@@ -285,11 +295,11 @@ export function ProfileScreen({
         onSaveStatusChange={(status, dirty) => { setSaveState(status); setTripDirty(dirty); }}
         onAuthenticationRequired={onAuthenticationRequired}
         onBack={() => {
-          setViewMode('profile');
+          setShowWorkspace(false); setViewMode('trips');
           if (onRefreshProfile) void onRefreshProfile();
         }}
         onTripDeleted={() => {
-          setViewMode('profile');
+          setShowWorkspace(false); setViewMode('trips');
           setActiveTrip(null);
           setEntryContext(null);
           if (onRefreshProfile) void onRefreshProfile();
@@ -301,13 +311,15 @@ export function ProfileScreen({
       />
     </div>}
     {viewMode === 'home' && <HomeScreen onStart={startCreateTrip} onReturn={activeTrip ? {label: activeTrip.label, open: () => void handleOpenTrip(activeTrip.id)} : undefined} />}
-    {viewMode === 'trips' && <TripStartForm draft={tripDraft} onChange={onTripDraftChange} mode={startMode} authenticated onAuthenticationRequired={onAuthenticationRequired} onSuccess={(createdTrip, mode, accommodationType) => {
+    {viewMode === 'trips' && !showWorkspace && <><TripStartForm draft={tripDraft} onChange={onTripDraftChange} mode={startMode} authenticated onAuthenticationRequired={onAuthenticationRequired} onSuccess={(createdTrip, mode, accommodationType) => {
       openingSequence.current += 1;
       setEntryContext({mode, accommodationType});
       setActiveTrip(createdTrip);
-      setViewMode('workspace');
+      setShowWorkspace(true);
       if (onRefreshProfile) void onRefreshProfile();
-    }} />}
+    }} />
+      <TripListSection upcoming={upcoming} past={past} onSelectTrip={(id) => void handleOpenTrip(id)} onDeleteTrip={handlePromptDeleteTrip} onCancelTrip={handlePromptCancelTrip} onRenameTrip={handleRenameTrip} />
+    </>}
     {viewMode === 'profile' && <section className="card profile-card" aria-labelledby="profile-heading">
       <div className="profile-heading">
         <div>
@@ -322,23 +334,6 @@ export function ProfileScreen({
         <dt>Email address</dt>
         <dd>{email}</dd>
       </dl>
-
-      {/* Trips Section */}
-      {hasTrips ? (
-        <TripListSection
-          upcoming={upcoming}
-          past={past}
-          onSelectTrip={(id) => void handleOpenTrip(id)}
-          onDeleteTrip={handlePromptDeleteTrip}
-          onCancelTrip={handlePromptCancelTrip}
-          onPlanTrip={() => startCreateTrip('PLAN_TRIP')}
-          onStartPlanTrip={() => startCreateTrip('PLAN_TRIP')}
-          onStartAirfare={() => startCreateTrip('AIRFARE')}
-          onStartStay={() => startCreateTrip('STAY')}
-        />
-      ) : (
-        <EmptyProfileState onPlanTrip={() => startCreateTrip('PLAN_TRIP')} onStartPlanTrip={() => startCreateTrip('PLAN_TRIP')} onStartAirfare={() => startCreateTrip('AIRFARE')} onStartStay={() => startCreateTrip('STAY')} />
-      )}
 
       {/* Change Password Section */}
       <section aria-labelledby="password-heading">

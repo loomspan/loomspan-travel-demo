@@ -641,6 +641,10 @@ a:focus-visible, summary:focus-visible { outline: 3px solid #d26521; outline-off
 .flight-option-card > *, .stay-option-card > *, .rental-option-card > * { min-width: 0; }
 .comparison-table th, .comparison-table td, .booking-review-workspace-card *,
 .booking-history-section * { overflow-wrap: anywhere; }
+.trip-rename-form { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .75rem; }
+.trip-rename-form label, .trip-rename-form .field-error { flex-basis: 100%; }
+.trip-rename-form input { flex: 1 1 12rem; min-width: 0; max-width: 100%; }
+.alternative-summary-meta { flex-wrap: wrap; }
 
 @media (max-width: 768px) {
   .desktop-comparison-matrix { display: none; }

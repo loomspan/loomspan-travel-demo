@@ -1,4 +1,6 @@
+import {useState, type FormEvent} from 'react';
 import type {TripProfileSummary, AlternativeProfileSummary} from '../api/tripsApi';
+import {IdentityApiError} from '../api/identityApi';
 
 type TripListSectionProps = {
   upcoming: TripProfileSummary[];
@@ -6,6 +8,7 @@ type TripListSectionProps = {
   onSelectTrip: (tripId: string) => void;
   onDeleteTrip: (trip: TripProfileSummary) => void;
   onCancelTrip?: (trip: TripProfileSummary) => void;
+  onRenameTrip?: (trip: TripProfileSummary, name: string) => Promise<void>;
   onPlanTrip?: () => void;
   onStartPlanTrip?: () => void;
   onStartAirfare?: () => void;
@@ -23,9 +26,8 @@ function AlternativeSummaryItem({alt}: {alt: AlternativeProfileSummary}) {
           {isDraft ? (alt.version !== null ? `Draft v${alt.version}` : 'Draft') : 'Planned itinerary'}
         </span>
         {isExpired && <span className="badge badge-expired">Expired</span>}
-        <span className="alternative-id" title={alt.id}>
-          ID: {alt.id.slice(0, 8)}…
-        </span>
+        <strong>{alt.name ?? 'Saved option'}</strong>
+        {alt.startDate && alt.endDate && <span>{alt.startDate} to {alt.endDate}</span>}
       </div>
     </li>
   );
@@ -36,14 +38,34 @@ function TripCard({
   onSelect,
   onDelete,
   onCancel,
+  onRename,
 }: {
   trip: TripProfileSummary;
   onSelect: (tripId: string) => void;
   onDelete: (trip: TripProfileSummary) => void;
   onCancel?: (trip: TripProfileSummary) => void;
+  onRename?: (trip: TripProfileSummary, name: string) => Promise<void>;
 }) {
   const isPast = trip.temporalStatus === 'PAST';
   const isCanceled = trip.status === 'CANCELED';
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(trip.name ?? trip.label);
+  const [renamePending, setRenamePending] = useState(false);
+  const [renameError, setRenameError] = useState<string>();
+  const submitRename = async (event: FormEvent) => {
+    event.preventDefault();
+    if (renamePending) return;
+    const trimmed = name.trim();
+    if (!trimmed) { setRenameError('Enter a trip name.'); return; }
+    if (trimmed.length > 300) { setRenameError('Trip name must be 300 characters or fewer.'); return; }
+    setRenamePending(true); setRenameError(undefined);
+    try { if (!onRename) return; await onRename(trip, trimmed); setEditing(false); }
+    catch (error) {
+      setRenameError(error instanceof IdentityApiError && error.code === 'VERSION_CONFLICT'
+        ? 'This trip changed on the server. Refresh Trips and try again.'
+        : error instanceof Error ? error.message : 'Trip could not be renamed. Try again.');
+    } finally { setRenamePending(false); }
+  };
 
   return (
     <article className="card trip-card" aria-labelledby={`trip-heading-${trip.id}`}>
@@ -59,11 +81,17 @@ function TripCard({
             <span className="badge badge-booked">Booking</span>
           )}
           <h3 id={`trip-heading-${trip.id}`} className="trip-card-title">
-            {trip.label}
+            {trip.name ?? trip.label}
           </h3>
-          <p className="trip-card-subtitle">
-            {trip.destinationName} • {trip.startDate} to {trip.endDate}
-          </p>
+          <p className="trip-card-subtitle">{trip.destinationName}</p>
+          <p className="trip-card-subtitle">Working plan: {trip.startDate} to {trip.endDate}</p>
+          {editing && <form className="trip-rename-form" onSubmit={submitRename}>
+            <label htmlFor={`rename-${trip.id}`}>Trip name</label>
+            <input id={`rename-${trip.id}`} value={name} aria-invalid={Boolean(renameError)} aria-describedby={renameError ? `rename-error-${trip.id}` : undefined} onChange={event => setName(event.target.value)} />
+            {renameError && <p id={`rename-error-${trip.id}`} className="field-error" role="alert">{renameError}</p>}
+            <button type="submit" disabled={renamePending}>{renamePending ? 'Saving…' : 'Save name'}</button>
+            <button type="button" disabled={renamePending} onClick={() => {setEditing(false); setRenameError(undefined); setName(trip.name ?? trip.label);}}>Cancel rename</button>
+          </form>}
           {trip.bookedCount > 0 && trip.primaryBookingReference && (
             <p className="trip-card-booking-ref">
               Booking Reference: <strong>{trip.primaryBookingReference}</strong>
@@ -84,8 +112,8 @@ function TripCard({
 
       {trip.alternatives && trip.alternatives.length > 0 && (
         <div className="trip-card-alternatives">
-          <h4 className="alternatives-heading">Alternatives</h4>
-          <ul className="alternatives-summary-list" aria-label={`Alternatives for ${trip.label}`}>
+          <h4 className="alternatives-heading">Saved options</h4>
+          <ul className="alternatives-summary-list" aria-label={`Saved options for ${trip.name ?? trip.label}`}>
             {trip.alternatives.map((alt) => (
               <AlternativeSummaryItem key={alt.id} alt={alt} />
             ))}
@@ -94,6 +122,7 @@ function TripCard({
       )}
 
       <div className="trip-card-actions">
+        {!editing && onRename && <button type="button" className="text-button" onClick={() => {setName(trip.name ?? trip.label); setEditing(true);}}>Rename trip</button>}
         {isCanceled ? (
           <button
             type="button"
@@ -154,6 +183,7 @@ export function TripListSection({
   onSelectTrip,
   onDeleteTrip,
   onCancelTrip,
+  onRenameTrip,
   onPlanTrip,
   onStartPlanTrip,
   onStartAirfare,
@@ -165,7 +195,7 @@ export function TripListSection({
     <div className="trips-container">
       <div className="trips-header">
         <h2>Your trips</h2>
-        <div className="trips-header-actions" style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
+        {handlePlanTrip && <div className="trips-header-actions" style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
           <button type="button" className="primary" onClick={handlePlanTrip}>
             Plan Trip
           </button>
@@ -183,7 +213,7 @@ export function TripListSection({
           >
             Stay
           </button>
-        </div>
+        </div>}
       </div>
 
       <section className="trips-section" aria-labelledby="upcoming-trips-heading">
@@ -201,6 +231,7 @@ export function TripListSection({
                 onSelect={onSelectTrip}
                 onDelete={onDeleteTrip}
                 onCancel={onCancelTrip}
+                onRename={onRenameTrip}
               />
             ))}
           </div>
@@ -221,6 +252,7 @@ export function TripListSection({
                 trip={trip}
                 onSelect={onSelectTrip}
                 onDelete={onDeleteTrip}
+                onRename={onRenameTrip}
                 onCancel={onCancelTrip}
               />
             ))}

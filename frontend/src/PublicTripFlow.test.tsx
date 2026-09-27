@@ -15,6 +15,7 @@ const ownedProfile = {email: 'ada@example.test', upcoming: [{id: trip.id, label:
 
 async function fillTrip(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', {name: 'Trips'}));
+  await user.clear(screen.getByLabelText('Trip name'));
   await user.type(screen.getByLabelText('Trip name'), 'Family visit');
   await user.selectOptions(screen.getByLabelText('Destination'), 'destination-muc');
   await user.type(screen.getByLabelText('Departure date'), '2027-03-10');
@@ -49,12 +50,19 @@ describe('public trip start and authentication handoff', () => {
     fetchMock.mockResolvedValueOnce(json(401, {code: 'UNAUTHENTICATED'}));
     const user = userEvent.setup(); render(<App />);
     await fillTrip(user);
+    await user.type(screen.getByLabelText('Budget (optional, dollars)'), '19.99');
+    await user.clear(screen.getByLabelText('Travelers'));
+    await user.type(screen.getByLabelText('Travelers'), '1');
+    await user.clear(screen.getByLabelText('Travelers'));
+    await user.type(screen.getByLabelText('Travelers'), '2');
+    expect(screen.getByLabelText('Traveler 2 age')).toHaveValue(12);
     await user.click(screen.getByRole('button', {name: 'Start planning'}));
     expect(await screen.findByRole('heading', {name: 'Welcome back'})).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips')).toHaveLength(0);
     await user.click(screen.getByRole('button', {name: 'Cancel'}));
     expect(screen.getByLabelText('Trip name')).toHaveValue('Family visit');
     expect(screen.getByLabelText('Traveler 2 age')).toHaveValue(12);
+    expect(screen.getByLabelText('Budget (optional, dollars)')).toHaveValue(19.99);
     await user.click(screen.getByRole('button', {name: 'Start planning'}));
     await user.click(screen.getByRole('button', {name: 'Register'}));
     await user.type(screen.getByLabelText('Email address'), 'ada@example.test');
@@ -76,7 +84,7 @@ describe('public trip start and authentication handoff', () => {
     await screen.findByRole('heading', {name: trip.label});
     const writes = fetchMock.mock.calls.filter(([url, options]) => url === '/api/trips' && options?.method === 'POST');
     expect(writes).toHaveLength(1);
-    expect(JSON.parse(writes[0][1].body)).toEqual({name: 'Family visit', destinationKey: 'destination-muc', startDate: '2027-03-10', endDate: '2027-03-14', travelerCount: 2, travelerAges: [30, 12]});
+    expect(JSON.parse(writes[0][1].body)).toEqual({name: 'Family visit', destinationKey: 'destination-muc', startDate: '2027-03-10', endDate: '2027-03-14', travelerCount: 2, travelerAges: [30, 12], budgetCents: 1999});
   });
 
   it('requires every traveler age before saving', async () => {
@@ -87,6 +95,25 @@ describe('public trip start and authentication handoff', () => {
     await user.clear(screen.getByLabelText('Traveler 2 age'));
     await user.click(screen.getByRole('button', {name: 'Start planning'}));
     expect(screen.getByText('Enter an age between 0 and 120 for each traveler.')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips')).toHaveLength(0);
+  });
+
+  it('suggests an editable name and binds invalid dates, ages, and budget to fields', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [], past: []}));
+    const user = userEvent.setup(); render(<App />);
+    await screen.findByRole('button', {name: 'Profile'});
+    await user.click(screen.getByRole('button', {name: 'Trips'}));
+    expect(screen.getByLabelText('Trip name')).toHaveValue('San Francisco trip');
+    await user.clear(screen.getByLabelText('Trip name'));
+    await user.type(screen.getByLabelText('Trip name'), 'My spring trip');
+    await user.type(screen.getByLabelText('Budget (optional, dollars)'), '1000001');
+    await user.click(screen.getByRole('button', {name: 'Start planning'}));
+    expect(screen.getByLabelText('Trip name')).toHaveValue('My spring trip');
+    for (const label of ['Departure date', 'Return date', 'Traveler 1 age', 'Budget (optional, dollars)']) {
+      const input = screen.getByLabelText(label);
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(document.getElementById(input.getAttribute('aria-describedby')!)).toHaveClass('field-error');
+    }
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips')).toHaveLength(0);
   });
 
@@ -152,7 +179,7 @@ describe('public trip start and authentication handoff', () => {
       .mockResolvedValueOnce(json(401, {code: 'UNAUTHENTICATED'}));
     const user = userEvent.setup(); render(<App />);
     await screen.findByRole('button', {name: 'Profile'});
-    await user.click(screen.getByRole('button', {name: 'Profile'}));
+    await user.click(screen.getByRole('button', {name: 'Trips'}));
     await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
     await user.type(screen.getByLabelText('Budget (USD)'), '2500');
     expect(await screen.findByRole('heading', {name: 'Welcome back'})).toBeInTheDocument();
@@ -179,7 +206,7 @@ describe('public trip start and authentication handoff', () => {
       .mockResolvedValueOnce(json(401, {code: 'UNAUTHENTICATED'}));
     const user = userEvent.setup(); render(<App />);
     await screen.findByRole('button', {name: 'Profile'});
-    await user.click(screen.getByRole('button', {name: 'Profile'}));
+    await user.click(screen.getByRole('button', {name: 'Trips'}));
     await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
     await user.type(screen.getByLabelText('Budget (USD)'), '2500');
     await screen.findByRole('heading', {name: 'Welcome back'});

@@ -16,13 +16,13 @@ Travelers can find their trips in a dedicated Trips area and start a named trip 
 
 ## Acceptance criteria
 
-- [ ] Home, Trips, and Profile have distinct destinations; Trip lists no longer live in Profile, and guests do not see private Trip data.
-- [ ] Plan Trip, Airfare, and Stay enter the same inline trip-start flow with no creation pop-up and no automatic Trip save on opening.
-- [ ] The user can set a Trip name, destination, dates, traveler count, and every traveler's age together; invalid or incomplete details cannot start planning.
-- [ ] Start planning creates one owned Trip with its single Working plan and keeps the user on the Trips page; a canceled or unfinished start creates no Trip.
-- [ ] A guest can complete the start form, authenticate, and continue without re-entering details or creating duplicate Trips.
-- [ ] The Trips list distinguishes named Trips from named Saved options and does not imply that every option shares one date range. Trip renaming leaves alternatives and bookings attached to the same Trip.
-- [ ] The flow remains accessible and usable at desktop and mobile widths, and save errors do not claim that data was persisted.
+- [x] Home, Trips, and Profile have distinct destinations; Trip lists no longer live in Profile, and guests do not see private Trip data.
+- [x] Plan Trip, Airfare, and Stay enter the same inline trip-start flow with no creation pop-up and no automatic Trip save on opening.
+- [x] The user can set a Trip name, destination, dates, traveler count, and every traveler's age together; invalid or incomplete details cannot start planning.
+- [x] Start planning creates one owned Trip with its single Working plan and keeps the user on the Trips page; a canceled or unfinished start creates no Trip.
+- [x] A guest can complete the start form, authenticate, and continue without re-entering details or creating duplicate Trips.
+- [x] The Trips list distinguishes named Trips from named Saved options and does not imply that every option shares one date range. Trip renaming leaves alternatives and bookings attached to the same Trip.
+- [x] The flow remains accessible and usable at desktop and mobile widths, and save errors do not claim that data was persisted.
 
 ## Context
 

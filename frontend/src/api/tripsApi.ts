@@ -673,6 +673,9 @@ export const tripsApi = {
   getTrip: (tripId: string): Promise<TripResponse> =>
     request<TripResponse>(`/api/trips/${tripId}`, 'GET'),
 
+  renameTrip: (tripId: string, payload: {expectedVersion: number; name: string}): Promise<TripResponse> =>
+    request<TripResponse>(`/api/trips/${tripId}/name`, 'PUT', payload),
+
   replaceSharedDetails: (tripId: string, payload: SharedDetailsUpdateRequest): Promise<TripResponse> =>
     request<TripResponse>(`/api/trips/${tripId}`, 'PUT', cleanUpdatePayload(payload)),
 

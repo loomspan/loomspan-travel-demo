@@ -82,6 +82,16 @@ describe('tripsApi client', () => {
     });
   });
 
+  it('renameTrip sends the owned name update with version and CSRF', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, {id: 'trip-1', name: 'Spring break', version: 4}));
+    await tripsApi.renameTrip('trip-1', {expectedVersion: 3, name: 'Spring break'});
+    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/name', {
+      method: 'PUT', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': 'secret-token'},
+      body: JSON.stringify({expectedVersion: 3, name: 'Spring break'}),
+    });
+  });
+
   it('sends named option lifecycle versions and explicit Working replacement', async () => {
     fetchMock.mockImplementation(async () => json(200, {id: 'trip-1'}));
     await tripsApi.saveOption('trip-1', {expectedVersion: 2, expectedDraftVersion: 1, name: 'March stay'});

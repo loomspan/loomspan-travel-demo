@@ -27,18 +27,98 @@ describe('App identity experience', () => {
     await waitFor(() => expect(lastProfile).toBeDefined());
     await screen.findByRole('button', {name: 'Profile'});
     if (!lastProfile) throw new Error('Expected a loaded profile before navigating');
-    // Keep each test's queued trip/API responses for its workflow, while following the real Home → Profile navigation.
-    vi.mocked(identityApi.getProfile).mockResolvedValueOnce(lastProfile);
     await userEvent.setup().click(screen.getByRole('button', {name: 'Profile'}));
     return screen.findByText(lastProfile.email);
   }
+
+  async function showTrips() {
+    await showProfile();
+    if (lastProfile) vi.mocked(identityApi.getProfile).mockResolvedValueOnce(lastProfile);
+    await userEvent.setup().click(screen.getByRole('button', {name: 'Trips'}));
+    return screen.findByRole('heading', {name: 'Trips'});
+  }
+  it('shows the owned Trip list in Trips and account controls only in Profile', async () => {
+    const summary = {id: 'trip-1', name: 'Family trip', label: 'Family trip', destinationKey: 'destination-sfo', destinationName: 'San Francisco', startDate: '2027-03-10', endDate: '2027-03-14', version: 0, temporalStatus: 'UPCOMING', draftCount: 0, plannedCount: 0, expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: []};
+    fetchMock.mockImplementation(async () => json(200, {email: 'ada@example.test', upcoming: [summary], past: []}));
+    const user = userEvent.setup(); render(<App />);
+    await screen.findByRole('button', {name: 'Profile'});
+    await user.click(screen.getByRole('button', {name: 'Trips'}));
+    expect(await screen.findByRole('heading', {name: 'Family trip'})).toBeInTheDocument();
+    expect(screen.getByLabelText('Trip name')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Profile'}));
+    expect(screen.getByText('ada@example.test')).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'Change password'})).toBeInTheDocument();
+    expect(screen.queryByRole('heading', {name: 'Family trip'})).not.toBeInTheDocument();
+  });
+
+  it('renames the same Trip while preserving its Saved option and reports a conflict', async () => {
+    const option = {id: 'option-1', name: 'April escape', startDate: '2027-03-20', endDate: '2027-03-25', lifecycle: 'DRAFT', version: 0, status: 'DRAFT', expired: false};
+    let summary = {id: 'trip-1', name: 'Original trip', label: 'Original trip', destinationKey: 'destination-sfo', destinationName: 'San Francisco', startDate: '2027-03-10', endDate: '2027-03-14', version: 2, temporalStatus: 'UPCOMING', draftCount: 1, plannedCount: 0, expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: [option]};
+    let rejectRename = true;
+    fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url === '/api/profile') return json(200, {email: 'ada@example.test', upcoming: [summary], past: []});
+      if (url === '/api/trips/trip-1/name' && options?.method === 'PUT') {
+        if (rejectRename) return json(409, {code: 'VERSION_CONFLICT', message: 'Stale version'});
+        summary = {...summary, name: 'Spring break', label: 'Spring break', version: 3};
+        return json(200, {id: 'trip-1', name: 'Spring break', label: 'Spring break', version: 3});
+      }
+      throw new Error(`Unexpected request ${url}`);
+    });
+    const user = userEvent.setup(); render(<App />);
+    await screen.findByRole('button', {name: 'Profile'});
+    await user.click(screen.getByRole('button', {name: 'Trips'}));
+    expect(screen.getByText('April escape')).toBeInTheDocument();
+    expect(screen.getByText('2027-03-20 to 2027-03-25')).toBeInTheDocument();
+    expect(screen.getByText('Working plan: 2027-03-10 to 2027-03-14')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Rename trip'}));
+    await user.clear(screen.getAllByLabelText('Trip name')[1]);
+    await user.type(screen.getAllByLabelText('Trip name')[1], 'Spring break');
+    await user.click(screen.getByRole('button', {name: 'Save name'}));
+    expect(await screen.findByText(/changed on the server/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'Original trip'})).toBeInTheDocument();
+    rejectRename = false;
+    await user.click(screen.getByRole('button', {name: 'Save name'}));
+    expect(await screen.findByRole('heading', {name: 'Spring break'})).toBeInTheDocument();
+    expect(screen.getByText('April escape')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips/trip-1/name')).toHaveLength(2);
+  });
+
+  it('refreshes an already mounted Working plan after renaming its Trip', async () => {
+    let name = 'Original trip';
+    let version = 0;
+    const summary = () => ({id: 'trip-1', name, label: name, destinationKey: 'destination-sfo', destinationName: 'San Francisco', startDate: '2027-03-10', endDate: '2027-03-14', version, temporalStatus: 'UPCOMING', draftCount: 1, plannedCount: 0, expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: []});
+    const detail = () => ({...summary(), originAirportCode: 'PDX', travelerCount: 1, travelerAges: [30], budgetCents: null, drafts: [{id: 'draft-1', version: 0, selections: {airfare: null, stay: null, rental: null}}], planned: [], revisionSummary: null});
+    fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url === '/api/profile') return json(200, {email: 'ada@example.test', upcoming: [summary()], past: []});
+      if (url === '/api/trips/trip-1' && !options?.method?.startsWith('PUT')) return json(200, detail());
+      if (url === '/api/trips/trip-1/name' && options?.method === 'PUT') {
+        name = 'Renamed trip'; version += 1;
+        return json(200, detail());
+      }
+      throw new Error(`Unexpected request ${url}`);
+    });
+    const user = userEvent.setup(); render(<App />);
+    await screen.findByRole('button', {name: 'Profile'});
+    await user.click(screen.getByRole('button', {name: 'Trips'}));
+    await user.click(screen.getByRole('button', {name: 'Open trip Original trip'}));
+    expect(await screen.findByRole('heading', {name: 'Original trip'})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Trips'}));
+    await user.click(screen.getByRole('button', {name: 'Rename trip'}));
+    await user.clear(screen.getAllByLabelText('Trip name')[1]);
+    await user.type(screen.getAllByLabelText('Trip name')[1], 'Renamed trip');
+    await user.click(screen.getByRole('button', {name: 'Save name'}));
+    expect(await screen.findByRole('heading', {name: 'Renamed trip'})).toBeInTheDocument();
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips/trip-1')).toHaveLength(2));
+    await user.click(screen.getByRole('button', {name: 'Open trip Renamed trip'}));
+    expect(await screen.findByRole('heading', {name: 'Renamed trip'})).toBeInTheDocument();
+  });
 
   it('restores the authenticated profile from the existing server session', async () => {
     fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test'}));
     render(<App />);
     expect(screen.getByRole('heading', {name: 'Home'})).toBeInTheDocument();
     expect(await showProfile()).toBeInTheDocument();
-    expect(screen.getByText('Your profile is ready')).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'Change password'})).toBeInTheDocument();
     expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/profile', expect.objectContaining({credentials: 'same-origin'}));
@@ -250,13 +330,10 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
-    expect(await showProfile()).toBeInTheDocument();
-
-    const planTripButton = screen.getByRole('button', {name: 'Plan Trip'});
-    expect(planTripButton).toBeInTheDocument();
-    await user.click(planTripButton);
+    expect(await showTrips()).toBeInTheDocument();
 
     expect(screen.getByRole('heading', {name: 'Trips'})).toBeInTheDocument();
+    await user.clear(screen.getByLabelText('Trip name'));
     await user.type(screen.getByLabelText('Trip name'), 'Spring break');
     await user.selectOptions(screen.getByLabelText('Destination'), 'destination-sfo');
     await user.type(screen.getByLabelText('Departure date'), '2027-03-10');
@@ -282,6 +359,11 @@ describe('App identity experience', () => {
 
     expect(await screen.findByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
     expect(screen.getByText('1 Draft')).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Trips'})).toHaveAttribute('aria-current', 'page');
+    fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [], past: []}));
+    await user.click(screen.getByRole('button', {name: /Back to all trips/}));
+    expect(screen.getByRole('heading', {name: 'Trips'})).toBeInTheDocument();
+    expect(screen.getByLabelText('Trip name')).toBeInTheDocument();
   });
 
   it('renders Upcoming and Past trips in backend order with clear nested hierarchy and status badges', async () => {
@@ -331,7 +413,7 @@ describe('App identity experience', () => {
     }));
 
     render(<App />);
-    await showProfile();
+    await showTrips();
     expect(await screen.findByRole('heading', {name: 'Upcoming trips (1)'})).toBeInTheDocument();
     expect(screen.getByRole('heading', {name: 'Past trips (1)'})).toBeInTheDocument();
     expect(screen.getByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
@@ -364,7 +446,7 @@ describe('App identity experience', () => {
     }], past: []})).mockResolvedValueOnce(json(200, tripDetail));
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     await user.click(screen.getByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
     expect(await screen.findByRole('button', {name: 'Save as new option'})).toBeInTheDocument();
     expect(screen.queryByRole('button', {name: /create empty draft/i})).not.toBeInTheDocument();
@@ -422,7 +504,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     expect(await screen.findByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
@@ -463,14 +545,14 @@ describe('App identity experience', () => {
       .mockResolvedValueOnce(json(200, {...trip, version: 1, budgetCents: 250000}));
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
     await user.type(screen.getByLabelText('Budget (USD)'), '2500');
     expect(await screen.findByRole('button', {name: 'Retry save'})).toBeInTheDocument();
     expect(screen.getByText('Your edited details have not been saved.')).toBeInTheDocument();
     expect(screen.queryByText('All changes saved.')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', {name: 'Home'}));
-    await user.click(screen.getByRole('button', {name: `Trip: ${trip.label}`}));
+    await user.click(screen.getByRole('button', {name: `Return to ${trip.label}`}));
     expect(screen.getByLabelText('Budget (USD)')).toHaveValue(2500);
     await user.click(screen.getByRole('button', {name: 'Retry save'}));
     expect(await screen.findByText('All changes saved.')).toBeInTheDocument();
@@ -492,14 +574,14 @@ describe('App identity experience', () => {
       .mockRejectedValueOnce(new Error('offline')).mockRejectedValueOnce(new Error('offline'));
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
     await user.type(screen.getByLabelText('Budget (USD)'), '2500');
     expect(await screen.findByRole('button', {name: 'Retry save'})).toBeInTheDocument();
-    await user.click(screen.getByRole('button', {name: 'Profile'}));
+    await user.click(screen.getByRole('button', {name: 'Trips'}));
     expect(await screen.findByRole('alert')).toHaveTextContent('We could not reach DeTour');
-    expect(screen.getByText('ada@example.test')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', {name: `Trip: ${trip.label}`}));
+    expect(screen.getByRole('heading', {name: 'Trips'})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: `Open trip ${trip.label}`}));
     expect(screen.getByLabelText('Budget (USD)')).toHaveValue(2500);
     expect(screen.getByRole('button', {name: 'Retry save'})).toBeInTheDocument();
   });
@@ -519,14 +601,14 @@ describe('App identity experience', () => {
       .mockResolvedValueOnce(json(200, {...trip, version: 1, budgetCents: 250000}));
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
     await user.type(screen.getByLabelText('Budget (USD)'), '2500');
     await waitFor(() => expect(fetchMock.mock.calls.some((call) => call[1]?.method === 'PUT')).toBe(true));
     await user.click(screen.getByRole('button', {name: 'Home'}));
     expect(screen.getByText('Trip changes pending')).toBeInTheDocument();
     resolveSave(json(200, {...trip, version: 1, budgetCents: 250000}));
-    await user.click(screen.getByRole('button', {name: `Trip: ${trip.label}`}));
+    await user.click(screen.getByRole('button', {name: `Return to ${trip.label}`}));
     expect(screen.getByLabelText('Budget (USD)')).toHaveValue(2500);
     expect(await screen.findByText('All changes saved.')).toBeInTheDocument();
   });
@@ -544,7 +626,7 @@ describe('App identity experience', () => {
     }], past: []})).mockResolvedValueOnce(json(200, trip)).mockImplementationOnce(() => pendingSave);
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
     const budget = screen.getByLabelText('Budget (USD)');
     await user.type(budget, '2500');
@@ -608,7 +690,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
     expect(await screen.findByLabelText('Budget (USD)')).toBeInTheDocument();
 
@@ -670,7 +752,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     expect(await screen.findByRole('heading', {name: 'Revision changes applied'})).toBeInTheDocument();
@@ -711,7 +793,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     expect(await screen.findByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', {name: 'Delete trip San Francisco — Mar 10–14, 2027'}));
@@ -760,7 +842,7 @@ describe('App identity experience', () => {
     }));
 
     render(<App />);
-    await showProfile();
+    await showTrips();
     expect(await screen.findByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
     expect(screen.queryByRole('button', {name: 'Delete trip San Francisco — Mar 10–14, 2027'})).not.toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Cancel trip San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
@@ -812,7 +894,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     await user.click(await screen.findByRole('button', {name: 'Delete trip San Francisco — Mar 10–14, 2027'}));
 
     await user.click(screen.getByRole('button', {name: 'Delete trip'}));
@@ -881,7 +963,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     await user.type(screen.getByLabelText('Budget (USD)'), '1500.00');
@@ -939,7 +1021,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     expect(screen.queryByRole('button', {name: 'Delete trip San Francisco — Mar 10–14, 2027'})).not.toBeInTheDocument();
@@ -988,7 +1070,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     // Change return date to be before departure date
@@ -1105,7 +1187,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     const reviseBtn = screen.getByRole('button', {name: 'Revise Trip'});
@@ -1185,7 +1267,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     const deleteBtn = await screen.findByRole('button', {name: 'Delete trip San Francisco — Mar 10–14, 2027'});
     await user.click(deleteBtn);
 
@@ -1239,7 +1321,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     const travelersInput = screen.getByLabelText('Travelers');
@@ -1306,7 +1388,7 @@ describe('App identity experience', () => {
 
     const user = userEvent.setup();
     render(<App />);
-    await showProfile();
+    await showTrips();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
     // Verify h1 landmark
@@ -1362,7 +1444,7 @@ describe('App identity experience', () => {
     }));
 
     render(<App />);
-    await showProfile();
+    await showTrips();
 
     // Upcoming trip and past trip display BOOKED badges
     const bookedBadges = await screen.findAllByText('Booking');

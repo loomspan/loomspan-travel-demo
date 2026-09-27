@@ -144,10 +144,10 @@ describe('Progressive Trip Builder Experience', () => {
     await waitFor(() => expect(lastProfile).toBeDefined());
     await screen.findByRole('button', {name: 'Profile'});
     if (!lastProfile) throw new Error('Expected a loaded profile before navigating');
-    // Profile navigation refreshes data; replay the loaded profile so queued workflow responses stay intact.
+    // Trips navigation refreshes data; replay the loaded profile so queued workflow responses stay intact.
     vi.mocked(identityApi.getProfile).mockResolvedValueOnce(lastProfile);
-    await userEvent.setup().click(screen.getByRole('button', {name: 'Profile'}));
-    return screen.findByText(lastProfile.email);
+    await userEvent.setup().click(screen.getByRole('button', {name: 'Trips'}));
+    return screen.findByRole('heading', {name: 'Trips'});
   }
 
   it('keeps the active Draft through Home and Profile and returns to the same saved tally', async () => {
@@ -174,7 +174,8 @@ describe('Progressive Trip Builder Experience', () => {
     expect(screen.getByRole('heading', {name: 'Home'})).toBeInTheDocument();
     await user.click(screen.getByRole('button', {name: 'Profile'}));
     expect(screen.getByText('ada@example.test')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', {name: `Trip: ${trip.label}`}));
+    await user.click(screen.getByRole('button', {name: 'Home'}));
+    await user.click(screen.getByRole('button', {name: `Return to ${trip.label}`}));
     expect(screen.getByRole('heading', {name: 'Progressive Trip Builder'})).toBeInTheDocument();
     expect(screen.getByRole('heading', {name: /Draft totals/})).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter((call) => ['POST', 'PUT', 'DELETE'].includes(call[1]?.method as string))).toHaveLength(0);
@@ -286,6 +287,7 @@ describe('Progressive Trip Builder Experience', () => {
     await user.click(airfareBtn);
 
     await screen.findByRole('heading', {name: 'Trips'});
+    await user.clear(screen.getByLabelText('Trip name'));
     await user.type(screen.getByLabelText('Trip name'), 'Flight trip');
 
     await user.type(screen.getByLabelText('Departure date'), '2027-03-10');
@@ -339,7 +341,7 @@ describe('Progressive Trip Builder Experience', () => {
           expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: []},
       ], past: [],
     })).mockResolvedValueOnce(json(200, anotherTrip));
-    await user.click(screen.getByRole('button', {name: 'Profile'}));
+    await user.click(screen.getByRole('button', {name: 'Trips'}));
     await user.click(await screen.findByRole('button', {name: `Open trip ${anotherTrip.label}`}));
     expect(await screen.findByRole('heading', {name: 'Progressive Trip Builder'})).toBeInTheDocument();
     expect(screen.getByRole('button', {name: /add airfare/i})).toBeInTheDocument();
@@ -365,6 +367,7 @@ describe('Progressive Trip Builder Experience', () => {
     await user.click(stayBtn);
 
     await screen.findByRole('heading', {name: 'Trips'});
+    await user.clear(screen.getByLabelText('Trip name'));
     await user.type(screen.getByLabelText('Trip name'), 'Stay trip');
 
     // Check mandatory accommodation type selector is present
@@ -446,6 +449,7 @@ describe('Progressive Trip Builder Experience', () => {
     await user.click(planBtn);
 
     await screen.findByRole('heading', {name: 'Trips'});
+    await user.clear(screen.getByLabelText('Trip name'));
     await user.type(screen.getByLabelText('Trip name'), 'Whole trip');
 
     await user.type(screen.getByLabelText('Departure date'), '2027-03-15');
