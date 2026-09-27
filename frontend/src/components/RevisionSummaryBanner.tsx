@@ -14,13 +14,13 @@ export function RevisionSummaryBanner({summary, onDismiss}: RevisionSummaryBanne
   return (
     <aside className="revision-summary-banner" role="region" aria-labelledby="revision-summary-heading">
       <div className="revision-summary-header">
-        <h3 id="revision-summary-heading">Revision changes applied</h3>
-        <button type="button" className="text-button" onClick={onDismiss} aria-label="Dismiss revision summary">
-          ✕ Dismiss
+        <h3 id="revision-summary-heading">Review changes to your Working plan</h3>
+        <button type="button" className="text-button" onClick={onDismiss} aria-label="Acknowledge date change summary">
+          I reviewed these changes
         </button>
       </div>
       <p className="hint">
-        When updating shared trip details or duplicating planned itineraries, some selections were adjusted or removed:
+        Changing dates or shared Trip details changed these selections or prices. Review them before updating a Saved option:
       </p>
 
       {hasRemovals && (

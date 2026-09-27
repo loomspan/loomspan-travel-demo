@@ -123,7 +123,10 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | undefined>();
 
-  const activeDraft = trip.drafts && trip.drafts.length > 0 ? trip.drafts[0] : null;
+  const activeDraft = trip.workingPlan ?? trip.drafts?.[0] ?? null;
+  const savedOptions: AlternativeResponse[] = (trip.savedOptions ?? trip.planned ?? []).map(option => ({
+    ...option, lifecycle: 'PLANNED', version: option.version ?? 0,
+  }));
 
   const [airfareMode, setAirfareMode] = useState<'empty' | 'searching' | 'selected'>(() => {
     if (initialTrip.drafts?.[0]?.selections?.airfare) return 'selected';
@@ -159,9 +162,56 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
   const [promotionPending, setPromotionPending] = useState(false);
   const [optionName, setOptionName] = useState('');
   const [editingOptionId, setEditingOptionId] = useState<string | null>(null);
+  const [updateConfirmationOpen, setUpdateConfirmationOpen] = useState(false);
+  const [renameOptionId, setRenameOptionId] = useState<string | null>(null);
+  const [renameName, setRenameName] = useState('');
   const [loadTargetId, setLoadTargetId] = useState<string | null>(null);
   const [currentPreservedForLoad, setCurrentPreservedForLoad] = useState(false);
   const [optionActionPending, setOptionActionPending] = useState(false);
+  const [optionFailure, setOptionFailure] = useState<{action: 'save' | 'update' | 'rename' | 'load'; message: string} | null>(null);
+  const optionDialogRef = useRef<HTMLDivElement>(null);
+  const optionDialogReturnFocusRef = useRef<HTMLElement | null>(null);
+  const activeOptionDialog = updateConfirmationOpen || Boolean(renameOptionId) || Boolean(loadTargetId);
+  useEffect(() => {
+    if (!activeOptionDialog) return;
+    optionDialogReturnFocusRef.current = document.activeElement as HTMLElement;
+    const dialog = optionDialogRef.current;
+    (dialog?.querySelector<HTMLElement>('input:not(:disabled)') ?? dialog?.querySelector<HTMLElement>('button:not(:disabled)'))?.focus();
+    return () => {
+      const previous = optionDialogReturnFocusRef.current;
+      if (previous && document.body.contains(previous)) previous.focus();
+      else document.getElementById('workspace-heading')?.focus();
+      optionDialogReturnFocusRef.current = null;
+    };
+  }, [activeOptionDialog]);
+  useEffect(() => {
+    if (!activeOptionDialog) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const dialog = optionDialogRef.current;
+      if (!dialog) return;
+      if (event.key === 'Escape' && !optionActionPending) {
+        event.preventDefault();
+        setUpdateConfirmationOpen(false);
+        setRenameOptionId(null);
+        setLoadTargetId(null);
+        setCurrentPreservedForLoad(false);
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)'));
+      if (!focusable.length) { event.preventDefault(); return; }
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (!focusable.includes(document.activeElement as HTMLElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault(); first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [activeOptionDialog, optionActionPending]);
   const [readinessIssues, setReadinessIssues] = useState<Record<string, string> | null>(null);
   const [isReadinessBannerOpen, setIsReadinessBannerOpen] = useState(false);
   const [isOverageModalOpen, setIsOverageModalOpen] = useState(false);
@@ -255,17 +305,16 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
   }, [trip.id, hasBookingHistory, initialActiveBooking]);
 
   useEffect(() => {
-    if (!trip.alternatives) {
+    if (!trip.savedOptions && !trip.planned) {
       setSelectedForCompareIds([]);
       return;
     }
     const validIds = new Set(
-      trip.alternatives
-        .filter((a) => a.lifecycle.toUpperCase() === 'PLANNED')
+      (trip.savedOptions ?? trip.planned)
         .map((a) => a.id)
     );
     setSelectedForCompareIds((prev) => prev.filter((id) => validIds.has(id)));
-  }, [trip.alternatives]);
+  }, [trip.savedOptions, trip.planned]);
 
   useEffect(() => {
     if (activeDraft?.selections?.airfare) {
@@ -339,9 +388,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
   // never replace local edits or a newer mutation response.
 
   const hasPlanned = trip.planned && trip.planned.length > 0;
-  const plannedAlternatives = (trip.alternatives || []).filter(
-    (a) => a.lifecycle.toUpperCase() === 'PLANNED'
-  );
+  const plannedAlternatives = savedOptions;
 
   // Validation helper
   const validateInputs = useCallback(() => {
@@ -573,6 +620,12 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       setAutosaveStatus('idle');
       setAutosaveMessage(undefined);
       setFieldErrors({});
+      setEditingOptionId(null);
+      setUpdateConfirmationOpen(false);
+      setRenameOptionId(null);
+      setLoadTargetId(null);
+      setCurrentPreservedForLoad(false);
+      setOptionFailure(null);
       if (deleteTarget && deleteTarget.kind === 'trip') {
         setDeleteTarget({
           ...deleteTarget,
@@ -653,7 +706,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       setBudgetOverageAcknowledged(false);
       setAirfareMode('selected');
       setAutosaveStatus('saved');
-      setAutosaveMessage('Flight saved to draft.');
+      setAutosaveMessage('Flight saved to Working plan.');
     } catch (err) {
       setWorkingMutationFailed(true);
       if (err instanceof IdentityApiError && err.code === 'VERSION_CONFLICT') {
@@ -685,7 +738,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       setBudgetOverageAcknowledged(false);
       setStayMode('selected');
       setAutosaveStatus('saved');
-      setAutosaveMessage('Stay saved to draft.');
+      setAutosaveMessage('Stay saved to Working plan.');
     } catch (err) {
       setWorkingMutationFailed(true);
       if (err instanceof IdentityApiError && err.code === 'VERSION_CONFLICT') {
@@ -722,7 +775,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       setBudgetOverageAcknowledged(false);
       setRentalMode('selected');
       setAutosaveStatus('saved');
-      setAutosaveMessage('Rental car saved to draft.');
+      setAutosaveMessage('Rental car saved to Working plan.');
     } catch (err) {
       setWorkingMutationFailed(true);
       if (err instanceof IdentityApiError && err.code === 'VERSION_CONFLICT') {
@@ -803,7 +856,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       const title = removeTarget.title;
       setRemoveTarget(null);
       setAutosaveStatus('saved');
-      setAutosaveMessage(`${title} removed from draft.`);
+      setAutosaveMessage(`${title} removed from Working plan.`);
     } catch (err) {
       setWorkingMutationFailed(true);
       if (err instanceof IdentityApiError && err.code === 'VERSION_CONFLICT') {
@@ -927,6 +980,11 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
 
   const handleSaveNamedOption = async () => {
     if (optionActionPending || !ensureSavedWorking()) return;
+    if (!activeDraft?.selections.airfare && !activeDraft?.selections.stay && !activeDraft?.selections.rental) {
+      setAutosaveStatus('error');
+      setAutosaveMessage('Choose a flight, stay, or rental car before saving a new option. Your incomplete Working plan remains saved.');
+      return;
+    }
     if (!optionName.trim()) {
       setAutosaveStatus('error');
       setAutosaveMessage('Enter a name for the Saved option.');
@@ -942,12 +1000,16 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       applyTripState(updated);
       onTripUpdated?.(updated);
       setOptionName('');
+      setEditingOptionId(null);
       setAutosaveStatus('saved');
       setAutosaveMessage('Saved as a new option.');
+      if (optionFailure?.action === 'save') setOptionFailure(null);
     } catch (error) {
+      if (error instanceof IdentityApiError && error.code === 'UNAUTHENTICATED') onAuthenticationRequired?.();
       const conflict = error instanceof IdentityApiError && error.code === 'VERSION_CONFLICT';
       setAutosaveStatus(conflict ? 'conflict' : 'error');
       setAutosaveMessage(error instanceof IdentityApiError ? error.message : 'Could not save option.');
+      setOptionFailure({action: 'save', message: error instanceof IdentityApiError ? error.message : 'Could not save option.'});
     } finally {
       setOptionActionPending(false);
     }
@@ -955,24 +1017,66 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
 
   const handleUpdateNamedOption = async () => {
     if (optionActionPending || !editingOptionId || !ensureSavedWorking()) return;
+    if (!activeDraft?.selections.airfare && !activeDraft?.selections.stay && !activeDraft?.selections.rental) {
+      setAutosaveStatus('error');
+      setAutosaveMessage('Choose a component before updating a Saved option. Your incomplete Working plan remains available.');
+      return;
+    }
     const option = (trip.savedOptions ?? trip.planned).find(item => item.id === editingOptionId);
     if (!option) return;
+    if (option.booked || activeBooking?.plannedItineraryId === option.id || trip.booking?.plannedItineraryId === option.id) {
+      setAutosaveStatus('error');
+      setAutosaveMessage('Booked options cannot be updated. Save your Working plan as a new option.');
+      return;
+    }
     setOptionActionPending(true);
     setAutosaveStatus('saving');
     setAutosaveMessage('Updating option…');
     try {
       const updated = await tripsApi.updateOption(trip.id, option.id, {
         expectedVersion: trip.version, expectedDraftVersion: activeDraft!.version,
-        expectedOptionVersion: option.version ?? 0, name: optionName.trim() || option.name || 'Saved option',
+        expectedOptionVersion: option.version ?? 0, name: option.name || 'Saved option',
       });
       applyTripState(updated);
       onTripUpdated?.(updated);
       setAutosaveStatus('saved');
       setAutosaveMessage('Option updated.');
+      if (optionFailure?.action === 'update') setOptionFailure(null);
+      setUpdateConfirmationOpen(false);
     } catch (error) {
+      if (error instanceof IdentityApiError && error.code === 'UNAUTHENTICATED') onAuthenticationRequired?.();
       const conflict = error instanceof IdentityApiError && error.code === 'VERSION_CONFLICT';
       setAutosaveStatus(conflict ? 'conflict' : 'error');
       setAutosaveMessage(error instanceof IdentityApiError ? error.message : 'Could not update option.');
+      setOptionFailure({action: 'update', message: error instanceof IdentityApiError ? error.message : 'Could not update option.'});
+      if (conflict) setUpdateConfirmationOpen(false);
+    } finally {
+      setOptionActionPending(false);
+    }
+  };
+
+  const handleRenameOption = async () => {
+    if (optionActionPending || !renameOptionId || !ensureSavedWorking()) return;
+    const option = savedOptions.find(item => item.id === renameOptionId);
+    if (!option || !renameName.trim() || option.booked || activeBooking?.plannedItineraryId === renameOptionId || trip.booking?.plannedItineraryId === renameOptionId) return;
+    setOptionActionPending(true);
+    try {
+      const updated = await tripsApi.renameOption(trip.id, option.id, {
+        expectedVersion: trip.version, expectedOptionVersion: option.version ?? 0, name: renameName.trim(),
+      });
+      applyTripState(updated);
+      onTripUpdated?.(updated);
+      setRenameOptionId(null);
+      setAutosaveStatus('saved');
+      setAutosaveMessage('Option renamed.');
+      if (optionFailure?.action === 'rename') setOptionFailure(null);
+    } catch (error) {
+      if (error instanceof IdentityApiError && error.code === 'UNAUTHENTICATED') onAuthenticationRequired?.();
+      const conflict = error instanceof IdentityApiError && error.code === 'VERSION_CONFLICT';
+      setAutosaveStatus(conflict ? 'conflict' : 'error');
+      setAutosaveMessage(error instanceof IdentityApiError ? error.message : 'Could not rename option.');
+      setOptionFailure({action: 'rename', message: error instanceof IdentityApiError ? error.message : 'Could not rename option.'});
+      if (conflict) setRenameOptionId(null);
     } finally {
       setOptionActionPending(false);
     }
@@ -982,6 +1086,11 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     if (optionActionPending || !loadTargetId || !ensureSavedWorking()) return;
     const option = (trip.savedOptions ?? trip.planned).find(item => item.id === loadTargetId);
     if (!option) return;
+    if (keepCurrent && !currentPreservedForLoad && !Boolean(activeDraft?.selections.airfare || activeDraft?.selections.stay || activeDraft?.selections.rental)) {
+      setAutosaveStatus('error');
+      setAutosaveMessage('Add a selection before keeping the current Working plan as an option, or replace it without saving a copy.');
+      return;
+    }
     if (keepCurrent && !currentPreservedForLoad && !optionName.trim()) {
       setAutosaveStatus('error');
       setAutosaveMessage('Name your current Working plan before keeping it as an option.');
@@ -1008,15 +1117,19 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       applyTripState(updated);
       onTripUpdated?.(updated);
       setEditingOptionId(option.id);
-      setOptionName(option.name || '');
+      setOptionName('');
       setLoadTargetId(null);
       setCurrentPreservedForLoad(false);
       setAutosaveStatus('saved');
       setAutosaveMessage('Option opened in the Working plan. The Saved option is unchanged.');
+      if (optionFailure?.action === 'load') setOptionFailure(null);
     } catch (error) {
+      if (error instanceof IdentityApiError && error.code === 'UNAUTHENTICATED') onAuthenticationRequired?.();
       const conflict = error instanceof IdentityApiError && error.code === 'VERSION_CONFLICT';
       setAutosaveStatus(conflict ? 'conflict' : 'error');
       setAutosaveMessage(error instanceof IdentityApiError ? error.message : 'Could not open option.');
+      setOptionFailure({action: 'load', message: error instanceof IdentityApiError ? error.message : 'Could not open option.'});
+      if (conflict) setLoadTargetId(null);
     } finally {
       setOptionActionPending(false);
     }
@@ -1323,9 +1436,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
   };
 
   if (workspaceView === 'compare') {
-    const comparedAlternatives = (trip.alternatives || []).filter(
-      (a) => a.lifecycle.toUpperCase() === 'PLANNED' && selectedForCompareIds.includes(a.id)
-    );
+    const comparedAlternatives = savedOptions.filter(a => selectedForCompareIds.includes(a.id));
     return (
       <section aria-labelledby="comparison-heading" className="card workspace-card comparison-workspace-card">
         <ItineraryComparisonView
@@ -1334,13 +1445,14 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
           onBack={() => setWorkspaceView('workspace')}
           onSelectForBookingReview={(id) => handleSelectForBookingReview(id, 'compare')}
           hasActiveBooking={Boolean(activeBooking)}
+          bookedOptionId={activeBooking?.plannedItineraryId ?? trip.booking?.plannedItineraryId}
         />
       </section>
     );
   }
 
   if (workspaceView === 'booking-review' && reviewAlternativeId) {
-    const reviewAlternative = (trip.alternatives || []).find((a) => a.id === reviewAlternativeId);
+    const reviewAlternative = savedOptions.find(a => a.id === reviewAlternativeId);
     if (reviewAlternative) {
       return (
         <section aria-labelledby="booking-review-heading" className="card workspace-card booking-review-workspace-card">
@@ -1434,9 +1546,9 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
             {isTripCanceled && <span className="badge badge-canceled">Canceled Trip</span>}
             {isExpired && <span className="badge badge-expired">Expired</span>}
           </div>
-          <h1 id="workspace-heading" tabIndex={-1}>{trip.label}</h1>
+          <h1 id="workspace-heading" tabIndex={-1}>{trip.name ?? trip.label}</h1>
           <p className="trip-meta">
-            From {trip.originAirportCode} to {trip.destinationName} • {trip.startDate} to {trip.endDate} • {trip.travelerCount} traveler{trip.travelerCount === 1 ? '' : 's'} (v{trip.version})
+            From {trip.originAirportCode} to {trip.destinationName} • Working dates: {activeDraft?.startDate ?? trip.startDate} to {activeDraft?.endDate ?? trip.endDate} • {trip.travelerCount} traveler{trip.travelerCount === 1 ? '' : 's'}
           </p>
         </div>
 
@@ -1473,6 +1585,12 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
           )}
         </div>
       </header>
+
+      {optionFailure && <div className="save-error" aria-live="polite">
+        {optionFailure.action === 'save' ? 'Save as new option' : optionFailure.action === 'update'
+          ? 'Update option' : optionFailure.action === 'rename' ? 'Rename option' : 'Open option'} failed: {optionFailure.message}
+        {' '}Retry that action, or reload the Trip if its version changed.
+      </div>}
 
       {/* Canceled Trip Banner */}
       {isTripCanceled && (
@@ -1563,16 +1681,18 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       {activeDraft && (
         <section className="workspace-section builder-section" aria-labelledby="builder-heading">
           <div className="section-header builder-header">
-            <h3 id="builder-heading" tabIndex={-1}>Progressive Trip Builder</h3>
+            <h3 id="builder-heading" tabIndex={-1}>Working plan</h3>
             <div className="option-actions">
               <label htmlFor="option-name">Option name</label>
               <input id="option-name" value={optionName} maxLength={300}
                 onChange={event => setOptionName(event.target.value)} placeholder="Name this option" />
-              <button type="button" className="primary-button" disabled={optionActionPending || isTripCanceled}
+              <button type="button" className="primary-button" disabled={optionActionPending || isTripCanceled || !Boolean(activeDraft.selections.airfare || activeDraft.selections.stay || activeDraft.selections.rental)}
                 onClick={() => void handleSaveNamedOption()}>Save as new option</button>
-              {editingOptionId && <button type="button" className="secondary-action-button"
-                disabled={optionActionPending || isTripCanceled}
-                onClick={() => void handleUpdateNamedOption()}>Update this option</button>}
+              {!activeDraft.selections.airfare && !activeDraft.selections.stay && !activeDraft.selections.rental && <p className="hint">Choose a flight, stay, or rental car to save an option. You can keep editing this incomplete Working plan.</p>}
+              {editingOptionId && <p className="hint">Editing a copy of {savedOptions.find(item => item.id === editingOptionId)?.name || 'a Saved option'}. Save as new to keep both, or update the original below.</p>}
+              {editingOptionId && !savedOptions.find(item => item.id === editingOptionId)?.booked && activeBooking?.plannedItineraryId !== editingOptionId && trip.booking?.plannedItineraryId !== editingOptionId && <button type="button" className="secondary-action-button"
+                disabled={optionActionPending || isTripCanceled || !Boolean(activeDraft.selections.airfare || activeDraft.selections.stay || activeDraft.selections.rental)}
+                onClick={() => setUpdateConfirmationOpen(true)}>Update this option</button>}
             </div>
           </div>
 
@@ -1788,7 +1908,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
           <div className="field">
             <fieldset>
               <legend>Traveler Ages (0–120)</legend>
-              <p className="hint">Optional. Needed before promoting a draft to a planned itinerary.</p>
+              <p className="hint">Optional while editing the Working plan. Enter all traveler ages before saving an option for booking.</p>
               <div className="ages-grid">
                 {Array.from({length: travelerCount}, (_, i) => (
                   <div key={i} className="field age-field">
@@ -1820,18 +1940,12 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         </form>
       </section>
 
-      {/* Alternatives section */}
+      {/* Saved options section */}
       <section className="workspace-section" aria-labelledby="alternatives-heading">
         <div className="section-header">
           <h3 id="alternatives-heading" tabIndex={-1}>
-            Alternatives ({trip.alternatives ? trip.alternatives.length : 0})
+            Saved options ({savedOptions.length})
           </h3>
-          <span className="count-pill">
-            {trip.drafts ? trip.drafts.length : 0} Draft{trip.drafts && trip.drafts.length === 1 ? '' : 's'}
-          </span>
-          <span className="count-pill">
-            {plannedAlternatives.length} Planned itinerar{plannedAlternatives.length === 1 ? 'y' : 'ies'}
-          </span>
           <div className="alternatives-actions" style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center'}}>
             {plannedAlternatives.length >= 2 && (
               <>
@@ -1840,9 +1954,9 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
                   className="primary-button compare-launch-btn"
                   disabled={selectedForCompareIds.length < 2}
                   onClick={() => setWorkspaceView('compare')}
-                  aria-label={`Compare selected itineraries (${selectedForCompareIds.length})`}
+                  aria-label={`Compare selected options (${selectedForCompareIds.length})`}
                 >
-                  Compare selected itineraries ({selectedForCompareIds.length})
+                  Compare selected options ({selectedForCompareIds.length})
                 </button>
                 {selectedForCompareIds.length > 0 && (
                   <button
@@ -1863,11 +1977,11 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
 
         {plannedAlternatives.length >= 2 ? (
           <p className="hint">
-            Drafts let you explore and compare options. Select 2 or 3 Planned itineraries to compare them side-by-side.
+            Select 2 or 3 saved options to compare them side by side.
           </p>
         ) : (
           <p className="hint">
-            Drafts let you explore and compare options. Promote at least 2 Drafts to Planned itineraries to compare them.
+            Save at least two options to compare their dates, selections, and prices.
           </p>
         )}
 
@@ -1877,24 +1991,25 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
           </div>
         )}
 
-        {(!trip.alternatives || trip.alternatives.length === 0) ? (
-          <p className="hint">No alternatives yet. Create an empty draft to get started.</p>
+        {savedOptions.length === 0 ? (
+          <p className="hint">No saved options yet. Add a selection to the Working plan, name it, and save it here.</p>
         ) : (
           <div className="alternatives-grid">
-            {trip.alternatives.map((alt: AlternativeResponse) => (
+            {savedOptions.map((alt: AlternativeResponse) => (
               <AlternativeCard
                 key={alt.id}
                 alternative={alt}
                 singleWorking
                 onOpenForEditing={(id) => { setCurrentPreservedForLoad(false); setLoadTargetId(id); }}
+                onRename={(id) => {setRenameOptionId(id); setRenameName(savedOptions.find(item => item.id === id)?.name ?? '');}}
                 tripExpired={alt.startDate ? alt.startDate <= pacificToday : isExpired}
                 tripCanceled={isTripCanceled}
                 hasBookingHistory={effectiveHasBookingHistory}
                 promotionPending={promotionPending}
                 isSelectedForCompare={selectedForCompareIds.includes(alt.id)}
-                isBooked={activeBooking?.plannedItineraryId === alt.id}
+                isBooked={Boolean(alt.booked || activeBooking?.plannedItineraryId === alt.id || trip.booking?.plannedItineraryId === alt.id)}
                 hasActiveBooking={Boolean(activeBooking)}
-                onViewBookingDetails={() => setWorkspaceView('booking-confirmation')}
+                onViewBookingDetails={activeBooking?.plannedItineraryId === alt.id ? () => setWorkspaceView('booking-confirmation') : undefined}
                 onToggleCompare={handleToggleCompare}
                 onSelectForBookingReview={(id) => handleSelectForBookingReview(id, 'workspace')}
                 onDuplicateDraft={(id, ver) => void handleDuplicateDraft(id, ver)}
@@ -1908,15 +2023,67 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         )}
       </section>
 
+      {updateConfirmationOpen && editingOptionId && (() => {
+        const target = savedOptions.find(item => item.id === editingOptionId);
+        if (!target || !activeDraft) return null;
+        const changes = (['airfare', 'stay', 'rental'] as const).filter(key =>
+          JSON.stringify(target.selections[key]) !== JSON.stringify(activeDraft.selections[key]));
+        return <div className="modal-backdrop" role="presentation">
+          <div ref={optionDialogRef} className="modal" role="dialog" aria-modal="true" aria-labelledby="update-option-heading">
+            <h3 id="update-option-heading">Replace {target.name || 'this option'}?</h3>
+            <p>This updates the unbooked Saved option with the current Working plan. The option keeps its place in your list.</p>
+            <p>Dates: {target.startDate} to {target.endDate} → {activeDraft.startDate ?? trip.startDate} to {activeDraft.endDate ?? trip.endDate}</p>
+            <p>Components changed: {changes.length ? changes.join(', ') : 'none'}.</p>
+            <p>Total: {formatCents(target.tally?.grandTotalCents ?? 0)} → {formatCents(activeDraft.tally?.grandTotalCents ?? 0)}.</p>
+            {revisionSummary && (revisionSummary.removals.length > 0 || revisionSummary.adjustments.length > 0) &&
+              <div className="revision-summary-banner">
+                <h4>Date changes to review</h4>
+                <ul>
+                  {revisionSummary.removals.map((item, index) => <li key={`removed-${index}`}>{item.component} removed: {item.reason}</li>)}
+                  {revisionSummary.adjustments.map((item, index) => <li key={`adjusted-${index}`}>
+                    {item.component} changed: {item.reason}
+                    {item.previousPriceCents !== null && item.newPriceCents !== null &&
+                      <> ({formatCents(item.previousPriceCents)} → {formatCents(item.newPriceCents)})</>}
+                  </li>)}
+                </ul>
+              </div>}
+            <div className="modal-actions">
+              <button type="button" onClick={() => setUpdateConfirmationOpen(false)} disabled={optionActionPending}>Cancel</button>
+              <button type="button" className="primary-button" onClick={() => void handleUpdateNamedOption()} disabled={optionActionPending}>Replace Saved option</button>
+            </div>
+          </div>
+        </div>;
+      })()}
+
+      {renameOptionId && <div className="modal-backdrop" role="presentation">
+        <div ref={optionDialogRef} className="modal" role="dialog" aria-modal="true" aria-labelledby="rename-option-heading">
+          <h3 id="rename-option-heading">Rename Saved option</h3>
+          <p>The name changes; its dates, selections, and price stay the same.</p>
+          <label htmlFor="rename-option-name">Option name</label>
+          <input id="rename-option-name" value={renameName} maxLength={300} onChange={event => setRenameName(event.target.value)} />
+          <div className="modal-actions">
+            <button type="button" onClick={() => setRenameOptionId(null)} disabled={optionActionPending}>Cancel</button>
+            <button type="button" className="primary-button" onClick={() => void handleRenameOption()} disabled={optionActionPending || !renameName.trim()}>Save name</button>
+          </div>
+        </div>
+      </div>}
+
       {loadTargetId && (
         <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="load-option-heading">
+          <div ref={optionDialogRef} className="modal" role="dialog" aria-modal="true" aria-labelledby="load-option-heading">
             <h3 id="load-option-heading">Open Saved option for editing?</h3>
             <p>This copies the option into your one Working plan. The Saved option stays unchanged. Different Working dates and selections will be replaced.</p>
             <p>You can keep the current Working plan as another named Saved option first.</p>
+            {!currentPreservedForLoad && <>
+              <label htmlFor="keep-working-option-name">Name the current Working plan to keep both</label>
+              <input id="keep-working-option-name" value={optionName} maxLength={300}
+                onChange={event => setOptionName(event.target.value)} placeholder="Name your current option" />
+              {!activeDraft?.selections.airfare && !activeDraft?.selections.stay && !activeDraft?.selections.rental &&
+                <p className="hint">Add a selection before keeping the current Working plan as a Saved option.</p>}
+            </>}
             <div className="modal-actions">
               <button type="button" onClick={() => { setCurrentPreservedForLoad(false); setLoadTargetId(null); }} disabled={optionActionPending}>Cancel</button>
-              <button type="button" onClick={() => void handleLoadNamedOption(true)} disabled={optionActionPending}>{currentPreservedForLoad ? 'Retry opening option' : 'Save current first, then open'}</button>
+              <button type="button" onClick={() => void handleLoadNamedOption(true)} disabled={optionActionPending || (!currentPreservedForLoad && (!optionName.trim() || !Boolean(activeDraft?.selections.airfare || activeDraft?.selections.stay || activeDraft?.selections.rental)))}>{currentPreservedForLoad ? 'Retry opening option' : 'Save current first, then open'}</button>
               <button type="button" className="primary-button" onClick={() => void handleLoadNamedOption(false)} disabled={optionActionPending}>Replace Working plan</button>
             </div>
           </div>

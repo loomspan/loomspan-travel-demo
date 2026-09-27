@@ -16,16 +16,14 @@ type TripListSectionProps = {
 };
 
 function AlternativeSummaryItem({alt}: {alt: AlternativeProfileSummary}) {
-  const isDraft = alt.lifecycle.toUpperCase() === 'DRAFT';
   const isExpired = alt.expired || alt.status.toUpperCase() === 'EXPIRED';
 
   return (
     <li className="alternative-summary-item">
       <div className="alternative-summary-meta">
-        <span className={`badge ${isDraft ? 'badge-draft' : 'badge-planned'}`}>
-          {isDraft ? (alt.version !== null ? `Draft v${alt.version}` : 'Draft') : 'Planned itinerary'}
-        </span>
+        <span className="badge badge-planned">Saved option</span>
         {isExpired && <span className="badge badge-expired">Expired</span>}
+        {alt.booked && <span className="badge badge-booked">Booked</span>}
         <strong>{alt.name ?? 'Saved option'}</strong>
         {alt.startDate && alt.endDate && <span>{alt.startDate} to {alt.endDate}</span>}
       </div>
@@ -99,8 +97,7 @@ function TripCard({
           )}
         </div>
         <div className="trip-card-counts">
-          <span className="count-pill">{trip.draftCount} Draft{trip.draftCount === 1 ? '' : 's'}</span>
-          <span className="count-pill">{trip.plannedCount} Planned itinerary{trip.plannedCount === 1 ? '' : 's'}</span>
+          <span className="count-pill">{trip.plannedCount} Saved option{trip.plannedCount === 1 ? '' : 's'}</span>
           {trip.expiredAlternativeCount > 0 && (
             <span className="count-pill badge-expired">{trip.expiredAlternativeCount} Expired</span>
           )}
@@ -110,11 +107,11 @@ function TripCard({
         </div>
       </div>
 
-      {trip.alternatives && trip.alternatives.length > 0 && (
+      {trip.alternatives && trip.alternatives.some(alt => alt.lifecycle.toUpperCase() === 'PLANNED') && (
         <div className="trip-card-alternatives">
           <h4 className="alternatives-heading">Saved options</h4>
           <ul className="alternatives-summary-list" aria-label={`Saved options for ${trip.name ?? trip.label}`}>
-            {trip.alternatives.map((alt) => (
+            {trip.alternatives.filter(alt => alt.lifecycle.toUpperCase() === 'PLANNED').map((alt) => (
               <AlternativeSummaryItem key={alt.id} alt={alt} />
             ))}
           </ul>

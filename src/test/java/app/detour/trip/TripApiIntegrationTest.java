@@ -122,6 +122,65 @@ class TripApiIntegrationTest {
     }
 
     @Test
+    void optionRenameChangesOnlyNameAndRejectsStaleForeignAndBookedChanges() throws Exception {
+        Client owner = register("rename-option-owner@example.test");
+        Client other = register("rename-option-other@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"), validRequest("\"travelerAges\":[25,30]"))
+                .andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(created, "id");
+        var mapper = tools.jackson.databind.json.JsonMapper.builder().build();
+        String draftId = mapper.readTree(created.getResponse().getContentAsString()).get("workingPlan").get("id").asString();
+        insertSfoStaySelection(draftId);
+        MvcResult saved = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Original\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated()).andReturn();
+        var before = mapper.readTree(saved.getResponse().getContentAsString()).get("savedOptions").get(0);
+        String optionId = before.get("id").asString();
+        long optionRowId = jdbc.queryForObject("SELECT id FROM detour_planned_itinerary WHERE public_id = ?", Long.class, UUID.fromString(optionId));
+        int nightsBefore = jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_stay_night_snapshot WHERE planned_itinerary_id = ?", Integer.class, optionRowId);
+
+        String rename = "{\"name\":\"  Later stay  \",\"expectedVersion\":1,\"expectedOptionVersion\":0}";
+        other.unsafe(put("/api/trips/{tripId}/options/{optionId}/name", tripId, optionId), rename)
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+        owner.unsafe(put("/api/trips/{tripId}/options/{optionId}/name", tripId, optionId),
+                "{\"name\":\" \",\"expectedVersion\":1,\"expectedOptionVersion\":0}")
+                .andExpect(status().isBadRequest());
+        MvcResult renamed = owner.unsafe(put("/api/trips/{tripId}/options/{optionId}/name", tripId, optionId), rename)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.savedOptions[0].name").value("Later stay"))
+                .andExpect(jsonPath("$.savedOptions[0].version").value(1)).andReturn();
+        var after = mapper.readTree(renamed.getResponse().getContentAsString()).get("savedOptions").get(0);
+        assertEquals(before.get("startDate"), after.get("startDate"));
+        assertEquals(before.get("endDate"), after.get("endDate"));
+        assertEquals(before.get("selections"), after.get("selections"));
+        assertEquals(before.get("tally"), after.get("tally"));
+        assertEquals(nightsBefore, jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_stay_night_snapshot WHERE planned_itinerary_id = ?", Integer.class, optionRowId));
+
+        owner.unsafe(put("/api/trips/{tripId}/options/{optionId}/name", tripId, optionId), rename)
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+        owner.unsafe(put("/api/trips/{tripId}/options/{optionId}/name", tripId, optionId),
+                "{\"name\":\"Stale option\",\"expectedVersion\":2,\"expectedOptionVersion\":0}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+        assertEquals("Later stay", jdbc.queryForObject("SELECT name FROM detour_planned_itinerary WHERE id = ?", String.class, optionRowId));
+
+        long tripRowId = jdbc.queryForObject("SELECT id FROM detour_trip WHERE public_id = ?", Long.class, UUID.fromString(tripId));
+        UUID bookingId = UUID.randomUUID();
+        String reference = "HIST-" + bookingId.toString().substring(0, 8);
+        jdbc.update("INSERT INTO detour_booking (public_id, trip_id, planned_itinerary_id, booking_reference, status, grand_total_cents, idempotency_key, created_at, canceled_at) VALUES (?, ?, ?, ?, 'CANCELED', 100, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                bookingId, tripRowId, optionRowId, reference, bookingId.toString());
+        owner.unsafe(get("/api/trips/{tripId}", tripId), null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.savedOptions[0].booked").value(true));
+        owner.unsafe(get("/api/trips"), null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.upcoming[0].alternatives[1].booked").value(true));
+        owner.unsafe(put("/api/trips/{tripId}/options/{optionId}/name", tripId, optionId),
+                "{\"name\":\"Booked change\",\"expectedVersion\":2,\"expectedOptionVersion\":1}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("IMMUTABLE_BOOKED_OPTION"));
+        assertEquals(reference, jdbc.queryForObject("SELECT booking_reference FROM detour_booking WHERE planned_itinerary_id = ?", String.class, optionRowId));
+        assertEquals("Later stay", jdbc.queryForObject("SELECT name FROM detour_planned_itinerary WHERE id = ?", String.class, optionRowId));
+    }
+
+    @Test
     void sharedWorkingEditsAreNoOpAwareAndGuardBothVersions() throws Exception {
         Client owner = register("working-versions@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"), validRequest("\"travelerAges\":[25,30]"))

@@ -144,7 +144,7 @@ export function PostCancellationTriageModal({
               Open a Saved option in the existing Working plan to revalidate selections before booking.
             </p>
             {plannedAlternatives.length === 0 ? (
-              <p className="hint read-only-hint">No other Planned alternatives are saved on this trip.</p>
+              <p className="hint read-only-hint">No other Saved options are available on this trip.</p>
             ) : (
               <ul className="triage-alternatives-list">
                 {plannedAlternatives.map((alt) => {
@@ -156,7 +156,8 @@ export function PostCancellationTriageModal({
                   return (
                     <li key={alt.id} className="triage-alternative-item">
                       <div className="triage-alt-info">
-                        <strong>{alt.name || 'Saved option'} ({alt.id.slice(0, 8)}…)</strong>
+                        <strong>{alt.name || 'Saved option'}</strong>
+                        <span>{alt.startDate} to {alt.endDate}</span>
                         <span className="triage-alt-components">
                           {summaryParts.length > 0 ? summaryParts.join(' • ') : 'No components'}
                         </span>
@@ -169,7 +170,7 @@ export function PostCancellationTriageModal({
                       >
                         {pending && pendingAction === 'use-alternative'
                           ? 'Opening option…'
-                          : 'Open this option'}
+                          : `Open ${alt.name || 'this option'} as a copy`}
                       </button>
                     </li>
                   );

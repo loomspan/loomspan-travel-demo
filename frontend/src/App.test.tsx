@@ -52,8 +52,8 @@ describe('App identity experience', () => {
   });
 
   it('renames the same Trip while preserving its Saved option and reports a conflict', async () => {
-    const option = {id: 'option-1', name: 'April escape', startDate: '2027-03-20', endDate: '2027-03-25', lifecycle: 'DRAFT', version: 0, status: 'DRAFT', expired: false};
-    let summary = {id: 'trip-1', name: 'Original trip', label: 'Original trip', destinationKey: 'destination-sfo', destinationName: 'San Francisco', startDate: '2027-03-10', endDate: '2027-03-14', version: 2, temporalStatus: 'UPCOMING', draftCount: 1, plannedCount: 0, expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: [option]};
+    const option = {id: 'option-1', name: 'April escape', startDate: '2027-03-20', endDate: '2027-03-25', lifecycle: 'PLANNED', version: 0, status: 'PLANNED', expired: false};
+    let summary = {id: 'trip-1', name: 'Original trip', label: 'Original trip', destinationKey: 'destination-sfo', destinationName: 'San Francisco', startDate: '2027-03-10', endDate: '2027-03-14', version: 2, temporalStatus: 'UPCOMING', draftCount: 1, plannedCount: 1, expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: [option]};
     let rejectRename = true;
     fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
       if (url === '/api/profile') return json(200, {email: 'ada@example.test', upcoming: [summary], past: []});
@@ -358,7 +358,7 @@ describe('App identity experience', () => {
     }));
 
     expect(await screen.findByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
-    expect(screen.getByText('1 Draft')).toBeInTheDocument();
+    expect(screen.getByText('No saved options yet. Add a selection to the Working plan, name it, and save it here.')).toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Trips'})).toHaveAttribute('aria-current', 'page');
     fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [], past: []}));
     await user.click(screen.getByRole('button', {name: /Back to all trips/}));
@@ -418,8 +418,7 @@ describe('App identity experience', () => {
     expect(screen.getByRole('heading', {name: 'Past trips (1)'})).toBeInTheDocument();
     expect(screen.getByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
     expect(screen.getByRole('heading', {name: 'Munich — Mar 01–05, 2027'})).toBeInTheDocument();
-    expect(screen.getByText('2 Drafts')).toBeInTheDocument();
-    expect(screen.getByText('1 Planned itinerary')).toBeInTheDocument();
+    expect(screen.getByText('1 Saved option')).toBeInTheDocument();
     expect(screen.getByText('1 Expired')).toBeInTheDocument();
     expect(screen.queryByText(/Booked/)).not.toBeInTheDocument();
   });
@@ -755,13 +754,13 @@ describe('App identity experience', () => {
     await showTrips();
     await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
 
-    expect(await screen.findByRole('heading', {name: 'Revision changes applied'})).toBeInTheDocument();
+    expect(await screen.findByRole('heading', {name: 'Review changes to your Working plan'})).toBeInTheDocument();
     expect(screen.getByText(/Flight dates no longer match trip dates/)).toBeInTheDocument();
     expect(screen.getByText(/Traveler count increased/)).toBeInTheDocument();
     expect(screen.getByText(/units: 1 → 2/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', {name: 'Dismiss revision summary'}));
-    expect(screen.queryByRole('heading', {name: 'Revision changes applied'})).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Acknowledge date change summary'}));
+    expect(screen.queryByRole('heading', {name: 'Review changes to your Working plan'})).not.toBeInTheDocument();
   });
 
   it('confirms and executes scoped draft deletion, planned deletion, and trip deletion with server counts', async () => {
@@ -800,7 +799,7 @@ describe('App identity experience', () => {
 
     const dialog = screen.getByRole('dialog', {name: 'Delete San Francisco — Mar 10–14, 2027'});
     expect(dialog).toBeInTheDocument();
-    expect(screen.getByText(/1 Draft alternative\(s\) and 1 Planned itinerary\(ies\) will be removed\./)).toBeInTheDocument();
+    expect(screen.getByText(/Working plan and 1 Saved option\(s\) will be removed\./)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', {name: 'Delete trip'}));
 
@@ -900,7 +899,7 @@ describe('App identity experience', () => {
     await user.click(screen.getByRole('button', {name: 'Delete trip'}));
 
     expect(await screen.findByText(/The alternative counts on the server have changed/)).toBeInTheDocument();
-    expect(await screen.findByText(/2 Draft alternative\(s\) and 0 Planned itinerary\(ies\) will be removed\./)).toBeInTheDocument();
+    expect(await screen.findByText(/Working plan and 0 Saved option\(s\) will be removed\./)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', {name: 'Delete trip'}));
     expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1', expect.objectContaining({
@@ -1231,11 +1230,11 @@ describe('App identity experience', () => {
     expect(screen.getByLabelText('Destination')).not.toBeDisabled();
     expect(screen.getByLabelText('Departure date')).not.toBeDisabled();
 
-    expect(screen.getByRole('heading', {name: 'Revision changes applied'})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'Review changes to your Working plan'})).toBeInTheDocument();
     expect(screen.getByText(/Destination changed to Munich\./)).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', {name: 'Dismiss revision summary'}));
-    expect(screen.queryByRole('heading', {name: 'Revision changes applied'})).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Acknowledge date change summary'}));
+    expect(screen.queryByRole('heading', {name: 'Review changes to your Working plan'})).not.toBeInTheDocument();
   });
 
   it('restores focus to section heading when deleted trip card button is removed from DOM', async () => {

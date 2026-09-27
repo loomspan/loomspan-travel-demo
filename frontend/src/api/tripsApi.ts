@@ -9,6 +9,7 @@ export type AlternativeProfileSummary = {
   version: number | null;
   status: 'DRAFT' | 'PLANNED' | 'EXPIRED' | string;
   expired: boolean;
+  booked?: boolean;
 };
 
 export type TripProfileSummary = {
@@ -366,6 +367,7 @@ export type PlannedResponse = {
   startDate?: string;
   endDate?: string;
   version?: number;
+  booked?: boolean;
   selections: DraftSelectionResponse;
   tally?: ItineraryTallyResponse;
 };
@@ -377,6 +379,7 @@ export type AlternativeResponse = {
   endDate?: string;
   lifecycle: 'DRAFT' | 'PLANNED' | string;
   version: number | null;
+  booked?: boolean;
   selections: DraftSelectionResponse;
   tally?: ItineraryTallyResponse;
 };
@@ -450,6 +453,7 @@ export type SharedDetailsUpdateRequest = {
 
 export type OptionSaveRequest = {expectedVersion: number; expectedDraftVersion: number; name: string};
 export type OptionUpdateRequest = OptionSaveRequest & {expectedOptionVersion: number};
+export type OptionRenameRequest = {expectedVersion: number; expectedOptionVersion: number; name: string};
 export type OptionLoadRequest = {expectedVersion: number; expectedDraftVersion: number; expectedOptionVersion: number; replaceWorking: boolean};
 
 export type TripRevisionRequest = {
@@ -684,6 +688,9 @@ export const tripsApi = {
 
   updateOption: (tripId: string, optionId: string, payload: OptionUpdateRequest): Promise<TripResponse> =>
     request<TripResponse>(`/api/trips/${tripId}/options/${optionId}`, 'PUT', payload),
+
+  renameOption: (tripId: string, optionId: string, payload: OptionRenameRequest): Promise<TripResponse> =>
+    request<TripResponse>(`/api/trips/${tripId}/options/${optionId}/name`, 'PUT', payload),
 
   loadOption: (tripId: string, optionId: string, payload: OptionLoadRequest): Promise<TripResponse> =>
     request<TripResponse>(`/api/trips/${tripId}/options/${optionId}/load`, 'POST', payload),

@@ -23,9 +23,9 @@ it('discloses the complete demo scope and lets keyboard users return to the page
   expect(panel).toHaveTextContent('San Francisco, Munich, or Mexico City');
   expect(panel).toHaveTextContent('March 2027');
   expect(panel).toHaveTextContent('Start with Plan Trip, Airfare, or Stay');
-  expect(panel).toHaveTextContent('Add other components explicitly');
-  expect(panel).toHaveTextContent('save a Draft as Planned');
-  expect(panel).toHaveTextContent('compare up to three Planned alternatives');
+  expect(panel).toHaveTextContent('Build one Working plan');
+  expect(panel).toHaveTextContent('save named options');
+  expect(panel).toHaveTextContent('compare up to three options');
   expect(panel).toHaveTextContent('review one to book');
   expect(panel).toHaveTextContent('cancel an active Booking only before its departure date begins');
   expect(panel).toHaveTextContent('America/Los_Angeles');

@@ -78,7 +78,9 @@ describe('Progressive Trip Builder Experience', () => {
 
   it('saves a named option only after the explicit action', async () => {
     const user = userEvent.setup();
-    const trip = createMockTrip();
+    const trip = createMockTrip({drafts: [{id: 'draft-1', version: 0, selections: {
+      airfare: {outboundDescription: 'Outbound', returnDescription: 'Return'} as DraftSelectionResponse['airfare'], stay: null, rental: null,
+    }}]});
     const saved = createMockTrip({version: 1, planned: [{
       id: 'option-1', name: 'Early March', version: 0,
       selections: {airfare: null, stay: null, rental: null},
@@ -122,17 +124,17 @@ describe('Progressive Trip Builder Experience', () => {
     vi.setSystemTime(new Date('2027-03-15T20:00:00Z'));
     try {
       const trip = createMockTrip({
+        planned: [{id: 'option-1', name: 'Later', version: 0, startDate: '2027-03-20',
+          endDate: '2027-03-24', selections: {airfare: null, stay: null, rental: null}}],
         alternatives: [{id: 'draft-1', lifecycle: 'DRAFT', version: 0,
           startDate: '2027-03-10', selections: {airfare: null, stay: null, rental: null}},
         {id: 'option-1', lifecycle: 'PLANNED', version: 0, name: 'Later',
           startDate: '2027-03-20', selections: {airfare: null, stay: null, rental: null}}],
       });
       render(<TripWorkspace initialTrip={trip} isExpired onBack={() => {}} onTripDeleted={() => {}} />);
-      const working = screen.getByRole('heading', {name: 'Working plan'}).closest('article');
       const later = screen.getByRole('heading', {name: 'Later'}).closest('article');
-      expect(working).not.toBeNull();
       expect(later).not.toBeNull();
-      expect(within(working!).getByText('Expired')).toBeInTheDocument();
+      expect(screen.getByText('Expired')).toBeInTheDocument();
       expect(within(later!).queryByText('Expired')).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
@@ -166,8 +168,8 @@ describe('Progressive Trip Builder Experience', () => {
     render(<App />);
     await showProfile();
     await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
-    expect(await screen.findByRole('heading', {name: 'Progressive Trip Builder'})).toBeInTheDocument();
-    const draftTotal = screen.getByRole('heading', {name: /Draft totals/});
+    expect(await screen.findByRole('heading', {name: 'Working plan'})).toBeInTheDocument();
+    const draftTotal = screen.getByRole('heading', {name: /Working plan totals/});
     expect(draftTotal).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', {name: 'Home'}));
@@ -176,8 +178,8 @@ describe('Progressive Trip Builder Experience', () => {
     expect(screen.getByText('ada@example.test')).toBeInTheDocument();
     await user.click(screen.getByRole('button', {name: 'Home'}));
     await user.click(screen.getByRole('button', {name: `Return to ${trip.label}`}));
-    expect(screen.getByRole('heading', {name: 'Progressive Trip Builder'})).toBeInTheDocument();
-    expect(screen.getByRole('heading', {name: /Draft totals/})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'Working plan'})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /Working plan totals/})).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter((call) => ['POST', 'PUT', 'DELETE'].includes(call[1]?.method as string))).toHaveLength(0);
   });
 
@@ -201,7 +203,7 @@ describe('Progressive Trip Builder Experience', () => {
     await user.click(screen.getByRole('button', {name: 'Home'}));
     await act(async () => { resolveTrip(trip); await pendingTrip; });
     expect(screen.getByRole('heading', {name: 'Home'})).toBeInTheDocument();
-    expect(screen.queryByRole('heading', {name: 'Progressive Trip Builder'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', {name: 'Working plan'})).not.toBeInTheDocument();
     getTrip.mockRestore();
   });
 
@@ -343,7 +345,7 @@ describe('Progressive Trip Builder Experience', () => {
     })).mockResolvedValueOnce(json(200, anotherTrip));
     await user.click(screen.getByRole('button', {name: 'Trips'}));
     await user.click(await screen.findByRole('button', {name: `Open trip ${anotherTrip.label}`}));
-    expect(await screen.findByRole('heading', {name: 'Progressive Trip Builder'})).toBeInTheDocument();
+    expect(await screen.findByRole('heading', {name: 'Working plan'})).toBeInTheDocument();
     expect(screen.getByRole('button', {name: /add airfare/i})).toBeInTheDocument();
     expect(screen.queryByRole('heading', {name: /search flights/i})).not.toBeInTheDocument();
   });

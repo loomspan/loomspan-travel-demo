@@ -64,7 +64,7 @@ export function ItinerarySummaryTally({trip, selections}: ItinerarySummaryTallyP
   return (
     <section className="card itinerary-tally" aria-labelledby="tally-heading">
       <div className="tally-header">
-        <h3 id="tally-heading">Draft totals <span className="currency-note">(USD)</span></h3>
+        <h3 id="tally-heading">Working plan totals <span className="currency-note">(USD)</span></h3>
         {hasBudget && (
           <span
             className={`badge ${isOverBudget ? 'badge-warning' : 'badge-success'}`}

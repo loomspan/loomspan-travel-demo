@@ -79,6 +79,13 @@ public class TripController {
                 TripRequests.optionUpdate(request));
     }
 
+    @PutMapping("/{tripId}/options/{optionId}/name")
+    TripResponse renameOption(@AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId, @PathVariable String optionId, @RequestBody JsonNode request) {
+        return trips.renameOption(requirePrincipal(principal).userId(), tripId, optionId,
+                TripRequests.optionRename(request));
+    }
+
     @PostMapping("/{tripId}/options/{optionId}/load")
     TripResponse loadOption(@AuthenticationPrincipal DetourUserPrincipal principal,
             @PathVariable String tripId, @PathVariable String optionId, @RequestBody JsonNode request) {

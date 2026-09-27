@@ -10,6 +10,7 @@ export type ItineraryComparisonViewProps = {
   onBack: () => void;
   onSelectForBookingReview: (alternativeId: string) => void;
   hasActiveBooking?: boolean;
+  bookedOptionId?: string | null;
 };
 
 export function ItineraryComparisonView({
@@ -18,6 +19,7 @@ export function ItineraryComparisonView({
   onBack,
   onSelectForBookingReview,
   hasActiveBooking = false,
+  bookedOptionId,
 }: ItineraryComparisonViewProps) {
   const [activeMobileIndex, setActiveMobileIndex] = useState(0);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -52,6 +54,12 @@ export function ItineraryComparisonView({
   };
 
   const activeAlt = alternatives[activeMobileIndex] || alternatives[0];
+  const dateParts = new Intl.DateTimeFormat('en-CA', {timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit'}).formatToParts(new Date());
+  const today = `${dateParts.find(part => part.type === 'year')?.value}-${dateParts.find(part => part.type === 'month')?.value}-${dateParts.find(part => part.type === 'day')?.value}`;
+  const statusBadges = (alt: AlternativeResponse) => <>
+    {(alt.booked || (bookedOptionId ?? trip.booking?.plannedItineraryId) === alt.id) && <span className="badge badge-booked">Booked</span>}
+    {alt.startDate && alt.startDate <= today && <span className="badge badge-expired">Expired</span>}
+  </>;
 
   const budgetPosition = (alt: AlternativeResponse) => {
     if (!alt.tally) return <span>Budget position unavailable</span>;
@@ -99,10 +107,10 @@ export function ItineraryComparisonView({
         <div>
           <p className="eyebrow">ITINERARY COMPARISON</p>
           <h2 id="comparison-heading" tabIndex={-1}>
-            Comparing {alternatives.length} Planned itineraries
+            Comparing {alternatives.length} Saved options
           </h2>
           <p className="trip-meta">
-            {trip.destinationName} ({trip.originAirportCode} → {trip.destinationKey.replace('destination-', '').toUpperCase()}) • {trip.startDate} to {trip.endDate} • {trip.travelerCount} traveler{trip.travelerCount === 1 ? '' : 's'}
+            {trip.destinationName} ({trip.originAirportCode} → {trip.destinationKey.replace('destination-', '').toUpperCase()}) • {trip.travelerCount} traveler{trip.travelerCount === 1 ? '' : 's'}
           </p>
           <p className="hint">All amounts in USD.</p>
         </div>
@@ -111,7 +119,7 @@ export function ItineraryComparisonView({
       {/* Screen reader live announcement for active mobile switcher tab */}
       <div className="sr-only" aria-live="polite" role="status">
         {activeAlt
-          ? `Showing itinerary ${activeMobileIndex + 1} of ${alternatives.length}: Planned itinerary ${activeAlt.id}`
+          ? `Showing option ${activeMobileIndex + 1} of ${alternatives.length}: ${activeAlt.name || 'Saved option'}, ${activeAlt.startDate} to ${activeAlt.endDate}`
           : ''}
       </div>
 
@@ -137,7 +145,7 @@ export function ItineraryComparisonView({
                 onClick={() => setActiveMobileIndex(idx)}
                 onKeyDown={(e) => handleTabKeyDown(e, idx)}
               >
-                Itinerary {idx + 1} ({alt.id})
+                {alt.name || `Saved option ${idx + 1}`} ({alt.startDate} to {alt.endDate})
               </button>
             );
           })}
@@ -152,8 +160,9 @@ export function ItineraryComparisonView({
           >
             <div className="card mobile-alt-card">
               <div className="mobile-alt-header">
-                <h3>Planned itinerary #{activeMobileIndex + 1}</h3>
-                <span className="alternative-id">ID: {activeAlt.id.slice(0, 8)}…</span>
+                <h3>{activeAlt.name || 'Saved option'}</h3>
+                <p>{activeAlt.startDate} to {activeAlt.endDate}</p>
+                <div className="badge-row">{statusBadges(activeAlt)}</div>
                 <div className="mobile-price-banner">
                   <span className="grand-total-amount">
                     {formatTallyCents(activeAlt.tally?.grandTotalCents)}
@@ -166,7 +175,7 @@ export function ItineraryComparisonView({
                   disabled={hasActiveBooking}
                   aria-disabled={hasActiveBooking}
                   onClick={() => !hasActiveBooking && onSelectForBookingReview(activeAlt.id)}
-                  aria-label={`Select alternative ${activeAlt.id} for booking review`}
+                  aria-label={`Select ${activeAlt.name || 'saved option'} for booking review`}
                 >
                   Select for Booking Review
                 </button>
@@ -301,7 +310,7 @@ export function ItineraryComparisonView({
               <th scope="col" className="comparison-label-header">
                 Attribute
               </th>
-              {alternatives.map((alt, idx) => (
+              {alternatives.map((alt) => (
                 <th
                   key={alt.id}
                   scope="col"
@@ -309,8 +318,9 @@ export function ItineraryComparisonView({
                   className="comparison-alt-header"
                 >
                   <div className="alt-header-box">
-                    <span className="badge badge-planned">Planned itinerary #{idx + 1}</span>
-                    <span className="alternative-id">ID: {alt.id.slice(0, 8)}…</span>
+                    <span className="badge badge-planned">{alt.name || 'Saved option'}</span>
+                    <p>{alt.startDate} to {alt.endDate}</p>
+                    <div className="badge-row">{statusBadges(alt)}</div>
                     <div className="header-grand-total">
                       {formatTallyCents(alt.tally?.grandTotalCents)}
                     </div>
@@ -323,7 +333,7 @@ export function ItineraryComparisonView({
                       disabled={hasActiveBooking}
                       aria-disabled={hasActiveBooking}
                       onClick={() => !hasActiveBooking && onSelectForBookingReview(alt.id)}
-                      aria-label={`Select alternative ${alt.id} for booking review`}
+                      aria-label={`Select ${alt.name || 'saved option'} for booking review`}
                     >
                       Select for Booking Review
                     </button>

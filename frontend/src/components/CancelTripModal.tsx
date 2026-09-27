@@ -130,7 +130,7 @@ export function CancelTripModal({
               <strong>Booking history permanently retained:</strong> All past reservations, confirmation codes, and cancellation timestamps will be saved permanently.
             </li>
             <li>
-              <strong>Alternatives become read-only:</strong> All Draft and Planned itineraries on this trip will be locked and cannot be edited or booked.
+              <strong>Plans become read-only:</strong> The Working plan and all Saved options on this trip will be locked and cannot be edited or booked.
             </li>
             <li>
               <strong>Duplication available:</strong> You can duplicate this trip into a fresh travel plan at any time to revise dates, destinations, or itineraries.

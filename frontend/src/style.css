@@ -128,8 +128,13 @@ h1, h2 { color: #12333c; } h1 { margin: 0; font-family: Georgia, serif; font-siz
 .alternative-card-header { margin-bottom: 0.75rem; }
 .badge-row { display: flex; gap: 0.4rem; align-items: center; margin-bottom: 0.25rem; }
 .alternative-card-title { margin: 0.25rem 0 0.1rem; font-size: 1.1rem; color: #12333c; }
+.alternative-card-title, .trip-card-title, .alternative-summary-meta, .alt-header-box { overflow-wrap: anywhere; }
 .alternative-card-content { margin: 0.75rem 0; font-size: 0.9rem; }
 .alternative-card-actions { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem; }
+.alternative-card-actions button { white-space: normal; overflow-wrap: anywhere; }
+.option-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; min-width: 0; }
+.option-actions input { flex: 1 1 12rem; min-width: 0; max-width: 100%; }
+.option-actions .hint { flex-basis: 100%; }
 .secondary-action-button { min-height: 2.4rem; padding: 0.4rem 0.85rem; border: 1px solid #17614f; border-radius: 0.35rem; background: #f0f7f5; color: #17614f; font-weight: 600; cursor: pointer; }
 .secondary-action-button:hover { background: #e0eee9; }
 .delete-description { margin: 0.5rem 0 1rem; line-height: 1.45; }

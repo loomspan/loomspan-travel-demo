@@ -49,7 +49,7 @@ export function TripRevisionModal({
     hint ??
     (isDuplicate
       ? 'Duplicate this trip into a fresh active travel plan.'
-      : 'Because this trip has Planned alternatives, modifying destination, dates, or travelers creates a new revised Trip copy.');
+      : 'Because this trip has Saved options, modifying destination, dates, or travelers creates a new revised Trip copy.');
 
   const [destinationKey, setDestinationKey] = useState(trip.destinationKey);
   const [startDate, setStartDate] = useState(trip.startDate);
@@ -134,7 +134,7 @@ export function TripRevisionModal({
     const count = parseInt(travelerCount, 10);
     if (isNaN(count) || count < 1 || count > 8) errors.travelerCount = 'Traveler count must be between 1 and 8.';
     if (selectedPlannedIds.length === 0) {
-      errors.sourcePlanned = 'Select at least one Planned alternative to copy into the revised trip.';
+      errors.sourcePlanned = 'Select at least one Saved option to copy into the revised trip.';
     }
 
     if (Object.keys(errors).length > 0) {
@@ -271,14 +271,14 @@ export function TripRevisionModal({
 
           <div className="field">
             <fieldset>
-              <legend>Planned alternatives to copy</legend>
+              <legend>Saved options to copy</legend>
               {(trip.planned || []).length === 0 ? (
                 <p className="hint read-only-hint">
-                  This trip has no planned alternatives to copy. At least one planned alternative is required to duplicate.
+                  This trip has no Saved options to copy. At least one Saved option is required to duplicate.
                 </p>
               ) : (
                 <>
-                  <p className="hint">Selected itineraries will be revalidated and added as Drafts in the new trip:</p>
+                  <p className="hint">Selected options will be revalidated and saved as options in the new Trip. Its Working plan starts separately:</p>
                   {(trip.planned || []).map((p) => (
                     <label key={p.id} className="checkbox-label">
                       <input
@@ -286,7 +286,7 @@ export function TripRevisionModal({
                         checked={selectedPlannedIds.includes(p.id)}
                         onChange={() => togglePlannedId(p.id)}
                       />
-                      <span>Planned snapshot ({p.id.slice(0, 8)}…)</span>
+                      <span>{p.name || 'Saved option'}{p.startDate && p.endDate ? ` (${p.startDate} to ${p.endDate})` : ''}</span>
                     </label>
                   ))}
                   {fieldErrors.sourcePlanned && (

@@ -16,12 +16,16 @@ public record AlternativeResponse(UUID id, String lifecycle, Long version, Draft
     }
 }
 record PlannedResponse(UUID id, DraftSelectionResponse selections, ItineraryTallyResponse tally,
-        String name, LocalDate startDate, LocalDate endDate, long version) {
+        String name, LocalDate startDate, LocalDate endDate, long version, boolean booked) {
+    public PlannedResponse(UUID id, DraftSelectionResponse selections, ItineraryTallyResponse tally,
+            String name, LocalDate startDate, LocalDate endDate, long version) {
+        this(id, selections, tally, name, startDate, endDate, version, false);
+    }
     public PlannedResponse(UUID id, DraftSelectionResponse selections, ItineraryTallyResponse tally) {
-        this(id, selections, tally, null, null, null, 0);
+        this(id, selections, tally, null, null, null, 0, false);
     }
     public PlannedResponse(UUID id, DraftSelectionResponse selections) {
-        this(id, selections, null, null, null, null, 0);
+        this(id, selections, null, null, null, null, 0, false);
     }
 }
 

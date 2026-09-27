@@ -14,6 +14,8 @@ function createMockPlannedAlternative(
 ): AlternativeResponse {
   return {
     id,
+    name: `Choice ${id.split('-').at(-1)}`,
+    startDate: '2027-03-10', endDate: '2027-03-14',
     lifecycle: 'PLANNED',
     version: null,
     selections: {
@@ -97,12 +99,14 @@ function createMockPlannedAlternative(
 
 function createMockTripWithPlanned(plannedCount: number): TripResponse {
   const alternatives: AlternativeResponse[] = [];
-  const planned: Array<{id: string; selections: any; tally: any}> = [];
+  const planned: TripResponse['planned'] = [];
 
   for (let i = 1; i <= plannedCount; i++) {
     const isOver = i === 2;
     const isThird = i === 3;
     const alt = createMockPlannedAlternative(`planned-${i}`, {
+      startDate: i === 2 ? '2027-03-15' : '2027-03-10',
+      endDate: i === 2 ? '2027-03-19' : '2027-03-14',
       selections: {
         airfare: {
           outboundFlightInstanceId: 100 + i,
@@ -189,7 +193,7 @@ function createMockTripWithPlanned(plannedCount: number): TripResponse {
     });
 
     alternatives.push(alt);
-    planned.push({id: alt.id, selections: alt.selections, tally: alt.tally});
+    planned.push({...alt, version: 0});
   }
 
   return {
@@ -240,15 +244,15 @@ describe('Itinerary Comparison and Booking Selection', () => {
     />);
     await user.click(screen.getByRole('button', {name: 'Trips'}));
     await user.click(screen.getByRole('button', {name: `Open trip ${trip.label}`}));
-    const choices = screen.getAllByRole('checkbox', {name: /select for comparison/i});
+    const choices = screen.getAllByRole('checkbox', {name: /select .* for comparison/i});
     await user.click(choices[0]);
     await user.click(choices[1]);
-    await user.click(screen.getByRole('button', {name: /compare selected itineraries/i}));
-    await waitFor(() => expect(screen.getByRole('heading', {name: 'Comparing 2 Planned itineraries'})).toHaveFocus());
+    await user.click(screen.getByRole('button', {name: /compare selected options/i}));
+    await waitFor(() => expect(screen.getByRole('heading', {name: 'Comparing 2 Saved options'})).toHaveFocus());
     await user.click(screen.getByRole('button', {name: 'Home'}));
     await waitFor(() => expect(screen.getByRole('heading', {name: 'Home'})).toHaveFocus());
     await user.click(screen.getByRole('button', {name: `Return to ${trip.label}`}));
-    await waitFor(() => expect(screen.getByRole('heading', {name: 'Comparing 2 Planned itineraries'})).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole('heading', {name: 'Comparing 2 Saved options'})).toHaveFocus());
   });
 
   // AC 1: Enforces 2-to-3 planned alternative selection constraint and enables comparison launch
@@ -265,11 +269,11 @@ describe('Itinerary Comparison and Booking Selection', () => {
     );
 
     // Initial state: Compare button should exist and be disabled (0 selected)
-    const compareBtn = screen.getByRole('button', {name: /compare selected itineraries/i});
+    const compareBtn = screen.getByRole('button', {name: /compare selected options/i});
     expect(compareBtn).toBeDisabled();
 
     // Checkboxes for each planned alternative
-    const compareCheckboxes = screen.getAllByRole('checkbox', {name: /select for comparison/i});
+    const compareCheckboxes = screen.getAllByRole('checkbox', {name: /select .* for comparison/i});
     expect(compareCheckboxes).toHaveLength(3);
 
     // Select 1 alternative -> still disabled
@@ -301,7 +305,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
       />
     );
 
-    const compareCheckboxes = screen.getAllByRole('checkbox', {name: /select for comparison/i});
+    const compareCheckboxes = screen.getAllByRole('checkbox', {name: /select .* for comparison/i});
     expect(compareCheckboxes).toHaveLength(4);
 
     // Select 3 alternatives
@@ -337,7 +341,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     expect(compareCheckboxes[1]).not.toBeChecked();
     expect(compareCheckboxes[2]).not.toBeChecked();
     expect(compareCheckboxes[3]).not.toBeChecked();
-    expect(screen.getByRole('button', {name: /compare selected itineraries/i})).toBeDisabled();
+    expect(screen.getByRole('button', {name: /compare selected options/i})).toBeDisabled();
   });
 
   // AC 2 & 3: Desktop side-by-side comparison matrix with complete attribute columns
@@ -354,23 +358,25 @@ describe('Itinerary Comparison and Booking Selection', () => {
     );
 
     // Select 2 alternatives and launch comparison
-    const checkboxes = screen.getAllByRole('checkbox', {name: /select for comparison/i});
+    const checkboxes = screen.getAllByRole('checkbox', {name: /select .* for comparison/i});
     await user.click(checkboxes[0]);
     await user.click(checkboxes[1]);
 
-    const compareBtn = screen.getByRole('button', {name: /compare selected itineraries/i});
+    const compareBtn = screen.getByRole('button', {name: /compare selected options/i});
     await user.click(compareBtn);
 
     // Comparison view rendered
-    expect(screen.getByRole('heading', {name: /comparing 2 planned itineraries/i})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /comparing 2 saved options/i})).toBeInTheDocument();
 
     // Native table semantics retain row and column headers.
     const grid = screen.getByRole('table', {name: /itinerary comparison table/i});
     expect(grid).not.toHaveAttribute('role', 'grid');
 
     // Column headers for each alternative
-    expect(within(grid).getByText(/planned itinerary #1/i)).toBeInTheDocument();
-    expect(within(grid).getByText(/planned itinerary #2/i)).toBeInTheDocument();
+    expect(within(grid).getByText(/choice 1/i)).toBeInTheDocument();
+    expect(within(grid).getByText(/choice 2/i)).toBeInTheDocument();
+    expect(within(grid).getByText('2027-03-10 to 2027-03-14')).toBeInTheDocument();
+    expect(within(grid).getByText('2027-03-15 to 2027-03-19')).toBeInTheDocument();
     expect(within(grid).getByText('Airfare total')).toBeInTheDocument();
     expect(within(grid).getByText('Stay total')).toBeInTheDocument();
     expect(within(grid).getByText('Rental Car total')).toBeInTheDocument();
@@ -433,7 +439,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
 
     // Live region announces Tab 1
     const liveRegion = screen.getByRole('status');
-    expect(liveRegion).toHaveTextContent(/showing itinerary 1 of 3: planned itinerary planned-/i);
+    expect(liveRegion).toHaveTextContent(/showing option 1 of 3: choice 1/i);
 
     // Focus first tab and use ArrowRight key
     tabs[0].focus();
@@ -441,12 +447,12 @@ describe('Itinerary Comparison and Booking Selection', () => {
     expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
     expect(document.activeElement).toBe(tabs[1]);
     expect(document.getElementById(tabs[1].getAttribute('aria-controls')!)).toHaveAttribute('role', 'tabpanel');
-    expect(liveRegion).toHaveTextContent(/showing itinerary 2 of 3: planned itinerary planned-/i);
+    expect(liveRegion).toHaveTextContent(/showing option 2 of 3: choice 2/i);
 
     // ArrowRight again moves to Tab 3
     await user.keyboard('{ArrowRight}');
     expect(tabs[2]).toHaveAttribute('aria-selected', 'true');
-    expect(liveRegion).toHaveTextContent(/showing itinerary 3 of 3: planned itinerary planned-/i);
+    expect(liveRegion).toHaveTextContent(/showing option 3 of 3: choice 3/i);
 
     // ArrowRight wraps to Tab 1
     await user.keyboard('{ArrowRight}');
@@ -466,6 +472,30 @@ describe('Itinerary Comparison and Booking Selection', () => {
   });
 
   // AC 4: Missing optional components are visually and semantically distinguished from zero-cost selections
+  it('attaches booked and expired status to each named option in comparison', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2027-03-16T20:00:00Z'));
+    try {
+      const trip = createMockTripWithPlanned(2);
+      const options = trip.alternatives.map((alt, index) => ({...alt,
+        startDate: index === 0 ? '2027-03-10' : '2027-03-20',
+        endDate: index === 0 ? '2027-03-14' : '2027-03-24',
+      }));
+      render(<ItineraryComparisonView trip={trip} alternatives={options} bookedOptionId="planned-2"
+        onBack={() => {}} onSelectForBookingReview={() => {}} />);
+      const table = screen.getByRole('table', {name: /itinerary comparison table/i});
+      const columns = within(table).getAllByRole('columnheader');
+      expect(columns[1]).toHaveTextContent('Choice 1');
+      expect(columns[1]).toHaveTextContent('Expired');
+      expect(columns[1]).not.toHaveTextContent('Booked');
+      expect(columns[2]).toHaveTextContent('Choice 2');
+      expect(columns[2]).toHaveTextContent('Booked');
+      expect(columns[2]).not.toHaveTextContent('Expired');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('visually and semantically distinguishes missing optional components from zero-cost selections', async () => {
     const trip = createMockTripWithPlanned(2);
     // Alternative 2 has selections.rental === null
@@ -504,14 +534,14 @@ describe('Itinerary Comparison and Booking Selection', () => {
     );
 
     // Select alternatives and enter comparison view
-    const checkboxes = screen.getAllByRole('checkbox', {name: /select for comparison/i});
+    const checkboxes = screen.getAllByRole('checkbox', {name: /select .* for comparison/i});
     await user.click(checkboxes[0]);
     await user.click(checkboxes[1]);
-    await user.click(screen.getByRole('button', {name: /compare selected itineraries/i}));
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', {name: /comparing 2 planned itineraries/i})));
+    await user.click(screen.getByRole('button', {name: /compare selected options/i}));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', {name: /comparing 2 saved options/i})));
 
     // In comparison view, click "Select for Booking Review" on Alternative 1
-    const reviewButtons = screen.getAllByRole('button', {name: /select alternative planned-1 for booking review/i});
+    const reviewButtons = screen.getAllByRole('button', {name: /select choice 1 for booking review/i});
     await user.click(reviewButtons[0]);
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', {name: /review itinerary & component snapshots/i})));
 
@@ -550,8 +580,8 @@ describe('Itinerary Comparison and Booking Selection', () => {
     // Return back to comparison view
     const backBtn = screen.getByRole('button', {name: /← back to comparison/i});
     await user.click(backBtn);
-    expect(screen.getByRole('heading', {name: /comparing 2 planned itineraries/i})).toBeInTheDocument();
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', {name: /comparing 2 planned itineraries/i})));
+    expect(screen.getByRole('heading', {name: /comparing 2 saved options/i})).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', {name: /comparing 2 saved options/i})));
   });
 
   // AC 5: Transitions from standalone planned alternative card to booking review screen and returns to workspace
@@ -568,7 +598,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     );
 
     // Standalone planned card has "Select for Booking Review"
-    const selectBtn = screen.getByRole('button', {name: /select planned itinerary planned-1 for booking review/i});
+    const selectBtn = screen.getByRole('button', {name: /select choice 1 for booking review/i});
     expect(selectBtn).toBeInTheDocument();
     await user.click(selectBtn);
 
@@ -702,7 +732,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     );
 
     // Navigate to booking review
-    await user.click(screen.getByRole('button', {name: /select planned itinerary planned-1 for booking review/i}));
+    await user.click(screen.getByRole('button', {name: /select choice 1 for booking review/i}));
     expect(screen.getByRole('heading', {name: /review itinerary & component snapshots/i})).toBeInTheDocument();
 
     // Click Confirm Booking
@@ -759,7 +789,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
       />
     );
 
-    await user.click(screen.getByRole('button', {name: /select planned itinerary planned-1 for booking review/i}));
+    await user.click(screen.getByRole('button', {name: /select choice 1 for booking review/i}));
     const confirmBtn = screen.getByRole('button', {name: /confirm booking/i});
     await user.click(confirmBtn);
 
@@ -822,10 +852,10 @@ describe('Itinerary Comparison and Booking Selection', () => {
     // Planned-1 displays BOOKED badge and View Booking Details
     const bookedBadges = screen.getAllByText('Booking');
     expect(bookedBadges.length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', {name: /view booking details for itinerary planned-1/i})).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: /view booking details for choice 1/i})).toBeInTheDocument();
 
     // Planned-2 has "Select for Booking Review" disabled with single-booking hint
-    const reviewBtnAlt2 = screen.getByRole('button', {name: /select planned itinerary planned-2 for booking review/i});
+    const reviewBtnAlt2 = screen.getByRole('button', {name: /select choice 2 for booking review/i});
     expect(reviewBtnAlt2).toBeDisabled();
     expect(
       screen.getByText(/this trip already has an active booking\. only one active booking is permitted per trip\./i)
@@ -833,10 +863,10 @@ describe('Itinerary Comparison and Booking Selection', () => {
 
     // The one Working plan can be populated from a Saved option without creating another Draft.
     expect(screen.queryByRole('button', {name: /create empty draft/i})).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button', {name: /open for editing/i})).toHaveLength(2);
+    expect(screen.getAllByRole('button', {name: /open choice [12] as a copy/i})).toHaveLength(2);
 
     // Clicking "View Booking Details" navigates to confirmation view
-    await user.click(screen.getByRole('button', {name: /view booking details for itinerary planned-1/i}));
+    await user.click(screen.getByRole('button', {name: /view booking details for choice 1/i}));
     expect(screen.getByRole('heading', {name: /booking confirmed!/i})).toBeInTheDocument();
   });
 
@@ -855,7 +885,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     );
 
     // All "Select for Booking Review" buttons in comparison are disabled
-    const selectButtons = screen.getAllByRole('button', {name: /select alternative planned-[12] for booking review/i});
+    const selectButtons = screen.getAllByRole('button', {name: /select choice [12] for booking review/i});
     for (const btn of selectButtons) {
       expect(btn).toBeDisabled();
     }

@@ -126,7 +126,7 @@ export function ConfirmDeleteModal({
     if (isBookedTrip) {
       description = 'Trips with booking history cannot be permanently deleted.';
     } else {
-      description = `Permanently delete ${target.label} and all its contents? ${target.draftCount} Draft alternative(s) and ${target.plannedCount} Planned itinerary(ies) will be removed.`;
+      description = `Permanently delete ${target.label} and all its contents? Its Working plan and ${target.plannedCount} Saved option(s) will be removed.`;
     }
     confirmLabel = 'Delete trip';
   }

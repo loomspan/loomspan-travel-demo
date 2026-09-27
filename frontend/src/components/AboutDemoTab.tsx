@@ -23,7 +23,7 @@ export function AboutDemoTab() {
       <h2 id="about-demo-heading" ref={headingRef} tabIndex={-1}>About this demo</h2>
       <p>Suppliers, schedules, prices, availability, and bookings are fictional. No payment or real reservation occurs.</p>
       <p>Trips start at PDX, travel to San Francisco, Munich, or Mexico City, and use dates in March 2027.</p>
-      <p>Start with Plan Trip, Airfare, or Stay. Add other components explicitly, save a Draft as Planned, compare up to three Planned alternatives, then review one to book.</p>
+      <p>Start with Plan Trip, Airfare, or Stay. Build one Working plan, save named options, compare up to three options, then review one to book.</p>
       <p>You can cancel an active Booking only before its departure date begins in the PDX (America/Los_Angeles) timezone.</p>
       <button type="button" className="about-tab-close" onClick={close}>Close About this demo</button>
     </section>

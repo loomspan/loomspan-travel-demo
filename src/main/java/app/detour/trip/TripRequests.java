@@ -22,6 +22,7 @@ public final class TripRequests {
     public record WorkingDates(long expectedVersion, long expectedDraftVersion, LocalDate startDate, LocalDate endDate) { }
     public record OptionSave(long expectedVersion, long expectedDraftVersion, String name) { }
     public record OptionUpdate(long expectedVersion, long expectedDraftVersion, long expectedOptionVersion, String name) { }
+    public record OptionRename(long expectedVersion, long expectedOptionVersion, String name) { }
     public record OptionLoad(long expectedVersion, long expectedDraftVersion, long expectedOptionVersion,
             boolean replaceWorking) { }
 
@@ -80,6 +81,12 @@ public final class TripRequests {
         requireObject(body, Set.of("expectedVersion", "expectedDraftVersion", "expectedOptionVersion", "name"));
         return new OptionUpdate(version(body.get("expectedVersion"), "expectedVersion"),
                 version(body.get("expectedDraftVersion"), "expectedDraftVersion"),
+                version(body.get("expectedOptionVersion"), "expectedOptionVersion"), text(body.get("name"), "name"));
+    }
+
+    static OptionRename optionRename(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion", "expectedOptionVersion", "name"));
+        return new OptionRename(version(body.get("expectedVersion"), "expectedVersion"),
                 version(body.get("expectedOptionVersion"), "expectedOptionVersion"), text(body.get("name"), "name"));
     }
 

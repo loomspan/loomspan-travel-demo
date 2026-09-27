@@ -27,6 +27,7 @@ function createMockTrip(overrides: Partial<TripResponse> = {}): TripResponse {
     planned: [
       {
         id: 'alt-planned-1',
+        name: 'Harbor choice', version: 0,
         selections: {
           airfare: {
             outboundFlightInstanceId: 101,
@@ -256,7 +257,8 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
   // Test 3: Open a saved alternative in the existing Working plan.
   it('Triage option 1: opens a saved option in the one Working plan', async () => {
     const base = createMockTrip();
-    const trip = createMockTrip({drafts: [{id: 'working-1', version: 0,
+    const trip = createMockTrip({planned: base.planned.map(option => ({...option, startDate: '2027-03-10', endDate: '2027-03-14'})),
+      drafts: [{id: 'working-1', version: 0,
       selections: {airfare: null, stay: null, rental: null}}],
       alternatives: [{id: 'working-1', lifecycle: 'DRAFT', version: 0,
         selections: {airfare: null, stay: null, rental: null}}, ...base.alternatives]});
@@ -307,7 +309,8 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
     expect(triageDialog).toBeInTheDocument();
 
     // Choose the option, then explicitly replace the Working plan.
-    const useAltBtn = within(triageDialog).getByRole('button', {name: /open this option/i});
+    expect(within(triageDialog).getByText('2027-03-10 to 2027-03-14')).toBeInTheDocument();
+    const useAltBtn = within(triageDialog).getByRole('button', {name: /open harbor choice as a copy/i});
     await user.click(useAltBtn);
     const loadDialog = await screen.findByRole('dialog', {name: /open saved option for editing/i});
     await user.click(within(loadDialog).getByRole('button', {name: /replace working plan/i}));

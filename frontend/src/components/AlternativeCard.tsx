@@ -20,6 +20,7 @@ type AlternativeCardProps = {
   onPromoteDraft?: (draftId: string, version: number) => void;
   singleWorking?: boolean;
   onOpenForEditing?: (optionId: string) => void;
+  onRename?: (optionId: string) => void;
 };
 
 export function AlternativeCard({
@@ -41,6 +42,7 @@ export function AlternativeCard({
   onPromoteDraft,
   singleWorking = false,
   onOpenForEditing,
+  onRename,
 }: AlternativeCardProps) {
   const isDraft = alternative.lifecycle.toUpperCase() === 'DRAFT';
   const isPlanned = alternative.lifecycle.toUpperCase() === 'PLANNED';
@@ -57,21 +59,15 @@ export function AlternativeCard({
       <div className="alternative-card-header">
         <div>
           <div className="badge-row">
-            <span className={`badge ${isDraft ? 'badge-draft' : 'badge-planned'}`}>
-              {singleWorking ? (isDraft ? 'Working plan' : 'Saved option') : isDraft
-                ? alternative.version !== null
-                  ? `Draft v${alternative.version}`
-                  : 'Draft'
-                : 'Planned itinerary (read-only)'}
-            </span>
+            <span className="badge badge-planned">Saved option</span>
             {isBooked && <span className="badge badge-booked">Booking</span>}
             {tripCanceled && <span className="badge badge-canceled">Canceled Trip</span>}
             {tripExpired && <span className="badge badge-expired">Expired</span>}
           </div>
           <h4 id={`alt-heading-${alternative.id}`} className="alternative-card-title">
-            {singleWorking ? (isDraft ? 'Working plan' : alternative.name || 'Saved option') : isDraft ? 'Draft' : 'Planned itinerary'}
+            {alternative.name || 'Saved option'}
           </h4>
-          <span className="alternative-id">ID: {alternative.id.slice(0, 8)}…</span>
+          <p className="trip-meta">{alternative.startDate} to {alternative.endDate}</p>
         </div>
         {isPlanned && !tripCanceled && onToggleCompare && (
           <div className="compare-checkbox-wrapper">
@@ -82,7 +78,7 @@ export function AlternativeCard({
                 checked={isSelectedForCompare}
                 onChange={(e) => onToggleCompare(alternative.id, e.target.checked)}
               />
-              <span>Select for comparison</span>
+              <span>Select {alternative.name || 'saved option'} for comparison</span>
             </label>
           </div>
         )}
@@ -91,11 +87,11 @@ export function AlternativeCard({
       <div className="alternative-card-content">
         {tripCanceled ? (
           <p className="hint read-only-hint">
-            This trip is canceled. All alternatives are read-only.
+            This trip is canceled. Saved options are read-only.
           </p>
         ) : isPlanned ? (
           <p className="hint read-only-hint">
-            {singleWorking ? 'Open this option in the Working plan to edit it.' : 'This planned itinerary is snapshot-locked and read-only. Use “Duplicate to draft” to make modifications.'}
+            Open a copy in the Working plan to edit it. Your saved option stays available.
           </p>
         ) : null}
 
@@ -143,7 +139,7 @@ export function AlternativeCard({
                 type="button"
                 className="primary-button view-booking-details-btn"
                 onClick={onViewBookingDetails}
-                aria-label={`View booking details for itinerary ${alternative.id}`}
+                aria-label={`View booking details for ${alternative.name || 'saved option'}`}
               >
                 View Booking Details
               </button>
@@ -182,30 +178,32 @@ export function AlternativeCard({
           </>
         ) : (
           <>
-            {singleWorking && onOpenForEditing && <button type="button" className="secondary-action-button"
-              onClick={() => onOpenForEditing(alternative.id)}>Open for editing</button>}
+            {onOpenForEditing && <button type="button" className="secondary-action-button"
+              onClick={() => onOpenForEditing(alternative.id)}>Open {alternative.name || 'option'} as a copy in Working plan</button>}
+            {onRename && !isBooked && <button type="button" className="secondary-action-button"
+              onClick={() => onRename(alternative.id)}>Rename {alternative.name || 'option'}</button>}
             {!singleWorking && <button
               type="button"
               className="text-button delete-button"
               onClick={() => onDeletePlanned(alternative.id)}
-              aria-label={`Delete planned itinerary ${alternative.id}`}
+              aria-label={`Delete saved option ${alternative.name || ''}`}
             >
-              Delete planned itinerary
+              Delete saved option
             </button>}
             {!singleWorking && <button
               type="button"
               className="secondary-action-button"
               onClick={() => onDuplicatePlanned(alternative.id)}
-              aria-label={`Duplicate planned itinerary ${alternative.id} to draft`}
+              aria-label={`Copy ${alternative.name || 'saved option'} into Working plan`}
             >
-              Duplicate to draft
+              Copy into Working plan
             </button>}
             {isBooked && onViewBookingDetails ? (
               <button
                 type="button"
                 className="primary-button view-booking-details-btn"
                 onClick={onViewBookingDetails}
-                aria-label={`View booking details for itinerary ${alternative.id}`}
+                aria-label={`View booking details for ${alternative.name || 'saved option'}`}
               >
                 View Booking Details
               </button>
@@ -217,7 +215,7 @@ export function AlternativeCard({
                   disabled={hasActiveBooking}
                   aria-disabled={hasActiveBooking}
                   onClick={() => !hasActiveBooking && onSelectForBookingReview(alternative.id)}
-                  aria-label={`Select planned itinerary ${alternative.id} for booking review`}
+                  aria-label={`Select ${alternative.name || 'saved option'} for booking review`}
                 >
                   Select for Booking Review
                 </button>

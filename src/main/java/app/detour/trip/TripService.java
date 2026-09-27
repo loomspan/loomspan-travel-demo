@@ -208,7 +208,8 @@ public class TripService {
                         planned.lifecycle(),
                         planned.version(),
                         optionExpired ? "EXPIRED" : "PLANNED",
-                        optionExpired, planned.name(), planned.startDate(), planned.endDate()));
+                        optionExpired, planned.name(), planned.startDate(), planned.endDate(),
+                        bookingRepository.isPlannedItineraryBooked(planned.id())));
             }
 
             TripProfileSummary summary = new TripProfileSummary(
@@ -420,6 +421,24 @@ public class TripService {
         trips.replacePlannedSnapshots(option.id(), name, working.startDate(), working.endDate(), snapshot);
         return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow(),
                 optionReplacementSummary(working.publicId(), option.selections(), snapshot, trip.travelerCount()));
+    }
+
+    @Transactional
+    public TripResponse renameOption(long ownerUserId, String tripId, String optionId, TripRequests.OptionRename request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
+        PlannedItinerary option = ownedOption(trip, optionId);
+        String name = validateName(request.name());
+        if (bookingRepository.isPlannedItineraryBooked(option.id())) {
+            throw new ApiException(409, "IMMUTABLE_BOOKED_OPTION", "An option with booking history cannot be renamed.");
+        }
+        if (!trips.advanceVersionForOption(trip.id(), ownerUserId, request.expectedVersion(),
+                option.id(), request.expectedOptionVersion())) {
+            throw parentConflict(ownerUserId, trip.publicId());
+        }
+        trips.renameOption(option.id(), name);
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
     }
 
     @Transactional
@@ -836,7 +855,8 @@ public class TripService {
         List<PlannedResponse> planned = trip.planned().stream().map(item -> {
             ItineraryTallyResponse tally = tallyEngine.calculateTally(item.selections(), trip.travelerCount(), trip.budgetCents());
             return new PlannedResponse(item.publicId(), selectionResponse(item.selections()), tally,
-                    item.name(), item.startDate(), item.endDate(), item.version());
+                    item.name(), item.startDate(), item.endDate(), item.version(),
+                    bookingRepository.isPlannedItineraryBooked(item.id()));
         }).toList();
 
         List<AlternativeResponse> alternatives = new ArrayList<>();
