@@ -132,7 +132,7 @@ export function CancelBookingModal({
               <strong>Booking history retained:</strong> The booking reference and full cancellation record will be preserved in your Trip history for future reference.
             </li>
             <li>
-              <strong>Trip remains active:</strong> Your trip remains open and active for planning, allowing you to select an alternative or start a new draft.
+              <strong>Trip remains active:</strong> Your Trip remains open for planning. You can continue its Working plan or open a Saved option in Working.
             </li>
           </ul>
         </div>

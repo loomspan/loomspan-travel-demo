@@ -56,15 +56,15 @@ class TripApplicationRestartIntegrationTest {
                         (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit'), 1)
                     """, UUID.fromString(draftId));
 
-            HttpResponse<String> promoted = request(base, "POST", "/api/trips/" + tripId + "/drafts/" + draftId + "/plan", sessionCookie + "|" + csrf,
-                    "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}").send();
+            HttpResponse<String> promoted = request(base, "POST", "/api/trips/" + tripId + "/options", sessionCookie + "|" + csrf,
+                    "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}").send();
             assertEquals(201, promoted.statusCode());
             var promotedBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(promoted.body());
             plannedId = promotedBody.get("planned").get(0).get("id").asString();
             copiedFare = promotedBody.get("planned").get(0).get("selections").get("airfare").get("outboundBaseFareCents").asLong();
 
-            HttpResponse<String> duplicated = request(base, "POST", "/api/trips/" + tripId + "/drafts/" + draftId + "/plan", sessionCookie + "|" + csrf,
-                    "{\"expectedVersion\":1,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}").send();
+            HttpResponse<String> duplicated = request(base, "POST", "/api/trips/" + tripId + "/options", sessionCookie + "|" + csrf,
+                    "{\"name\":\"Saved option 2\",\"expectedVersion\":1,\"expectedDraftVersion\":0}").send();
             assertEquals(201, duplicated.statusCode());
             var dupBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(duplicated.body());
             duplicatedDraftId = dupBody.get("planned").get(1).get("id").asString();
@@ -140,8 +140,8 @@ class TripApplicationRestartIntegrationTest {
                         (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit'), 1)
                     """, UUID.fromString(draftId));
 
-            HttpResponse<String> promoted = request(base, "POST", "/api/trips/" + originalTripId + "/drafts/" + draftId + "/plan", sessionCookie + "|" + csrf,
-                    "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}").send();
+            HttpResponse<String> promoted = request(base, "POST", "/api/trips/" + originalTripId + "/options", sessionCookie + "|" + csrf,
+                    "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}").send();
             assertEquals(201, promoted.statusCode());
             var promotedBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(promoted.body());
             plannedId = promotedBody.get("planned").get(0).get("id").asString();

@@ -16,8 +16,6 @@ import {ItineraryComparisonView} from './ItineraryComparisonView';
 import {BookingReviewView} from './BookingReviewView';
 import {BookingConfirmationView} from './BookingConfirmationView';
 import {RevisionSummaryBanner} from './RevisionSummaryBanner';
-import {DraftReadinessBanner} from './DraftReadinessBanner';
-import {BudgetOverageModal} from './BudgetOverageModal';
 import {TripRevisionModal} from './TripRevisionModal';
 import {ConfirmDeleteModal, type DeleteTarget} from './ConfirmDeleteModal';
 import {CancelBookingModal} from './CancelBookingModal';
@@ -159,7 +157,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
   const [componentMutationPending, setComponentMutationPending] = useState(false);
   const [workingMutationFailed, setWorkingMutationFailed] = useState(false);
 
-  const [promotionPending, setPromotionPending] = useState(false);
   const [optionName, setOptionName] = useState('');
   const [editingOptionId, setEditingOptionId] = useState<string | null>(null);
   const [updateConfirmationOpen, setUpdateConfirmationOpen] = useState(false);
@@ -212,19 +209,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [activeOptionDialog, optionActionPending]);
-  const [readinessIssues, setReadinessIssues] = useState<Record<string, string> | null>(null);
-  const [isReadinessBannerOpen, setIsReadinessBannerOpen] = useState(false);
-  const [isOverageModalOpen, setIsOverageModalOpen] = useState(false);
-  const [overageDetails, setOverageDetails] = useState<{
-    budgetCents: number;
-    grandTotalCents: number;
-    budgetOverageCents: number;
-    draftId: string;
-    draftVersion: number;
-  } | null>(null);
-  const [overageErrorMessage, setOverageErrorMessage] = useState<string | undefined>();
-  const [budgetOverageAcknowledged, setBudgetOverageAcknowledged] = useState(false);
-  const [highlightedSlot, setHighlightedSlot] = useState<'airfare' | 'stay' | 'rental' | null>(null);
 
   const [selectedForCompareIds, setSelectedForCompareIds] = useState<string[]>([]);
   const [compareNotification, setCompareNotification] = useState<string | undefined>();
@@ -242,7 +226,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
 
   const [isTriageModalOpen, setIsTriageModalOpen] = useState(false);
   const [triagePending, setTriagePending] = useState(false);
-  const [triageAction, setTriageAction] = useState<'use-alternative' | 'create-draft' | null>(null);
+  const [triageAction, setTriageAction] = useState<'use-alternative' | null>(null);
   const [triageError, setTriageError] = useState<string | undefined>();
 
   const [isCancelTripModalOpen, setIsCancelTripModalOpen] = useState(false);
@@ -340,20 +324,10 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     }
   }, [activeDraft?.selections?.rental]);
 
-  useEffect(() => {
-    if (highlightedSlot === 'rental' && rentalMode !== 'hidden') {
-      const el = document.getElementById('rental-slot-heading');
-      if (el && document.activeElement !== el) {
-        scrollToIssue(el);
-      }
-    }
-  }, [highlightedSlot, rentalMode]);
-
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialMount = useRef(true);
   const isSavingRef = useRef(false);
   const pendingSaveRef = useRef(false);
-  const isPromotingRef = useRef(false);
 
   const applyTripState = useCallback((t: TripResponse) => {
     setTrip((prev) => {
@@ -640,54 +614,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     }
   };
 
-  // Alternative handlers
-  const handleCreateEmptyDraft = async () => {
-    try {
-      const updated = await tripsApi.createDraft(trip.id, {expectedVersion: trip.version});
-      setTrip(updated);
-      setBudgetOverageAcknowledged(false);
-      setAutosaveStatus('saved');
-      setAutosaveMessage('Empty draft created.');
-    } catch (err) {
-      const failure = err instanceof IdentityApiError ? err.message : 'Could not create draft.';
-      setAutosaveStatus('error');
-      setAutosaveMessage(failure);
-    }
-  };
-
-  const handleDuplicateDraft = async (draftId: string, version: number) => {
-    try {
-      const updated = await tripsApi.duplicateDraft(trip.id, draftId, {
-        expectedVersion: trip.version,
-        expectedDraftVersion: version,
-      });
-      setTrip(updated);
-      setBudgetOverageAcknowledged(false);
-      setAutosaveStatus('saved');
-      setAutosaveMessage('Draft duplicated.');
-    } catch (err) {
-      const failure = err instanceof IdentityApiError ? err.message : 'Could not duplicate draft.';
-      setAutosaveStatus('error');
-      setAutosaveMessage(failure);
-    }
-  };
-
-  const handleDuplicatePlanned = async (alternativeId: string) => {
-    try {
-      const updated = await tripsApi.duplicateAlternative(trip.id, alternativeId, {
-        expectedVersion: trip.version,
-      });
-      setTrip(updated);
-      setBudgetOverageAcknowledged(false);
-      setAutosaveStatus('saved');
-      setAutosaveMessage('Planned itinerary duplicated to draft.');
-    } catch (err) {
-      const failure = err instanceof IdentityApiError ? err.message : 'Could not duplicate alternative.';
-      setAutosaveStatus('error');
-      setAutosaveMessage(failure);
-    }
-  };
-
   // Component Selection handlers
   const handleSelectAirfare = async (option: FlightCombinationResponse) => {
     if (!activeDraft) return;
@@ -703,7 +629,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       });
       applyTripState(updatedTrip);
       setWorkingMutationFailed(false);
-      setBudgetOverageAcknowledged(false);
       setAirfareMode('selected');
       setAutosaveStatus('saved');
       setAutosaveMessage('Flight saved to Working plan.');
@@ -735,7 +660,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       });
       applyTripState(updatedTrip);
       setWorkingMutationFailed(false);
-      setBudgetOverageAcknowledged(false);
       setStayMode('selected');
       setAutosaveStatus('saved');
       setAutosaveMessage('Stay saved to Working plan.');
@@ -772,7 +696,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       });
       applyTripState(updatedTrip);
       setWorkingMutationFailed(false);
-      setBudgetOverageAcknowledged(false);
       setRentalMode('selected');
       setAutosaveStatus('saved');
       setAutosaveMessage('Rental car saved to Working plan.');
@@ -852,7 +775,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       }
       applyTripState(updatedTrip);
       setWorkingMutationFailed(false);
-      setBudgetOverageAcknowledged(false);
       const title = removeTarget.title;
       setRemoveTarget(null);
       setAutosaveStatus('saved');
@@ -875,26 +797,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     }
   };
 
-  // Delete modal triggers
-  const promptDeleteDraft = (draftId: string, version: number) => {
-    setDeleteError(undefined);
-    setDeleteTarget({
-      kind: 'draft',
-      tripId: trip.id,
-      draftId,
-      draftVersion: version,
-    });
-  };
-
-  const promptDeletePlanned = (alternativeId: string) => {
-    setDeleteError(undefined);
-    setDeleteTarget({
-      kind: 'planned',
-      tripId: trip.id,
-      alternativeId,
-    });
-  };
-
   const promptDeleteTrip = () => {
     setDeleteError(undefined);
     setDeleteTarget({
@@ -913,25 +815,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     setDeleteError(undefined);
 
     try {
-      if (deleteTarget.kind === 'draft') {
-        const updated = await tripsApi.deleteDraft(deleteTarget.tripId, deleteTarget.draftId, {
-          expectedVersion: trip.version,
-          expectedDraftVersion: deleteTarget.draftVersion,
-        });
-        setTrip(updated);
-        setDeleteTarget(null);
-        setAutosaveStatus('saved');
-        setAutosaveMessage('Draft deleted.');
-      } else if (deleteTarget.kind === 'planned') {
-        const updated = await tripsApi.deleteAlternative(deleteTarget.tripId, deleteTarget.alternativeId, {
-          expectedVersion: trip.version,
-          confirmed: true,
-        });
-        setTrip(updated);
-        setDeleteTarget(null);
-        setAutosaveStatus('saved');
-        setAutosaveMessage('Planned itinerary deleted.');
-      } else if (deleteTarget.kind === 'trip') {
+      if (deleteTarget.kind === 'trip') {
         await tripsApi.deleteTrip(deleteTarget.tripId, {
           expectedVersion: trip.version,
           expectedDraftCount: deleteTarget.draftCount,
@@ -944,7 +828,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     } catch (err) {
       if (err instanceof IdentityApiError) {
         if (err.code === 'STALE_CONFIRMATION') {
-          setDeleteError('The alternative counts on the server have changed. Reloading latest data…');
+          setDeleteError('The Trip contents on the server have changed. Reloading latest data…');
           void handleReloadFromServer();
         } else if (err.code === 'VERSION_CONFLICT') {
           setDeleteError('The Trip has changed on the server. Reloading latest data…');
@@ -961,7 +845,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
   };
 
   const updateTravelerAge = (index: number, val: string) => {
-    setBudgetOverageAcknowledged(false);
     setTravelerAges((prev) => {
       const next = [...prev];
       next[index] = val;
@@ -1135,158 +1018,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     }
   };
 
-  const handlePromoteDraft = async (
-    draftId: string,
-    draftVersion: number,
-    forceAcknowledged?: boolean
-  ) => {
-    if (isPromotingRef.current || promotionPending) return;
-    isPromotingRef.current = true;
-    setPromotionPending(true);
-    setOverageErrorMessage(undefined);
-    setAutosaveStatus('saving');
-    setAutosaveMessage('Saving draft as planned itinerary…');
-
-    const acknowledge = forceAcknowledged ?? budgetOverageAcknowledged;
-
-    try {
-      const updatedTrip = await tripsApi.promoteDraft(trip.id, draftId, {
-        expectedVersion: trip.version,
-        expectedDraftVersion: draftVersion,
-        budgetOverageAcknowledged: acknowledge ? true : undefined,
-      });
-      applyTripState(updatedTrip);
-      if (onTripUpdated) {
-        onTripUpdated(updatedTrip);
-      }
-      setIsOverageModalOpen(false);
-      setIsReadinessBannerOpen(false);
-      setReadinessIssues(null);
-      setOverageDetails(null);
-      setBudgetOverageAcknowledged(false);
-      setHighlightedSlot(null);
-      setAutosaveStatus('saved');
-      setAutosaveMessage('Draft successfully saved as planned itinerary.');
-    } catch (err) {
-      if (err instanceof IdentityApiError) {
-        if (err.code === 'PLANNING_NOT_READY') {
-          const issues =
-            err.fields && Object.keys(err.fields).length > 0
-              ? err.fields
-              : {general: err.apiMessage || 'Draft is not ready to be saved as a planned itinerary.'};
-          setReadinessIssues(issues);
-          setIsReadinessBannerOpen(true);
-          setAutosaveStatus('error');
-          setAutosaveMessage('Draft cannot be planned yet. Please review the blocking issues.');
-        } else if (err.code === 'BUDGET_OVERAGE_UNACKNOWLEDGED') {
-          const targetDraft = trip.drafts?.find((d) => d.id === draftId) ?? activeDraft;
-          const bCents = err.fields?.budgetCents
-            ? parseInt(err.fields.budgetCents, 10)
-            : (trip.budgetCents ?? 0);
-          const gtCents = err.fields?.grandTotalCents
-            ? parseInt(err.fields.grandTotalCents, 10)
-            : (targetDraft?.tally?.grandTotalCents ?? 0);
-          const boCents = err.fields?.budgetOverageCents
-            ? parseInt(err.fields.budgetOverageCents, 10)
-            : Math.max(0, gtCents - bCents);
-
-          setOverageDetails({
-            budgetCents: bCents,
-            grandTotalCents: gtCents,
-            budgetOverageCents: boCents,
-            draftId,
-            draftVersion,
-          });
-          setIsOverageModalOpen(true);
-          setAutosaveStatus('idle');
-          setAutosaveMessage(undefined);
-        } else if (err.code === 'VERSION_CONFLICT') {
-          setAutosaveStatus('conflict');
-          setAutosaveMessage('The Trip has changed on the server. Reload before saving.');
-          if (isOverageModalOpen) {
-            setOverageErrorMessage('The Trip has changed on the server. Please reload.');
-          }
-        } else if (err.code === 'ALTERNATIVE_EXPIRED') {
-          setAutosaveStatus('error');
-          setAutosaveMessage('This trip or draft alternative has expired and can no longer be planned.');
-          if (isOverageModalOpen) {
-            setOverageErrorMessage('This trip or draft alternative has expired.');
-          }
-        } else {
-          const msg = err.apiMessage || 'Failed to save draft as planned itinerary.';
-          setAutosaveStatus('error');
-          setAutosaveMessage(msg);
-          if (isOverageModalOpen) {
-            setOverageErrorMessage(msg);
-          }
-        }
-      } else {
-        const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
-        setAutosaveStatus('error');
-        setAutosaveMessage(msg);
-        if (isOverageModalOpen) {
-          setOverageErrorMessage(msg);
-        }
-      }
-    } finally {
-      isPromotingRef.current = false;
-      setPromotionPending(false);
-    }
-  };
-
-  const handleConfirmOveragePromotion = async () => {
-    if (!overageDetails) return;
-    setBudgetOverageAcknowledged(true);
-    await handlePromoteDraft(overageDetails.draftId, overageDetails.draftVersion, true);
-  };
-
-  const handleJumpToIssue = (key: string) => {
-    setHighlightedSlot(null);
-    let targetEl: HTMLElement | null = null;
-
-    if (key === 'travelerAges') {
-      let firstEmpty = travelerAges.findIndex((age) => !age.trim());
-      if (firstEmpty === -1) firstEmpty = 0;
-      targetEl = document.getElementById(`traveler-age-${firstEmpty}`);
-    } else if (key === 'adult') {
-      targetEl = document.getElementById('traveler-age-0');
-    } else if (key === 'budgetCents' || key === 'budget') {
-      targetEl = document.getElementById('workspace-budget');
-    } else if (key === 'components') {
-      targetEl = document.getElementById('builder-heading') || document.querySelector('.component-slots-grid');
-    } else if (key === 'airfare') {
-      setHighlightedSlot('airfare');
-      targetEl = document.getElementById('airfare-slot-heading');
-    } else if (key === 'stay') {
-      setHighlightedSlot('stay');
-      targetEl = document.getElementById('stay-slot-heading');
-    } else if (key === 'rental') {
-      if (rentalMode === 'hidden') {
-        setRentalMode('searching');
-      }
-      setHighlightedSlot('rental');
-      targetEl = document.getElementById('rental-slot-heading');
-      if (!targetEl) {
-        setTimeout(() => {
-          const el = document.getElementById('rental-slot-heading');
-          if (el) {
-            scrollToIssue(el);
-          }
-        }, 0);
-      }
-    } else if (key === 'destination') {
-      targetEl = document.getElementById('workspace-destination');
-    } else if (key === 'dates' || key === 'startDate' || key === 'endDate') {
-      targetEl = document.getElementById('workspace-start-date');
-    } else if (key === 'travelerCount') {
-      targetEl = document.getElementById('workspace-traveler-count');
-    }
-
-    if (targetEl) {
-      scrollToIssue(targetEl);
-    }
-  };
-
   const handleToggleCompare = (id: string, checked: boolean) => {
     if (checked) {
       if (selectedForCompareIds.length >= 3) {
@@ -1380,24 +1111,10 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     }
   };
 
-  const handleTriageCreateDraft = async () => {
-    setTriagePending(true);
-    setTriageAction('create-draft');
-    setTriageError(undefined);
-    try {
-      setIsTriageModalOpen(false);
-      setAutosaveStatus('saved');
-      setAutosaveMessage('Continue editing the existing Working plan.');
-    } catch (err) {
-      if (err instanceof IdentityApiError) {
-        setTriageError(err.message || 'Could not create draft.');
-      } else {
-        setTriageError(err instanceof Error ? err.message : 'Could not create draft.');
-      }
-    } finally {
-      setTriagePending(false);
-      setTriageAction(null);
-    }
+  const handleTriageContinueWorking = () => {
+    setIsTriageModalOpen(false);
+    setAutosaveStatus('saved');
+    setAutosaveMessage('Continue editing the existing Working plan.');
   };
 
   const handlePromptCancelTrip = () => {
@@ -1418,7 +1135,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       setHistoryRefreshKey((prev) => prev + 1);
       setIsCancelTripModalOpen(false);
       setAutosaveStatus('saved');
-      setAutosaveMessage('Trip canceled. Alternatives are now read-only.');
+      setAutosaveMessage('Trip canceled. Saved options are now read-only.');
       if (onTripUpdated) onTripUpdated(updatedTrip);
     } catch (err) {
       if (err instanceof IdentityApiError) {
@@ -1599,7 +1316,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
             <h2 id="canceled-trip-banner-heading">This trip has been canceled</h2>
             <p>
               All reservations have been released without fees, and booking history has been permanently preserved.
-              All alternatives on this trip are now read-only. You can duplicate this trip into a fresh travel plan to make new revisions.
+              All Saved options on this Trip are now read-only. You can duplicate this Trip to make new plans.
             </p>
           </div>
           <button
@@ -1666,17 +1383,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         />
       )}
 
-      {isReadinessBannerOpen && readinessIssues && (
-        <DraftReadinessBanner
-          issues={readinessIssues}
-          onJumpTo={handleJumpToIssue}
-          onDismiss={() => {
-            setIsReadinessBannerOpen(false);
-            setHighlightedSlot(null);
-          }}
-        />
-      )}
-
       {/* Progressive Builder & Component Slots */}
       {activeDraft && (
         <section className="workspace-section builder-section" aria-labelledby="builder-heading">
@@ -1704,7 +1410,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
               draftId={activeDraft.id}
               selectedAirfare={activeDraft.selections.airfare}
               mode={airfareMode}
-              highlighted={highlightedSlot === 'airfare'}
               onStartSearch={() => setAirfareMode('searching')}
               onSelect={handleSelectAirfare}
               onChange={() => setAirfareMode('searching')}
@@ -1720,7 +1425,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
               draftId={activeDraft.id}
               selectedStay={activeDraft.selections.stay}
               mode={stayMode}
-              highlighted={highlightedSlot === 'stay'}
               initialType={stayAccommodationType}
               onStartSearch={() => setStayMode('searching')}
               onSelect={handleSelectStay}
@@ -1737,7 +1441,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
               draftId={activeDraft.id}
               selectedRental={activeDraft.selections.rental}
               mode={rentalMode}
-              highlighted={highlightedSlot === 'rental'}
               onSelect={handleSelectRental}
               onChange={() => setRentalMode('searching')}
               onRemove={promptRemoveRental}
@@ -1799,7 +1502,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
                 disabled={hasPlanned || isTripCanceled}
                 onChange={(e) => {
                   setDestinationKey(e.target.value);
-                  setBudgetOverageAcknowledged(false);
                 }}
               >
                 {SUPPORTED_DESTINATIONS.map((dest) => (
@@ -1821,7 +1523,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
                 max="2027-03-31"
                 onChange={(e) => {
                   setStartDate(e.target.value);
-                  setBudgetOverageAcknowledged(false);
                 }}
                 aria-describedby={fieldErrors.dates ? 'workspace-dates-error' : undefined}
               />
@@ -1838,7 +1539,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
                 max="2027-03-31"
                 onChange={(e) => {
                   setEndDate(e.target.value);
-                  setBudgetOverageAcknowledged(false);
                 }}
                 aria-describedby={fieldErrors.dates ? 'workspace-dates-error' : undefined}
               />
@@ -1864,7 +1564,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
                 disabled={isTripCanceled}
                 onChange={(e) => {
                   setBudgetDollars(e.target.value);
-                  setBudgetOverageAcknowledged(false);
                 }}
                 aria-describedby={fieldErrors.budget ? 'workspace-budget-error' : undefined}
               />
@@ -1888,7 +1587,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
                   const raw = e.target.value;
                   setTravelerCountInput(raw);
                   setFieldErrors((previous) => ({...previous, travelerCount: ''}));
-                  setBudgetOverageAcknowledged(false);
                   const val = parseInt(raw, 10);
                   if (!isNaN(val) && val >= 1 && val <= 8) {
                     setTravelerCount(val);
@@ -1999,24 +1697,17 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
               <AlternativeCard
                 key={alt.id}
                 alternative={alt}
-                singleWorking
                 onOpenForEditing={(id) => { setCurrentPreservedForLoad(false); setLoadTargetId(id); }}
                 onRename={(id) => {setRenameOptionId(id); setRenameName(savedOptions.find(item => item.id === id)?.name ?? '');}}
                 tripExpired={alt.startDate ? alt.startDate <= pacificToday : isExpired}
                 tripCanceled={isTripCanceled}
                 hasBookingHistory={effectiveHasBookingHistory}
-                promotionPending={promotionPending}
                 isSelectedForCompare={selectedForCompareIds.includes(alt.id)}
                 isBooked={Boolean(alt.booked || activeBooking?.plannedItineraryId === alt.id || trip.booking?.plannedItineraryId === alt.id)}
                 hasActiveBooking={Boolean(activeBooking)}
                 onViewBookingDetails={activeBooking?.plannedItineraryId === alt.id ? () => setWorkspaceView('booking-confirmation') : undefined}
                 onToggleCompare={handleToggleCompare}
                 onSelectForBookingReview={(id) => handleSelectForBookingReview(id, 'workspace')}
-                onDuplicateDraft={(id, ver) => void handleDuplicateDraft(id, ver)}
-                onDuplicatePlanned={(id) => void handleDuplicatePlanned(id)}
-                onDeleteDraft={(id, ver) => promptDeleteDraft(id, ver)}
-                onDeletePlanned={(id) => promptDeletePlanned(id)}
-                onPromoteDraft={(id, ver) => void handlePromoteDraft(id, ver)}
               />
             ))}
           </div>
@@ -2138,7 +1829,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
           pendingAction={triageAction}
           errorMessage={triageError}
           onUseAlternative={(plannedId) => void handleTriageUseAlternative(plannedId)}
-          onCreateDraft={() => void handleTriageCreateDraft()}
+          onContinueWorking={handleTriageContinueWorking}
           onClose={() => {
             setIsTriageModalOpen(false);
             setTriageError(undefined);
@@ -2190,22 +1881,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         />
       )}
 
-      {/* Budget overage acknowledgment modal */}
-      {isOverageModalOpen && overageDetails && (
-        <BudgetOverageModal
-          isOpen={isOverageModalOpen}
-          budgetCents={overageDetails.budgetCents}
-          grandTotalCents={overageDetails.grandTotalCents}
-          budgetOverageCents={overageDetails.budgetOverageCents}
-          pending={promotionPending}
-          errorMessage={overageErrorMessage}
-          onClose={() => {
-            setIsOverageModalOpen(false);
-            setOverageErrorMessage(undefined);
-          }}
-          onConfirm={() => void handleConfirmOveragePromotion()}
-        />
-      )}
     </section>
   );
 });

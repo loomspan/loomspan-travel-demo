@@ -100,8 +100,8 @@ class BookingApiIntegrationTest {
         insertSfoAirfareSelection(draftId);
         insertSfoStaySelection(draftId);
 
-        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 
@@ -143,8 +143,8 @@ class BookingApiIntegrationTest {
         insertSfoStaySelection(draftId);
         insertSfoRentalSelection(draftId);
 
-        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 
@@ -173,8 +173,8 @@ class BookingApiIntegrationTest {
         String draftId = getDraftId(created, 0);
 
         insertSfoAirfareSelection(draftId);
-        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 
@@ -212,8 +212,8 @@ class BookingApiIntegrationTest {
         String draftId = getDraftId(created, 0);
 
         insertSfoAirfareSelection(draftId);
-        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 
@@ -241,8 +241,8 @@ class BookingApiIntegrationTest {
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
         insertSfoRentalSelection(draftId);
-        MvcResult saved = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult saved = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String optionId = getPlannedId(saved, 0);
 
@@ -278,8 +278,8 @@ class BookingApiIntegrationTest {
         String draftId = getDraftId(created, 0);
 
         insertSfoAirfareSelection(draftId);
-        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 
@@ -303,8 +303,8 @@ class BookingApiIntegrationTest {
         String draftId = getDraftId(created, 0);
 
         insertSfoAirfareSelection(draftId);
-        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 
@@ -330,8 +330,8 @@ class BookingApiIntegrationTest {
         String draftId = getDraftId(created, 0);
 
         insertSfoAirfareSelection(draftId);
-        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 
@@ -373,8 +373,8 @@ class BookingApiIntegrationTest {
         insertSfoStaySelection(draftId);
         insertSfoRentalSelection(draftId);
 
-        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 
@@ -415,8 +415,8 @@ class BookingApiIntegrationTest {
         insertSfoAirfareSelection(draftId);
         insertSfoStaySelection(draftId);
 
-        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 
@@ -453,8 +453,8 @@ class BookingApiIntegrationTest {
         insertSfoAirfareSelection(draftId);
         insertSfoRentalSelection(draftId);
 
-        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 
@@ -492,8 +492,8 @@ class BookingApiIntegrationTest {
         insertSfoAirfareSelection(draftId);
         insertSfoStaySelection(draftId);
 
-        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 
@@ -529,8 +529,8 @@ class BookingApiIntegrationTest {
         String draftAId = getDraftId(createdA, 0);
 
         insertSfoAirfareSelection(draftAId);
-        MvcResult planRes = userA.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripAId, draftAId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = userA.unsafe(post("/api/trips/{tripId}/options", tripAId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 
@@ -561,8 +561,8 @@ class BookingApiIntegrationTest {
         String draftId = getDraftId(created, 0);
 
         insertSfoAirfareSelection(draftId);
-        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 

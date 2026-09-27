@@ -22,7 +22,7 @@ class TripModelForwardMigrationIntegrationTest {
         String url = url("fresh");
         Flyway flyway = latest(url);
         flyway.migrate();
-        assertEquals("19", flyway.info().current().getVersion().getVersion());
+        assertEquals("20", flyway.info().current().getVersion().getVersion());
         try (Connection c = DriverManager.getConnection(url, "sa", "")) {
             assertEquals(0, count(c, "SELECT COUNT(*) FROM detour_trip_draft"));
             assertTrue(hasColumn(c, "DETOUR_TRIP", "NAME"));
@@ -74,26 +74,36 @@ class TripModelForwardMigrationIntegrationTest {
             insert(c, "INSERT INTO detour_booking (public_id, trip_id, planned_itinerary_id, booking_reference, status, grand_total_cents, idempotency_key, created_at) VALUES (?, ?, ?, 'BOOK-A', 'ACTIVE', 1234, 'key-a', ?)", UUID.randomUUID(), tripB, bookedPlannedId, OffsetDateTime.parse("2027-01-02T00:00:00Z"));
             insert(c, "INSERT INTO detour_booking (public_id, trip_id, planned_itinerary_id, booking_reference, status, grand_total_cents, idempotency_key, created_at, canceled_at) VALUES (?, ?, ?, 'BOOK-C', 'CANCELED', 1234, 'key-c', ?, ?)", UUID.randomUUID(), tripB, bookedPlannedId, OffsetDateTime.parse("2027-01-01T00:00:00Z"), OffsetDateTime.parse("2027-01-01T01:00:00Z"));
         }
+        // Simulate an installation that already ran V19 and renamed a Saved option.
+        Flyway.configure().dataSource(url, "sa", "").locations("classpath:db/migration")
+                .target(MigrationVersion.fromVersion("19")).load().migrate();
+        try (Connection c = DriverManager.getConnection(url, "sa", "")) {
+            try (PreparedStatement statement = c.prepareStatement("UPDATE detour_planned_itinerary SET name = 'Beach escape' WHERE id = ?")) {
+                statement.setLong(1, bookedPlannedId);
+                statement.executeUpdate();
+            }
+        }
         latest(url).migrate();
         try (Connection c = DriverManager.getConnection(url, "sa", "")) {
             assertEquals(3, count(c, "SELECT COUNT(*) FROM detour_trip_draft"));
             assertEquals(0, count(c, "SELECT COUNT(*) FROM (SELECT trip_id FROM detour_trip_draft GROUP BY trip_id HAVING COUNT(*) <> 1)"));
             assertEquals(workingCandidate, scalar(c, "SELECT id FROM detour_trip_draft WHERE trip_id = (SELECT trip_id FROM detour_trip_draft WHERE id = " + workingCandidate + ")"));
             assertEquals(5, count(c, "SELECT COUNT(*) FROM detour_planned_itinerary"));
-            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_rental_snapshot r JOIN detour_planned_itinerary p ON p.id = r.planned_itinerary_id WHERE p.name = 'Option from Draft " + copiedCandidate + "'"));
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_rental_snapshot r JOIN detour_planned_itinerary p ON p.id = r.planned_itinerary_id WHERE p.name = 'Recovered option " + copiedCandidate + "'"));
             assertEquals(4, count(c, "SELECT COUNT(*) FROM detour_planned_stay_night_snapshot"));
-            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_stay_snapshot s JOIN detour_planned_itinerary p ON p.id = s.planned_itinerary_id WHERE p.name = 'Option from Draft " + copiedStayCandidate + "'"));
-            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_airfare_snapshot a JOIN detour_planned_itinerary p ON p.id = a.planned_itinerary_id WHERE p.name = 'Option from Draft " + copiedAirfareCandidate + "' AND a.outbound_base_fare_cents > 0 AND a.return_base_fare_cents > 0"));
-            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_airfare_snapshot a JOIN detour_planned_itinerary p ON p.id = a.planned_itinerary_id WHERE p.name = 'Option from Draft " + copiedAirfareCandidate + "' AND a.outbound_carrier_name IS NOT NULL AND a.return_carrier_name IS NOT NULL AND a.outbound_flight_number IS NOT NULL AND a.return_flight_number IS NOT NULL AND a.outbound_departure_time IS NOT NULL AND a.return_arrival_time IS NOT NULL AND a.outbound_departure_timezone IS NOT NULL AND a.return_arrival_timezone IS NOT NULL AND a.outbound_duration_minutes > 0 AND a.return_duration_minutes > 0 AND a.total_duration_minutes = a.outbound_duration_minutes + a.return_duration_minutes"));
-            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_airfare_snapshot a JOIN detour_planned_itinerary p ON p.id = a.planned_itinerary_id WHERE p.name = 'Option from Draft " + copiedConnectingAirfareCandidate + "' AND a.outbound_stop_count = 1 AND a.return_stop_count = 1 AND a.outbound_layover_airport_code IS NOT NULL AND a.return_layover_airport_code IS NOT NULL AND a.outbound_layover_duration_minutes > 0 AND a.return_layover_duration_minutes > 0 AND a.total_duration_minutes = a.outbound_duration_minutes + a.return_duration_minutes"));
-            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_stay_snapshot s JOIN detour_planned_itinerary p ON p.id = s.planned_itinerary_id WHERE p.name = 'Option from Draft " + copiedStayCandidate + "' AND s.property_name IS NOT NULL AND s.unit_name IS NOT NULL AND s.property_category IS NOT NULL AND s.location_description IS NOT NULL AND s.guest_capacity > 0 AND s.required_room_count > 0"));
-            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_rental_snapshot r JOIN detour_planned_itinerary p ON p.id = r.planned_itinerary_id WHERE p.name = 'Option from Draft " + copiedCandidate + "' AND r.location_name IS NOT NULL AND r.vehicle_class_name IS NOT NULL AND r.unit_identifier IS NOT NULL AND r.vehicle_category IS NOT NULL AND r.daily_base_price_cents > 0 AND r.pickup_at < r.return_at"));
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_stay_snapshot s JOIN detour_planned_itinerary p ON p.id = s.planned_itinerary_id WHERE p.name = 'Recovered option " + copiedStayCandidate + "'"));
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_airfare_snapshot a JOIN detour_planned_itinerary p ON p.id = a.planned_itinerary_id WHERE p.name = 'Recovered option " + copiedAirfareCandidate + "' AND a.outbound_base_fare_cents > 0 AND a.return_base_fare_cents > 0"));
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_airfare_snapshot a JOIN detour_planned_itinerary p ON p.id = a.planned_itinerary_id WHERE p.name = 'Recovered option " + copiedAirfareCandidate + "' AND a.outbound_carrier_name IS NOT NULL AND a.return_carrier_name IS NOT NULL AND a.outbound_flight_number IS NOT NULL AND a.return_flight_number IS NOT NULL AND a.outbound_departure_time IS NOT NULL AND a.return_arrival_time IS NOT NULL AND a.outbound_departure_timezone IS NOT NULL AND a.return_arrival_timezone IS NOT NULL AND a.outbound_duration_minutes > 0 AND a.return_duration_minutes > 0 AND a.total_duration_minutes = a.outbound_duration_minutes + a.return_duration_minutes"));
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_airfare_snapshot a JOIN detour_planned_itinerary p ON p.id = a.planned_itinerary_id WHERE p.name = 'Recovered option " + copiedConnectingAirfareCandidate + "' AND a.outbound_stop_count = 1 AND a.return_stop_count = 1 AND a.outbound_layover_airport_code IS NOT NULL AND a.return_layover_airport_code IS NOT NULL AND a.outbound_layover_duration_minutes > 0 AND a.return_layover_duration_minutes > 0 AND a.total_duration_minutes = a.outbound_duration_minutes + a.return_duration_minutes"));
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_stay_snapshot s JOIN detour_planned_itinerary p ON p.id = s.planned_itinerary_id WHERE p.name = 'Recovered option " + copiedStayCandidate + "' AND s.property_name IS NOT NULL AND s.unit_name IS NOT NULL AND s.property_category IS NOT NULL AND s.location_description IS NOT NULL AND s.guest_capacity > 0 AND s.required_room_count > 0"));
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_rental_snapshot r JOIN detour_planned_itinerary p ON p.id = r.planned_itinerary_id WHERE p.name = 'Recovered option " + copiedCandidate + "' AND r.location_name IS NOT NULL AND r.vehicle_class_name IS NOT NULL AND r.unit_identifier IS NOT NULL AND r.vehicle_category IS NOT NULL AND r.daily_base_price_cents > 0 AND r.pickup_at < r.return_at"));
             assertEquals(2, count(c, "SELECT COUNT(*) FROM detour_booking WHERE planned_itinerary_id = " + bookedPlannedId));
             assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_itinerary WHERE id = " + bookedPlannedId + " AND public_id = '" + oldPlanned + "'"));
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_itinerary WHERE id = " + bookedPlannedId + " AND name = 'Beach escape'"));
             assertEquals(2, count(c, "SELECT COUNT(*) FROM detour_trip WHERE name = 'Portland to Anywhere'"));
             assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_trip_traveler WHERE age IS NULL"));
             assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_trip_draft WHERE start_date = DATE '2027-03-10' AND end_date = DATE '2027-03-14' AND id = " + workingCandidate));
-            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_itinerary WHERE name = 'Option from Draft " + copiedCandidate + "' AND start_date = DATE '2027-03-10' AND end_date = DATE '2027-03-14'"));
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_itinerary WHERE name = 'Recovered option " + copiedCandidate + "' AND start_date = DATE '2027-03-10' AND end_date = DATE '2027-03-14'"));
         }
     }
 

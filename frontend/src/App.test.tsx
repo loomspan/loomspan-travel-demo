@@ -193,7 +193,7 @@ describe('App identity experience', () => {
     const user = userEvent.setup(); render(<App />);
     await user.click(screen.getByRole('button', {name: 'Log in'}));
     await screen.findByRole('heading', {name: 'Welcome back'});
-    const introduction = 'Plan a trip your way. Start with airfare, a stay, or a complete itinerary. Save alternatives, compare total costs, and choose what works for you.';
+    const introduction = 'Plan a Trip your way. Start with a Working plan, create named Saved options, compare total costs, and choose what works for you.';
     expect(screen.getByText(introduction)).toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Log in'})).toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'About this demo'})).toBeInTheDocument();

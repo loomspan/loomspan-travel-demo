@@ -6,19 +6,12 @@ type AlternativeCardProps = {
   tripExpired?: boolean;
   tripCanceled?: boolean;
   hasBookingHistory?: boolean;
-  promotionPending?: boolean;
   isSelectedForCompare?: boolean;
   isBooked?: boolean;
   hasActiveBooking?: boolean;
   onToggleCompare?: (alternativeId: string, checked: boolean) => void;
   onSelectForBookingReview?: (alternativeId: string) => void;
   onViewBookingDetails?: () => void;
-  onDuplicateDraft: (draftId: string, version: number) => void;
-  onDuplicatePlanned: (alternativeId: string) => void;
-  onDeleteDraft: (draftId: string, version: number) => void;
-  onDeletePlanned: (alternativeId: string) => void;
-  onPromoteDraft?: (draftId: string, version: number) => void;
-  singleWorking?: boolean;
   onOpenForEditing?: (optionId: string) => void;
   onRename?: (optionId: string) => void;
 };
@@ -28,24 +21,15 @@ export function AlternativeCard({
   tripExpired = false,
   tripCanceled = false,
   hasBookingHistory = false,
-  promotionPending = false,
   isSelectedForCompare = false,
   isBooked = false,
   hasActiveBooking = false,
   onToggleCompare,
   onSelectForBookingReview,
   onViewBookingDetails,
-  onDuplicateDraft,
-  onDuplicatePlanned,
-  onDeleteDraft,
-  onDeletePlanned,
-  onPromoteDraft,
-  singleWorking = false,
   onOpenForEditing,
   onRename,
 }: AlternativeCardProps) {
-  const isDraft = alternative.lifecycle.toUpperCase() === 'DRAFT';
-  const isPlanned = alternative.lifecycle.toUpperCase() === 'PLANNED';
   const selections = alternative.selections;
   const hasSelections = Boolean(
     selections && (selections.airfare || selections.stay || selections.rental)
@@ -53,7 +37,7 @@ export function AlternativeCard({
 
   return (
     <article
-      className={`card alternative-card ${isPlanned ? 'alternative-card-planned' : 'alternative-card-draft'}`}
+      className="card alternative-card alternative-card-planned"
       aria-labelledby={`alt-heading-${alternative.id}`}
     >
       <div className="alternative-card-header">
@@ -69,7 +53,7 @@ export function AlternativeCard({
           </h4>
           <p className="trip-meta">{alternative.startDate} to {alternative.endDate}</p>
         </div>
-        {isPlanned && !tripCanceled && onToggleCompare && (
+        {!tripCanceled && onToggleCompare && (
           <div className="compare-checkbox-wrapper">
             <label className="checkbox-label" htmlFor={`compare-select-${alternative.id}`}>
               <input
@@ -89,11 +73,11 @@ export function AlternativeCard({
           <p className="hint read-only-hint">
             This trip is canceled. Saved options are read-only.
           </p>
-        ) : isPlanned ? (
+        ) : (
           <p className="hint read-only-hint">
             Open a copy in the Working plan to edit it. Your saved option stays available.
           </p>
-        ) : null}
+        )}
 
         {hasSelections ? (
           <div className="alternative-selections">
@@ -146,58 +130,12 @@ export function AlternativeCard({
             )}
             <span className="hint read-only-hint">Read-only (trip canceled)</span>
           </>
-        ) : isDraft ? (
-          <>
-            {!singleWorking && <button
-              type="button"
-              className="text-button delete-button"
-              onClick={() => onDeleteDraft(alternative.id, alternative.version ?? 0)}
-              aria-label={`Delete draft ${alternative.id.slice(0, 8)}`}
-            >
-              Delete draft
-            </button>}
-            {!singleWorking && <button
-              type="button"
-              className="secondary-action-button"
-              onClick={() => onDuplicateDraft(alternative.id, alternative.version ?? 0)}
-              aria-label={`Duplicate draft ${alternative.id.slice(0, 8)}`}
-            >
-              Duplicate to new draft
-            </button>}
-            {!singleWorking && onPromoteDraft && (
-              <button
-                type="button"
-                className="primary-button promote-draft-btn"
-                disabled={tripExpired || promotionPending}
-                onClick={() => onPromoteDraft(alternative.id, alternative.version ?? 0)}
-                aria-label={`Promote draft ${alternative.id.slice(0, 8)} to planned`}
-              >
-                {promotionPending ? 'Saving planned itinerary…' : 'Promote to Planned'}
-              </button>
-            )}
-          </>
         ) : (
           <>
             {onOpenForEditing && <button type="button" className="secondary-action-button"
               onClick={() => onOpenForEditing(alternative.id)}>Open {alternative.name || 'option'} as a copy in Working plan</button>}
             {onRename && !isBooked && <button type="button" className="secondary-action-button"
               onClick={() => onRename(alternative.id)}>Rename {alternative.name || 'option'}</button>}
-            {!singleWorking && <button
-              type="button"
-              className="text-button delete-button"
-              onClick={() => onDeletePlanned(alternative.id)}
-              aria-label={`Delete saved option ${alternative.name || ''}`}
-            >
-              Delete saved option
-            </button>}
-            {!singleWorking && <button
-              type="button"
-              className="secondary-action-button"
-              onClick={() => onDuplicatePlanned(alternative.id)}
-              aria-label={`Copy ${alternative.name || 'saved option'} into Working plan`}
-            >
-              Copy into Working plan
-            </button>}
             {isBooked && onViewBookingDetails ? (
               <button
                 type="button"

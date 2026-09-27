@@ -467,24 +467,9 @@ export type TripRevisionRequest = {
   sourcePlannedItineraryIds: string[];
 };
 
-export type DraftCreateRequest = {
-  expectedVersion: number;
-};
-
 export type DraftMutationRequest = {
   expectedVersion: number;
   expectedDraftVersion: number;
-};
-
-export type PromotionRequest = {
-  expectedVersion: number;
-  expectedDraftVersion: number;
-  budgetOverageAcknowledged?: boolean | null;
-};
-
-export type AlternativeDuplicateRequest = {
-  expectedVersion: number;
-  expectedDraftVersion?: number | null;
 };
 
 export type AlternativeDeleteRequest = {
@@ -577,31 +562,8 @@ function cleanRevisionPayload(p: TripRevisionRequest): Record<string, unknown> {
   return body;
 }
 
-function cleanDraftCreatePayload(p: DraftCreateRequest): Record<string, unknown> {
-  return { expectedVersion: p.expectedVersion };
-}
-
 function cleanDraftMutationPayload(p: DraftMutationRequest): Record<string, unknown> {
   return { expectedVersion: p.expectedVersion, expectedDraftVersion: p.expectedDraftVersion };
-}
-
-function cleanPromotionPayload(p: PromotionRequest): Record<string, unknown> {
-  const body: Record<string, unknown> = {
-    expectedVersion: p.expectedVersion,
-    expectedDraftVersion: p.expectedDraftVersion,
-  };
-  if (p.budgetOverageAcknowledged !== undefined && p.budgetOverageAcknowledged !== null) {
-    body.budgetOverageAcknowledged = p.budgetOverageAcknowledged;
-  }
-  return body;
-}
-
-function cleanAlternativeDuplicatePayload(p: AlternativeDuplicateRequest): Record<string, unknown> {
-  const body: Record<string, unknown> = { expectedVersion: p.expectedVersion };
-  if (p.expectedDraftVersion !== undefined && p.expectedDraftVersion !== null) {
-    body.expectedDraftVersion = p.expectedDraftVersion;
-  }
-  return body;
 }
 
 function cleanAlternativeDeletePayload(p: AlternativeDeleteRequest): Record<string, unknown> {
@@ -698,15 +660,6 @@ export const tripsApi = {
   duplicateTrip: (tripId: string, payload: TripRevisionRequest): Promise<TripResponse> =>
     request<TripResponse>(`/api/trips/${tripId}/duplicate`, 'POST', cleanRevisionPayload(payload)),
 
-  createDraft: (tripId: string, payload: DraftCreateRequest): Promise<TripResponse> =>
-    request<TripResponse>(`/api/trips/${tripId}/drafts`, 'POST', cleanDraftCreatePayload(payload)),
-
-  duplicateDraft: (tripId: string, draftId: string, payload: DraftMutationRequest): Promise<TripResponse> =>
-    request<TripResponse>(`/api/trips/${tripId}/drafts/${draftId}/duplicate`, 'POST', cleanDraftMutationPayload(payload)),
-
-  duplicateAlternative: (tripId: string, alternativeId: string, payload: AlternativeDuplicateRequest): Promise<TripResponse> =>
-    request<TripResponse>(`/api/trips/${tripId}/alternatives/${alternativeId}/duplicate`, 'POST', cleanAlternativeDuplicatePayload(payload)),
-
   deleteDraft: (tripId: string, draftId: string, payload: DraftMutationRequest): Promise<TripResponse> =>
     request<TripResponse>(`/api/trips/${tripId}/drafts/${draftId}`, 'DELETE', cleanDraftMutationPayload(payload)),
 
@@ -745,9 +698,6 @@ export const tripsApi = {
 
   getDraftReadiness: (tripId: string, draftId: string): Promise<DraftReadinessResponse> =>
     request<DraftReadinessResponse>(`/api/trips/${tripId}/drafts/${draftId}/readiness`, 'GET'),
-
-  promoteDraft: (tripId: string, draftId: string, payload: PromotionRequest): Promise<TripResponse> =>
-    request<TripResponse>(`/api/trips/${tripId}/drafts/${draftId}/plan`, 'POST', cleanPromotionPayload(payload)),
 
   createBooking: (tripId: string, payload: CreateBookingRequest): Promise<BookingResponse> => {
     const headers: Record<string, string> = {};

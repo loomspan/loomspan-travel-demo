@@ -139,35 +139,6 @@ describe('tripsApi client', () => {
     });
   });
 
-  it('draft operations send correct endpoints and expected versions', async () => {
-    fetchMock.mockResolvedValueOnce(json(201, {id: 'trip-1', version: 1}));
-    await tripsApi.createDraft('trip-1', {expectedVersion: 0});
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/drafts', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': 'secret-token'},
-      body: JSON.stringify({expectedVersion: 0}),
-    });
-
-    fetchMock.mockResolvedValueOnce(json(201, {id: 'trip-1', version: 2}));
-    await tripsApi.duplicateDraft('trip-1', 'draft-1', {expectedVersion: 1, expectedDraftVersion: 0});
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/drafts/draft-1/duplicate', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': 'secret-token'},
-      body: JSON.stringify({expectedVersion: 1, expectedDraftVersion: 0}),
-    });
-
-    fetchMock.mockResolvedValueOnce(json(201, {id: 'trip-1', version: 3}));
-    await tripsApi.duplicateAlternative('trip-1', 'alt-planned', {expectedVersion: 2});
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/trips/trip-1/alternatives/alt-planned/duplicate', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': 'secret-token'},
-      body: JSON.stringify({expectedVersion: 2}),
-    });
-  });
-
   it('deletion operations send expected bodies with DELETE method', async () => {
     fetchMock.mockResolvedValueOnce(json(200, {id: 'trip-1', version: 4}));
     await tripsApi.deleteDraft('trip-1', 'draft-1', {expectedVersion: 3, expectedDraftVersion: 1});
@@ -373,28 +344,6 @@ describe('tripsApi client', () => {
       credentials: 'same-origin',
       headers: undefined,
       body: undefined,
-    });
-  });
-
-  it('promoteDraft sends POST request with expected versions and overage acknowledgment', async () => {
-    fetchMock.mockResolvedValueOnce(json(201, {id: 'trip-1', version: 2}));
-
-    const result = await tripsApi.promoteDraft('trip-1', 'draft-1', {
-      expectedVersion: 1,
-      expectedDraftVersion: 0,
-      budgetOverageAcknowledged: true,
-    });
-
-    expect(result).toEqual({id: 'trip-1', version: 2});
-    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/drafts/draft-1/plan', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {'Content-Type': 'application/json', 'X-XSRF-TOKEN': 'secret-token'},
-      body: JSON.stringify({
-        expectedVersion: 1,
-        expectedDraftVersion: 0,
-        budgetOverageAcknowledged: true,
-      }),
     });
   });
 

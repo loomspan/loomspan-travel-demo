@@ -478,11 +478,11 @@ class TripPricingAndTallyIntegrationTest {
         long tripVersion = JSON.readTree(putResult.getResponse().getContentAsString()).get("version").asLong();
         long draftVersion = JSON.readTree(putResult.getResponse().getContentAsString()).get("drafts").get(0).get("version").asLong();
 
-        // Promote draft to planned
+        // Save a named option from the Working plan.
         String planPayload = """
-                {"expectedVersion":%d,"expectedDraftVersion":%d}
+                {"name":"Priced choice","expectedVersion":%d,"expectedDraftVersion":%d}
                 """.formatted(tripVersion, draftVersion);
-        MvcResult planResult = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId), planPayload)
+        MvcResult planResult = owner.unsafe(post("/api/trips/{tripId}/options", tripId), planPayload)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.planned.length()").value(1))
                 .andExpect(jsonPath("$.planned[0].tally.grandTotalCents").value(flightTotal))

@@ -5,10 +5,10 @@ type PostCancellationTriageModalProps = {
   isOpen: boolean;
   plannedAlternatives: PlannedResponse[];
   pending: boolean;
-  pendingAction?: 'use-alternative' | 'create-draft' | null;
+  pendingAction?: 'use-alternative' | null;
   errorMessage?: string;
   onUseAlternative: (plannedId: string) => void;
-  onCreateDraft: () => void;
+  onContinueWorking: () => void;
   onClose: () => void;
 };
 
@@ -19,7 +19,7 @@ export function PostCancellationTriageModal({
   pendingAction,
   errorMessage,
   onUseAlternative,
-  onCreateDraft,
+  onContinueWorking,
   onClose,
 }: PostCancellationTriageModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
@@ -180,8 +180,8 @@ export function PostCancellationTriageModal({
           </section>
 
           {/* Option 2: Continue the existing Working plan */}
-          <section className="triage-option-card card" aria-labelledby="triage-new-draft-heading">
-            <h3 id="triage-new-draft-heading" className="triage-option-title">
+          <section className="triage-option-card card" aria-labelledby="triage-working-heading">
+            <h3 id="triage-working-heading" className="triage-option-title">
               2. Continue Working plan
             </h3>
             <p className="hint">
@@ -189,11 +189,11 @@ export function PostCancellationTriageModal({
             </p>
             <button
               type="button"
-              className="primary-button triage-action-btn create-new-draft-btn"
-              onClick={onCreateDraft}
+              className="primary-button triage-action-btn continue-working-btn"
+              onClick={onContinueWorking}
               disabled={pending}
             >
-              {pending && pendingAction === 'create-draft' ? 'Continuing…' : 'Continue Working plan'}
+              Continue Working plan
             </button>
           </section>
 

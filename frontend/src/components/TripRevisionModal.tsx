@@ -278,7 +278,7 @@ export function TripRevisionModal({
                 </p>
               ) : (
                 <>
-                  <p className="hint">Selected options will be revalidated and saved as options in the new Trip. Its Working plan starts separately:</p>
+                  <p className="hint">Selected options keep their names and use the new Trip dates. Their selections will be revalidated for those dates. The new Trip also starts with one separate Working plan:</p>
                   {(trip.planned || []).map((p) => (
                     <label key={p.id} className="checkbox-label">
                       <input

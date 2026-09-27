@@ -547,8 +547,8 @@ class BookingCancellationIntegrationTest {
         insertSfoStaySelection(draftId);
         insertSfoRentalSelection(draftId);
 
-        MvcResult planRes = client.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = client.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 

@@ -13,18 +13,18 @@ $env:DETOUR_SECURE_COOKIES = 'false' # local loopback HTTP only
 .\scripts\run.ps1
 ```
 
-Open <http://127.0.0.1:8082/>. The JAR serves the React app and the API together; no separate frontend server is needed. The first run creates the default `data/detour.mv.db` through Flyway and seeds fictional catalog data, but creates no user. Registration is available on the opening screen. No external credentials are needed.
+Open <http://127.0.0.1:8082/>. The JAR serves the React app and the API together; no separate frontend server is needed. The first run creates the default `data/detour.mv.db` through Flyway and seeds fictional catalog data, but creates no user. Home and Trips are public, and registration is available when saving a Trip. No external credentials are needed.
 
 The server listens on loopback only. For local HTTP development, set `DETOUR_SECURE_COOKIES=false` before running so the browser can send the session cookie over HTTP. Leave secure cookies enabled for HTTPS deployments. The packaged release verifier sets this only for its isolated loopback process.
 
 ## First trip workflow
 
-1. Choose **Register**, enter an email and password, and continue to your Profile. The **About this demo** tab explains the fictional scope and available actions inside the app.
-2. Choose **Plan Trip**, **Airfare**, or **Stay**. Set a supported destination and March 2027 travel dates, travelers, and an optional budget. DeTour creates a Trip with a Draft.
-3. Search and select an eligible flight, stay, or rental car. Components are optional until you explicitly add them. Save a ready Draft as a **Planned** itinerary; compare up to three Planned alternatives.
-4. Review a Planned itinerary, including its server-calculated total and fictional-booking notice, then confirm a simulated Booking. Record the displayed booking reference. An active Booking can be canceled before its departure date begins in Portland time; canceled bookings remain in history.
+1. Open public **Home**, then go to **Trips**. Enter a Trip name, destination, March 2027 travel dates, traveler count and ages. Budget is optional. Choose **Start planning** to log in or register, then choose **Start planning** again to explicitly save the entered Trip.
+2. The new Trip has one **Working plan**. Search and select an eligible flight, stay, or rental car. Working plan changes save to that same plan; its dates can change, and selections are rechecked for the new dates.
+3. Give the Working plan a name and choose **Save new option** to create a **Saved option** with its own dates. You can change the Working plan and save another named option, then compare up to three options. Open an unbooked option in Working to update it in place, or explicitly save a new option to keep both.
+4. Review an eligible Saved option, including its server-calculated total and fictional-booking notice, then confirm a simulated Booking. Record the displayed booking reference. An active Booking can be canceled before its option's departure date begins in Portland time; canceled bookings remain in history. **Profile** contains account details.
 
-Trips and their Draft, Planned, and Booked snapshots are stored in the configured H2 database. Profile groups Upcoming and Past Trips using the application clock. A server restart clears in-memory sessions, so log in again; it does not remove accounts, Trips, bookings, or cancellation history.
+Trips, their Working plans and Saved options, and booked snapshots are stored in the configured H2 database. Profile groups Upcoming and Past Trips using the application clock. A server restart clears in-memory sessions, so log in again; it does not remove accounts, Trips, bookings, or cancellation history. Unsaved trip-start fields are held in the current browser view during login or registration and a failed save; reload the page only after saving.
 
 ## Architecture and configuration
 
@@ -69,7 +69,7 @@ Pop-Location
 .\scripts\verify-packaged-release.ps1
 ```
 
-`npm test` runs frontend interaction and accessibility assertions; Maven runs backend unit and HTTP/integration tests, inventory concurrency and idempotency tests, clean-database migration, clock-boundary and restart/persistence tests. `clean verify` also compiles the frontend and produces `target/detour-0.1.0-SNAPSHOT.jar`. The packaged verifier starts that JAR on a temporary loopback port with an isolated temporary H2 database, checks registration through a representative plan, restarts it, checks that the old session is invalid and that a new login recovers the Trip and Plan, then removes its own process and files. It does not touch the default development database. See `ai/thoughts/release/2026-09-23-p07-t05-verification.md` for release results and any remaining visual checks.
+`npm test` runs frontend interaction and accessibility assertions; Maven runs backend unit and HTTP/integration tests, inventory concurrency and idempotency tests, clean-database migration, clock-boundary and restart/persistence tests. `clean verify` also compiles the frontend and produces `target/detour-0.1.0-SNAPSHOT.jar`. The packaged verifier starts that JAR on a temporary loopback port with an isolated temporary H2 database, checks authentication and CSRF through a Trip with one Working plan, two named Saved options with different dates, booking and cancellation, then restarts the app and checks that a new login recovers the same Trip, options, and booking history. It checks owner isolation and removes its own process and files. It does not touch the default development database. See `ai/thoughts/release/2026-09-23-p07-t05-verification.md` for prior release results and any remaining visual checks.
 
 ## Reset disposable development data
 

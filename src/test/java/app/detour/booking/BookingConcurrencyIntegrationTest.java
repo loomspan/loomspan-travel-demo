@@ -66,8 +66,8 @@ class BookingConcurrencyIntegrationTest {
         String tripAId = jsonField(tripARes, "id");
         String draftAId = getDraftId(tripARes, 0);
         insertSfoAirfareSelection(draftAId);
-        MvcResult planARes = userA.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripAId, draftAId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planARes = userA.unsafe(post("/api/trips/{tripId}/options", tripAId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedAId = getPlannedId(planARes, 0);
 
@@ -77,8 +77,8 @@ class BookingConcurrencyIntegrationTest {
         String tripBId = jsonField(tripBRes, "id");
         String draftBId = getDraftId(tripBRes, 0);
         insertSfoAirfareSelection(draftBId);
-        MvcResult planBRes = userB.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripBId, draftBId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planBRes = userB.unsafe(post("/api/trips/{tripId}/options", tripBId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedBId = getPlannedId(planBRes, 0);
 
@@ -127,8 +127,8 @@ class BookingConcurrencyIntegrationTest {
         String draftAId = getDraftId(tripARes, 0);
         insertSfoAirfareSelection(draftAId);
         insertSfoStaySelection(draftAId);
-        MvcResult planARes = userA.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripAId, draftAId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planARes = userA.unsafe(post("/api/trips/{tripId}/options", tripAId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedAId = getPlannedId(planARes, 0);
 
@@ -139,8 +139,8 @@ class BookingConcurrencyIntegrationTest {
         String draftBId = getDraftId(tripBRes, 0);
         insertSfoAirfareSelection(draftBId);
         insertSfoStaySelection(draftBId);
-        MvcResult planBRes = userB.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripBId, draftBId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planBRes = userB.unsafe(post("/api/trips/{tripId}/options", tripBId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedBId = getPlannedId(planBRes, 0);
 
@@ -189,8 +189,8 @@ class BookingConcurrencyIntegrationTest {
         String draftAId = getDraftId(tripARes, 0);
         insertSfoAirfareSelection(draftAId);
         insertSfoRentalSelection(draftAId);
-        MvcResult planARes = userA.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripAId, draftAId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planARes = userA.unsafe(post("/api/trips/{tripId}/options", tripAId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedAId = getPlannedId(planARes, 0);
 
@@ -201,8 +201,8 @@ class BookingConcurrencyIntegrationTest {
         String draftBId = getDraftId(tripBRes, 0);
         insertSfoAirfareSelection(draftBId);
         insertSfoRentalSelection(draftBId);
-        MvcResult planBRes = userB.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripBId, draftBId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planBRes = userB.unsafe(post("/api/trips/{tripId}/options", tripBId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedBId = getPlannedId(planBRes, 0);
 
@@ -246,8 +246,8 @@ class BookingConcurrencyIntegrationTest {
         String tripId = jsonField(tripRes, "id");
         String draftId = getDraftId(tripRes, 0);
         insertSfoAirfareSelection(draftId);
-        MvcResult planRes = user.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = user.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 
@@ -306,8 +306,8 @@ class BookingConcurrencyIntegrationTest {
         insertSfoStaySelection(draftId);
         insertSfoRentalSelection(draftId);
 
-        MvcResult planRes = user.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = user.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 
@@ -384,8 +384,8 @@ class BookingConcurrencyIntegrationTest {
         insertSfoStaySelection(draftId);
         insertSfoRentalSelection(draftId);
 
-        MvcResult planRes = user.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult planRes = user.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = getPlannedId(planRes, 0);
 

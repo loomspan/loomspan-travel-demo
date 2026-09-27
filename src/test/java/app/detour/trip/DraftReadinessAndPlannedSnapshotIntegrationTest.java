@@ -93,191 +93,57 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
                 .andExpect(jsonPath("$.blockingIssues.components").value("Select at least one structurally valid reservable component before planning."))
                 .andExpect(jsonPath("$.blockingIssues.budgetCents").value("Provide a budget before planning."));
 
-        // Promotion endpoint fails with 400 PLANNING_NOT_READY and returns all issues in fields
-        owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        // Named option creation needs a component, but budget is optional at this step.
+        owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("PLANNING_NOT_READY"))
-                .andExpect(jsonPath("$.fields.adult").exists())
-                .andExpect(jsonPath("$.fields.components").exists())
-                .andExpect(jsonPath("$.fields.budgetCents").exists());
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.fields.components").exists());
     }
 
     @Test
-    void rejectsPromotionWhenCatalogComponentsAreSoldOutOrUnavailable() throws Exception {
-        Client owner = register("sold-out-check@example.test");
+    void savesOptionSnapshotWhileInventoryIsTemporarilyUnavailable() throws Exception {
+        Client owner = register("inventory-snapshot@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
+                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25]}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
-
         insertSfoAirfareSelection(draftId);
-        insertSfoStaySelection(draftId);
-        insertSfoRentalSelection(draftId);
-
-        // 1. Airfare seats depleted (< travelerCount)
         jdbc.update("UPDATE flight_instance SET available_seats = 1 WHERE id = (SELECT outbound_flight_instance_id FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?))", UUID.fromString(draftId));
-        owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("PLANNING_NOT_READY"))
-                .andExpect(jsonPath("$.fields.airfare").value("Selected flight does not have enough available seats for party size."));
         owner.unsafe(get("/api/trips/{tripId}/drafts/{draftId}/readiness", tripId, draftId), null)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.ready").value(false))
-                .andExpect(jsonPath("$.blockingIssues.airfare").value("Selected flight does not have enough available seats for party size."));
-        jdbc.update("UPDATE flight_instance SET available_seats = 48 WHERE id = (SELECT outbound_flight_instance_id FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?))", UUID.fromString(draftId));
-
-        // 2. Stay inventory depleted (< unitCount)
-        jdbc.update("UPDATE accommodation_nightly_inventory SET available_inventory = 0 WHERE accommodation_unit_id = (SELECT accommodation_unit_id FROM detour_trip_draft_stay_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?))", UUID.fromString(draftId));
-        owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("PLANNING_NOT_READY"))
-                .andExpect(jsonPath("$.fields.stay").value("Selected accommodation has insufficient inventory for the requested dates."));
-        jdbc.update("UPDATE accommodation_nightly_inventory SET available_inventory = inventory_capacity WHERE accommodation_unit_id = (SELECT accommodation_unit_id FROM detour_trip_draft_stay_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?))", UUID.fromString(draftId));
-
-        // 3. Stay capacity exceeded
-        Client capacityOwner = register("stay-capacity-check@example.test");
-        MvcResult capacityTrip = capacityOwner.unsafe(post("/api/trips"),
-                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":5,\"travelerAges\":[30,28,25,20,19],\"budgetCents\":500000}")
-                .andExpect(status().isCreated()).andReturn();
-        String capTripId = jsonField(capacityTrip, "id");
-        String capDraftId = getDraftId(capacityTrip, 0);
-        insertSfoStaySelection(capDraftId); // guest capacity = 4, party = 5
-        capacityOwner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", capTripId, capDraftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("PLANNING_NOT_READY"))
-                .andExpect(jsonPath("$.fields.stay").value("Selected accommodation unit capacity is insufficient for party size."));
-
-        // 4. Rental driver age < 25
-        Client rentalAgeOwner = register("rental-driver-age@example.test");
-        MvcResult under25Trip = rentalAgeOwner.unsafe(post("/api/trips"),
-                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[24,22],\"budgetCents\":500000}")
-                .andExpect(status().isCreated()).andReturn();
-        String under25TripId = jsonField(under25Trip, "id");
-        String under25DraftId = getDraftId(under25Trip, 0);
-        insertSfoRentalSelection(under25DraftId);
-        rentalAgeOwner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", under25TripId, under25DraftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("PLANNING_NOT_READY"))
-                .andExpect(jsonPath("$.fields.rental").value("At least one traveler must be 25 or older to rent a vehicle."));
-
-        // 5. Rental pickup date outside trip interval
-        Client rentalDateOwner = register("rental-dates@example.test");
-        MvcResult dateTrip = rentalDateOwner.unsafe(post("/api/trips"),
-                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[30,25],\"budgetCents\":500000}")
-                .andExpect(status().isCreated()).andReturn();
-        String dateTripId = jsonField(dateTrip, "id");
-        String dateDraftId = getDraftId(dateTrip, 0);
-        insertSfoRentalSelection(dateDraftId);
-        jdbc.update("UPDATE detour_trip_draft_rental_selection SET pickup_at = TIMESTAMP WITH TIME ZONE '2027-03-08 10:00:00+00' WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)", UUID.fromString(dateDraftId));
-        rentalDateOwner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", dateTripId, dateDraftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("PLANNING_NOT_READY"))
-                .andExpect(jsonPath("$.fields.rental").value("Rental dates must be within the trip interval."));
-
-        // 6. Rental active occupancy overlap
-        Client rentalOccOwner = register("rental-occupancy@example.test");
-        MvcResult occTrip = rentalOccOwner.unsafe(post("/api/trips"),
-                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[30,25],\"budgetCents\":500000}")
-                .andExpect(status().isCreated()).andReturn();
-        String occTripId = jsonField(occTrip, "id");
-        String occDraftId = getDraftId(occTrip, 0);
-        insertSfoRentalSelection(occDraftId);
-        jdbc.update("""
-                INSERT INTO rental_unit_occupancy (rental_unit_id, pickup_at, return_at, occupancy_status)
-                VALUES ((SELECT rental_unit_id FROM detour_trip_draft_rental_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)),
-                    TIMESTAMP WITH TIME ZONE '2027-03-11 10:00:00+00', TIMESTAMP WITH TIME ZONE '2027-03-13 12:00:00+00', 'ACTIVE')
-                """, UUID.fromString(occDraftId));
-        rentalOccOwner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", occTripId, occDraftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("PLANNING_NOT_READY"))
-                .andExpect(jsonPath("$.fields.rental").value("Selected rental car is not available for the requested interval."));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.ready").value(false));
+        owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Inventory watch\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.savedOptions[0].name").value("Inventory watch"));
     }
-
     @Test
-    void enforcesBudgetOverageAcknowledgmentOnPromotion() throws Exception {
+    void savesOverBudgetOptionWithoutAcknowledgment() throws Exception {
         Client owner = register("overage-enforcement@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
                 "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":50000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
-        String draftId = getDraftId(created, 0);
-
-        insertSfoAirfareSelection(draftId);
-
-        // 1. Omitted acknowledgment
-        owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("BUDGET_OVERAGE_UNACKNOWLEDGED"))
-                .andExpect(jsonPath("$.fields.grandTotalCents").exists())
-                .andExpect(jsonPath("$.fields.budgetCents").value("50000"))
-                .andExpect(jsonPath("$.fields.budgetOverageCents").exists());
-
-        // 2. Explicit false acknowledgment
-        owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":false}")
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("BUDGET_OVERAGE_UNACKNOWLEDGED"));
+        insertSfoAirfareSelection(getDraftId(created, 0));
+        owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Over budget\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.savedOptions[0].tally.isOverBudget").value(true))
+                .andExpect(jsonPath("$.savedOptions[0].tally.budgetOverageCents").isNumber());
     }
-
     @Test
-    void allowsPromotionWhenBudgetOverageIsExplicitlyAcknowledged() throws Exception {
+    void rejectsObsoleteOverageAcknowledgmentField() throws Exception {
         Client owner = register("overage-acknowledged@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
                 "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":50000}")
                 .andExpect(status().isCreated()).andReturn();
         String tripId = jsonField(created, "id");
-        String draftId = getDraftId(created, 0);
-
-        insertSfoAirfareSelection(draftId);
-
-        owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}")
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.version").value(1))
-                .andExpect(jsonPath("$.planned.length()").value(1))
-                .andExpect(jsonPath("$.planned[0].tally.isOverBudget").value(true))
-                .andExpect(jsonPath("$.planned[0].tally.budgetOverageCents").isNumber());
+        insertSfoAirfareSelection(getDraftId(created, 0));
+        owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Over budget\",\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}")
+                .andExpect(status().isBadRequest());
     }
-
-    @Test
-    void invalidatesOverageAcknowledgmentOnSubsequentEdits() throws Exception {
-        Client owner = register("invalidation-test@example.test");
-        MvcResult created = owner.unsafe(post("/api/trips"),
-                "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":50000}")
-                .andExpect(status().isCreated()).andReturn();
-        String tripId = jsonField(created, "id");
-        String draftId = getDraftId(created, 0);
-
-        insertSfoAirfareSelection(draftId);
-
-        // Edit shared trip details (changes budget and advances trip version to 1)
-        owner.unsafe(put("/api/trips/{tripId}", tripId),
-                "{\"expectedVersion\":0,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":60000}")
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.version").value(1));
-
-        // Stale expectedVersion: 0 rejected with 409 VERSION_CONFLICT
-        owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"budgetOverageAcknowledged\":true}")
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
-
-        // Promotion with updated version 1 without acknowledgment fails with 400 BUDGET_OVERAGE_UNACKNOWLEDGED
-        owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":1,\"expectedDraftVersion\":0}")
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("BUDGET_OVERAGE_UNACKNOWLEDGED"));
-    }
-
     @Test
     void persistsCompleteDescriptiveFactsIntoPlannedSnapshotV16() throws Exception {
         Client owner = register("v16-facts@example.test");
@@ -291,8 +157,8 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
         insertSfoStaySelection(draftId);
         insertSfoRentalSelection(draftId);
 
-        MvcResult promoted = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult promoted = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = tools.jackson.databind.json.JsonMapper.builder().build()
                 .readTree(promoted.getResponse().getContentAsString()).get("planned").get(0).get("id").asString();
@@ -348,8 +214,8 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
         insertSfoStaySelection(draftId);
         insertSfoRentalSelection(draftId);
 
-        MvcResult promoted = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult promoted = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         var planTree = tools.jackson.databind.json.JsonMapper.builder().build().readTree(promoted.getResponse().getContentAsString());
         String plannedId = planTree.get("planned").get(0).get("id").asString();
@@ -390,8 +256,8 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
 
         insertSfoAirfareSelection(draftId);
 
-        MvcResult promoted = owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        MvcResult promoted = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = tools.jackson.databind.json.JsonMapper.builder().build()
                 .readTree(promoted.getResponse().getContentAsString()).get("planned").get(0).get("id").asString();
@@ -430,8 +296,8 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
                 .andExpect(jsonPath("$.blockingIssues.dates").value("Trip departure date has passed."));
 
         // Promotion rejected with 400 ALTERNATIVE_EXPIRED
-        owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("ALTERNATIVE_EXPIRED"));
     }
@@ -453,13 +319,13 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
         try (ExecutorService workers = Executors.newFixedThreadPool(2)) {
             Future<Integer> f1 = workers.submit(() -> {
                 planBarrier.await();
-                return first.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                        "{\"expectedVersion\":0,\"expectedDraftVersion\":0}").andReturn().getResponse().getStatus();
+                return first.unsafe(post("/api/trips/{tripId}/options", tripId),
+                        "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}").andReturn().getResponse().getStatus();
             });
             Future<Integer> f2 = workers.submit(() -> {
                 planBarrier.await();
-                return second.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripId, draftId),
-                        "{\"expectedVersion\":0,\"expectedDraftVersion\":0}").andReturn().getResponse().getStatus();
+                return second.unsafe(post("/api/trips/{tripId}/options", tripId),
+                        "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}").andReturn().getResponse().getStatus();
             });
             int s1 = f1.get();
             int s2 = f2.get();
@@ -493,8 +359,8 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
 
         // User B attempts to promote User A's draft -> 404 RESOURCE_NOT_FOUND
-        userB.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/plan", tripAId, draftAId),
-                "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+        userB.unsafe(post("/api/trips/{tripId}/options", tripAId),
+                "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
 

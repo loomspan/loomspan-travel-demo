@@ -352,35 +352,10 @@ public class TripService {
 
     @Transactional
     public TripResponse promoteDraft(long ownerUserId, String tripId, String draftId, TripRequests.Promotion request) {
-        if (request == null) throw validation("request", "A request body is required.");
         Trip trip = ownedTrip(ownerUserId, tripId);
         requireActiveTrip(trip);
-        TripDraft draft = ownedDraft(trip, draftId);
-        if (isExpired(draft.startDate())) {
-            throw new ApiException(400, "ALTERNATIVE_EXPIRED", "Expired alternatives cannot be promoted.");
-        }
-        Map<String, String> issues = evaluateDraftBlockingIssues(trip, draft);
-        if (!issues.isEmpty()) throw new ApiException(400, "PLANNING_NOT_READY", "The Draft is not ready to be planned.", issues);
-
-        ItineraryTallyResponse tally = tallyEngine.calculateTally(draft.selections(), trip.travelerCount(), trip.budgetCents());
-        if (tally.isOverBudget()) {
-            if (!Boolean.TRUE.equals(request.budgetOverageAcknowledged())) {
-                throw new ApiException(400, "BUDGET_OVERAGE_UNACKNOWLEDGED",
-                        "Promotion requires explicit acknowledgment of budget overage.",
-                        Map.of(
-                                "grandTotalCents", String.valueOf(tally.grandTotalCents()),
-                                "budgetCents", String.valueOf(trip.budgetCents()),
-                                "budgetOverageCents", String.valueOf(tally.budgetOverageCents())
-                        ));
-            }
-        }
-
-        DraftSelections resolved = trips.resolveSelectionsForOption(trip, draft.selections(), draft.startDate(), draft.endDate());
-        if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
-            throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
-        }
-        trips.insertPlanned(trip.id(), UUID.randomUUID(), resolved);
-        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+        ownedDraft(trip, draftId);
+        throw new ApiException(409, "USE_NAMED_OPTION", "Save a named option from the Working plan instead.");
     }
 
     @Transactional
@@ -509,6 +484,9 @@ public class TripService {
     }
 
     private DraftSelections validOptionSnapshot(Trip trip, TripDraft working) {
+        if (isExpired(working.startDate())) {
+            throw new ApiException(400, "ALTERNATIVE_EXPIRED", "An option cannot be saved after its departure date.");
+        }
         DraftSelections selections = working.selections();
         if (selections == null || (selections.airfare() == null && selections.stay() == null && selections.rental() == null)) {
             throw validation("components", "Select at least one component before saving an option.");
@@ -710,11 +688,11 @@ public class TripService {
         trips.createAggregate(ownerUserId, newTripPublicId, destination, startDate, endDate, travelerCount,
                 ages, budgetCents, label, UUID.randomUUID());
         Trip newTrip = trips.findByPublicIdAndOwnerUserId(newTripPublicId, ownerUserId).orElseThrow();
-        int optionNumber = 1;
-        for (TripRepository.DraftCreationSpec spec : draftsToCreate) {
+        for (int index = 0; index < draftsToCreate.size(); index++) {
+            TripRepository.DraftCreationSpec spec = draftsToCreate.get(index);
             TripDraft source = new TripDraft(0, spec.draftPublicId(), 0, spec.selections(), startDate, endDate);
             DraftSelections snapshot = trips.resolveSelectionsForOption(newTrip, source.selections(), startDate, endDate);
-            trips.insertPlanned(newTrip.id(), UUID.randomUUID(), "Option " + optionNumber++, startDate, endDate, snapshot);
+            trips.insertPlanned(newTrip.id(), UUID.randomUUID(), selectedPlanned.get(index).name(), startDate, endDate, snapshot);
         }
         newTrip = trips.findByPublicIdAndOwnerUserId(newTripPublicId, ownerUserId).orElseThrow();
         RevisionSummaryResponse summary = new RevisionSummaryResponse(removals, adjustments);

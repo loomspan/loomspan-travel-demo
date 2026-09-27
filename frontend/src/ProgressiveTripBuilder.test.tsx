@@ -87,6 +87,7 @@ describe('Progressive Trip Builder Experience', () => {
     }]});
     const save = vi.spyOn(tripsApi, 'saveOption').mockResolvedValue(saved);
     render(<TripWorkspace initialTrip={trip} onBack={() => {}} onTripDeleted={() => {}} />);
+    expect(screen.queryByRole('button', {name: /promote to planned|duplicate to new draft|delete draft/i})).not.toBeInTheDocument();
     expect(save).not.toHaveBeenCalled();
     await user.type(screen.getByLabelText('Option name'), 'Early March');
     expect(save).not.toHaveBeenCalled();
@@ -95,6 +96,7 @@ describe('Progressive Trip Builder Experience', () => {
       expectedVersion: 0, expectedDraftVersion: 0, name: 'Early March',
     }));
     expect(await screen.findByText('Saved as a new option.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'Early March'})).toBeInTheDocument();
   });
 
   it('does not save an option after a failed Working component change', async () => {

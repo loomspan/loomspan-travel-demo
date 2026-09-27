@@ -331,46 +331,7 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
   it('Triage option 2: continues the existing Working plan without a write', async () => {
     const trip = createMockTrip();
     const activeBooking = createMockBooking();
-    const tripWithEmptyDraft = createMockTrip({
-      version: 2,
-      drafts: [
-        {
-          id: 'alt-draft-empty',
-          version: 1,
-          selections: {airfare: null, stay: null, rental: null},
-          tally: {
-            airfareTotalCents: 0,
-            stayTotalCents: 0,
-            rentalTotalCents: 0,
-            grandTotalCents: 0,
-            remainingBudgetCents: 200000,
-            budgetOverageCents: 0,
-            isOverBudget: false,
-          },
-        },
-      ],
-      alternatives: [
-        trip.alternatives[0],
-        {
-          id: 'alt-draft-empty',
-          lifecycle: 'DRAFT',
-          version: 1,
-          selections: {airfare: null, stay: null, rental: null},
-          tally: {
-            airfareTotalCents: 0,
-            stayTotalCents: 0,
-            rentalTotalCents: 0,
-            grandTotalCents: 0,
-            remainingBudgetCents: 200000,
-            budgetOverageCents: 0,
-            isOverBudget: false,
-          },
-        },
-      ],
-    });
-
     vi.spyOn(tripsApi, 'cancelBooking').mockResolvedValueOnce(trip);
-    const createDraftSpy = vi.spyOn(tripsApi, 'createDraft').mockResolvedValueOnce(tripWithEmptyDraft);
     vi.spyOn(tripsApi, 'getBookingHistory').mockResolvedValue([]);
 
     const user = userEvent.setup();
@@ -394,7 +355,6 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
     // Continue the Working plan without a request.
     const createDraftBtn = within(triageDialog).getByRole('button', {name: /continue working plan/i});
     await user.click(createDraftBtn);
-    expect(createDraftSpy).not.toHaveBeenCalled();
 
     // Triage modal dismissed
     await waitFor(() => {
@@ -689,7 +649,7 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
         plannedAlternatives={[]}
         pending={false}
         onUseAlternative={vi.fn()}
-        onCreateDraft={vi.fn()}
+        onContinueWorking={vi.fn()}
         onClose={handleCloseTriageModal}
       />
     );
@@ -913,7 +873,7 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
         plannedAlternatives={[]}
         pending={true}
         onUseAlternative={vi.fn()}
-        onCreateDraft={vi.fn()}
+        onContinueWorking={vi.fn()}
         onClose={handleClose}
       />
     );
