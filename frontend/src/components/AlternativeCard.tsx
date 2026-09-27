@@ -18,6 +18,8 @@ type AlternativeCardProps = {
   onDeleteDraft: (draftId: string, version: number) => void;
   onDeletePlanned: (alternativeId: string) => void;
   onPromoteDraft?: (draftId: string, version: number) => void;
+  singleWorking?: boolean;
+  onOpenForEditing?: (optionId: string) => void;
 };
 
 export function AlternativeCard({
@@ -37,6 +39,8 @@ export function AlternativeCard({
   onDeleteDraft,
   onDeletePlanned,
   onPromoteDraft,
+  singleWorking = false,
+  onOpenForEditing,
 }: AlternativeCardProps) {
   const isDraft = alternative.lifecycle.toUpperCase() === 'DRAFT';
   const isPlanned = alternative.lifecycle.toUpperCase() === 'PLANNED';
@@ -54,7 +58,7 @@ export function AlternativeCard({
         <div>
           <div className="badge-row">
             <span className={`badge ${isDraft ? 'badge-draft' : 'badge-planned'}`}>
-              {isDraft
+              {singleWorking ? (isDraft ? 'Working plan' : 'Saved option') : isDraft
                 ? alternative.version !== null
                   ? `Draft v${alternative.version}`
                   : 'Draft'
@@ -65,7 +69,7 @@ export function AlternativeCard({
             {tripExpired && <span className="badge badge-expired">Expired</span>}
           </div>
           <h4 id={`alt-heading-${alternative.id}`} className="alternative-card-title">
-            {isDraft ? 'Draft' : 'Planned itinerary'}
+            {singleWorking ? (isDraft ? 'Working plan' : alternative.name || 'Saved option') : isDraft ? 'Draft' : 'Planned itinerary'}
           </h4>
           <span className="alternative-id">ID: {alternative.id.slice(0, 8)}…</span>
         </div>
@@ -91,7 +95,7 @@ export function AlternativeCard({
           </p>
         ) : isPlanned ? (
           <p className="hint read-only-hint">
-            This planned itinerary is snapshot-locked and read-only. Use &ldquo;Duplicate to draft&rdquo; to make modifications.
+            {singleWorking ? 'Open this option in the Working plan to edit it.' : 'This planned itinerary is snapshot-locked and read-only. Use “Duplicate to draft” to make modifications.'}
           </p>
         ) : null}
 
@@ -148,23 +152,23 @@ export function AlternativeCard({
           </>
         ) : isDraft ? (
           <>
-            <button
+            {!singleWorking && <button
               type="button"
               className="text-button delete-button"
               onClick={() => onDeleteDraft(alternative.id, alternative.version ?? 0)}
               aria-label={`Delete draft ${alternative.id.slice(0, 8)}`}
             >
               Delete draft
-            </button>
-            <button
+            </button>}
+            {!singleWorking && <button
               type="button"
               className="secondary-action-button"
               onClick={() => onDuplicateDraft(alternative.id, alternative.version ?? 0)}
               aria-label={`Duplicate draft ${alternative.id.slice(0, 8)}`}
             >
               Duplicate to new draft
-            </button>
-            {onPromoteDraft && (
+            </button>}
+            {!singleWorking && onPromoteDraft && (
               <button
                 type="button"
                 className="primary-button promote-draft-btn"
@@ -178,22 +182,24 @@ export function AlternativeCard({
           </>
         ) : (
           <>
-            <button
+            {singleWorking && onOpenForEditing && <button type="button" className="secondary-action-button"
+              onClick={() => onOpenForEditing(alternative.id)}>Open for editing</button>}
+            {!singleWorking && <button
               type="button"
               className="text-button delete-button"
               onClick={() => onDeletePlanned(alternative.id)}
               aria-label={`Delete planned itinerary ${alternative.id}`}
             >
               Delete planned itinerary
-            </button>
-            <button
+            </button>}
+            {!singleWorking && <button
               type="button"
               className="secondary-action-button"
               onClick={() => onDuplicatePlanned(alternative.id)}
               aria-label={`Duplicate planned itinerary ${alternative.id} to draft`}
             >
               Duplicate to draft
-            </button>
+            </button>}
             {isBooked && onViewBookingDetails ? (
               <button
                 type="button"

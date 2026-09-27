@@ -76,6 +76,69 @@ describe('Progressive Trip Builder Experience', () => {
     fetchMock.mockReset();
   });
 
+  it('saves a named option only after the explicit action', async () => {
+    const user = userEvent.setup();
+    const trip = createMockTrip();
+    const saved = createMockTrip({version: 1, planned: [{
+      id: 'option-1', name: 'Early March', version: 0,
+      selections: {airfare: null, stay: null, rental: null},
+    }]});
+    const save = vi.spyOn(tripsApi, 'saveOption').mockResolvedValue(saved);
+    render(<TripWorkspace initialTrip={trip} onBack={() => {}} onTripDeleted={() => {}} />);
+    expect(save).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText('Option name'), 'Early March');
+    expect(save).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', {name: 'Save as new option'}));
+    await waitFor(() => expect(save).toHaveBeenCalledWith('trip-1', {
+      expectedVersion: 0, expectedDraftVersion: 0, name: 'Early March',
+    }));
+    expect(await screen.findByText('Saved as a new option.')).toBeInTheDocument();
+  });
+
+  it('does not save an option after a failed Working component change', async () => {
+    const user = userEvent.setup();
+    const airfare = {
+      outboundFlightInstanceId: 101, returnFlightInstanceId: 202,
+      outboundDescription: 'Outbound', returnDescription: 'Return',
+      outboundBaseFareCents: 10000, outboundTaxCents: 2000, outboundFeeCents: 1000,
+      returnBaseFareCents: 11000, returnTaxCents: 2000, returnFeeCents: 1000,
+    };
+    const trip = createMockTrip({drafts: [{id: 'draft-1', version: 0,
+      selections: {airfare, stay: null, rental: null}}]});
+    vi.spyOn(tripsApi, 'removeAirfare').mockRejectedValue(new Error('Network unavailable'));
+    const save = vi.spyOn(tripsApi, 'saveOption').mockResolvedValue(trip);
+    render(<TripWorkspace initialTrip={trip} onBack={() => {}} onTripDeleted={() => {}} />);
+    await user.click(screen.getByRole('button', {name: 'Remove'}));
+    const modal = await screen.findByRole('dialog', {name: /remove airfare\?/i});
+    await user.click(within(modal).getByRole('button', {name: 'Remove airfare'}));
+    expect((await screen.findAllByText('Network unavailable')).length).toBeGreaterThan(0);
+    await user.type(screen.getByLabelText('Option name'), 'Before removal');
+    await user.click(screen.getByRole('button', {name: 'Save as new option'}));
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('shows expiry for each option using its own dates', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2027-03-15T20:00:00Z'));
+    try {
+      const trip = createMockTrip({
+        alternatives: [{id: 'draft-1', lifecycle: 'DRAFT', version: 0,
+          startDate: '2027-03-10', selections: {airfare: null, stay: null, rental: null}},
+        {id: 'option-1', lifecycle: 'PLANNED', version: 0, name: 'Later',
+          startDate: '2027-03-20', selections: {airfare: null, stay: null, rental: null}}],
+      });
+      render(<TripWorkspace initialTrip={trip} isExpired onBack={() => {}} onTripDeleted={() => {}} />);
+      const working = screen.getByRole('heading', {name: 'Working plan'}).closest('article');
+      const later = screen.getByRole('heading', {name: 'Later'}).closest('article');
+      expect(working).not.toBeNull();
+      expect(later).not.toBeNull();
+      expect(within(working!).getByText('Expired')).toBeInTheDocument();
+      expect(within(later!).queryByText('Expired')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   async function showProfile() {
     await screen.findByRole('heading', {name: 'Home'});
     await waitFor(() => expect(lastProfile).toBeDefined());

@@ -141,7 +141,7 @@ export function PostCancellationTriageModal({
               1. Use a saved alternative
             </h3>
             <p className="hint">
-              Copy a saved Planned itinerary into a new Draft to revalidate current pricing and availability before booking.
+              Open a Saved option in the existing Working plan to revalidate selections before booking.
             </p>
             {plannedAlternatives.length === 0 ? (
               <p className="hint read-only-hint">No other Planned alternatives are saved on this trip.</p>
@@ -156,7 +156,7 @@ export function PostCancellationTriageModal({
                   return (
                     <li key={alt.id} className="triage-alternative-item">
                       <div className="triage-alt-info">
-                        <strong>Planned ({alt.id.slice(0, 8)}…)</strong>
+                        <strong>{alt.name || 'Saved option'} ({alt.id.slice(0, 8)}…)</strong>
                         <span className="triage-alt-components">
                           {summaryParts.length > 0 ? summaryParts.join(' • ') : 'No components'}
                         </span>
@@ -168,8 +168,8 @@ export function PostCancellationTriageModal({
                         disabled={pending}
                       >
                         {pending && pendingAction === 'use-alternative'
-                          ? 'Copying to draft…'
-                          : 'Use this alternative'}
+                          ? 'Opening option…'
+                          : 'Open this option'}
                       </button>
                     </li>
                   );
@@ -178,13 +178,13 @@ export function PostCancellationTriageModal({
             )}
           </section>
 
-          {/* Option 2: Create a new Draft */}
+          {/* Option 2: Continue the existing Working plan */}
           <section className="triage-option-card card" aria-labelledby="triage-new-draft-heading">
             <h3 id="triage-new-draft-heading" className="triage-option-title">
-              2. Create a new Draft
+              2. Continue Working plan
             </h3>
             <p className="hint">
-              Start building a fresh alternative with empty flight, stay, and car slots.
+              Continue editing the one Working plan already on this Trip.
             </p>
             <button
               type="button"
@@ -192,7 +192,7 @@ export function PostCancellationTriageModal({
               onClick={onCreateDraft}
               disabled={pending}
             >
-              {pending && pendingAction === 'create-draft' ? 'Creating draft…' : 'Create a new Draft'}
+              {pending && pendingAction === 'create-draft' ? 'Continuing…' : 'Continue Working plan'}
             </button>
           </section>
 

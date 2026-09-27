@@ -56,6 +56,39 @@ class BookingApiIntegrationTest {
     }
 
     @Test
+    void namedOptionsKeepAdultAndDriverEligibilityAtBookingTime() throws Exception {
+        Client minors = register("named-option-minors@example.test");
+        MvcResult minorTrip = minors.unsafe(post("/api/trips"),
+                "{\"name\":\"Young travelers\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[16,17]}")
+                .andExpect(status().isCreated()).andReturn();
+        String minorTripId = jsonField(minorTrip, "id");
+        String minorDraftId = getDraftId(minorTrip, 0);
+        insertSfoStaySelection(minorDraftId);
+        MvcResult minorOption = minors.unsafe(post("/api/trips/{tripId}/options", minorTripId),
+                "{\"name\":\"Stay choice\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated()).andReturn();
+        String minorOptionId = getPlannedId(minorOption, 0);
+        minors.unsafe(post("/api/trips/{tripId}/bookings", minorTripId),
+                "{\"plannedItineraryId\":\"" + minorOptionId + "\",\"expectedVersion\":1,\"idempotencyKey\":\"minor-choice\"}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("ADULT_REQUIRED"));
+
+        Client noDriver = register("named-option-no-driver@example.test");
+        MvcResult driverTrip = noDriver.unsafe(post("/api/trips"),
+                "{\"name\":\"Young adults\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[18,19]}")
+                .andExpect(status().isCreated()).andReturn();
+        String driverTripId = jsonField(driverTrip, "id");
+        String driverDraftId = getDraftId(driverTrip, 0);
+        insertSfoRentalSelection(driverDraftId);
+        MvcResult driverOption = noDriver.unsafe(post("/api/trips/{tripId}/options", driverTripId),
+                "{\"name\":\"Car choice\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated()).andReturn();
+        String driverOptionId = getPlannedId(driverOption, 0);
+        noDriver.unsafe(post("/api/trips/{tripId}/bookings", driverTripId),
+                "{\"plannedItineraryId\":\"" + driverOptionId + "\",\"expectedVersion\":1,\"idempotencyKey\":\"no-driver-choice\"}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("DRIVER_REQUIRED"));
+    }
+
+    @Test
     void booksValidPlannedItineraryAndDecrementsAllComponents() throws Exception {
         Client owner = register("booking-red-test@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),

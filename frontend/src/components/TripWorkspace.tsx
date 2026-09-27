@@ -154,8 +154,14 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
   const [removeError, setRemoveError] = useState<string | undefined>();
 
   const [componentMutationPending, setComponentMutationPending] = useState(false);
+  const [workingMutationFailed, setWorkingMutationFailed] = useState(false);
 
   const [promotionPending, setPromotionPending] = useState(false);
+  const [optionName, setOptionName] = useState('');
+  const [editingOptionId, setEditingOptionId] = useState<string | null>(null);
+  const [loadTargetId, setLoadTargetId] = useState<string | null>(null);
+  const [currentPreservedForLoad, setCurrentPreservedForLoad] = useState(false);
+  const [optionActionPending, setOptionActionPending] = useState(false);
   const [readinessIssues, setReadinessIssues] = useState<Record<string, string> | null>(null);
   const [isReadinessBannerOpen, setIsReadinessBannerOpen] = useState(false);
   const [isOverageModalOpen, setIsOverageModalOpen] = useState(false);
@@ -198,6 +204,15 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
   const [activeBooking, setActiveBooking] = useState<BookingResponse | null>(
     initialActiveBooking ?? null
   );
+  const bookedOptionStartDate = activeBooking
+    ? trip.planned.find(option => option.id === activeBooking.plannedItineraryId)?.startDate
+    : undefined;
+  const pacificDateParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const pacificToday = `${pacificDateParts.find(part => part.type === 'year')?.value}-${pacificDateParts.find(part => part.type === 'month')?.value}-${pacificDateParts.find(part => part.type === 'day')?.value}`;
+  const bookedOptionExpired = bookedOptionStartDate
+    ? bookedOptionStartDate <= pacificToday : isExpired || temporalStatus === 'PAST';
   const [workspaceView, setWorkspaceView] = useState<
     'workspace' | 'compare' | 'booking-review' | 'booking-confirmation'
   >('workspace');
@@ -332,10 +347,8 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
   const validateInputs = useCallback(() => {
     const errors: Record<string, string> = {};
 
-    if (!hasPlanned) {
-      const dateErr = validateDates(startDate, endDate);
-      if (dateErr) errors.dates = dateErr;
-    }
+    const dateErr = validateDates(startDate, endDate);
+    if (dateErr) errors.dates = dateErr;
 
     const count = parseInt(travelerCountInput, 10);
     if (isNaN(count) || count < 1 || count > 8) {
@@ -398,8 +411,8 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
 
   const hasUnsavedChanges = useCallback(() => {
     const {ages, budgetCents} = validateInputs();
-    return isSavingRef.current || componentMutationPending || isDirty(ages, budgetCents) || autosaveStatus === 'saving' || (autosaveStatus === 'error' && !refreshFailed) || autosaveStatus === 'conflict';
-  }, [validateInputs, isDirty, autosaveStatus, componentMutationPending, refreshFailed]);
+    return isSavingRef.current || componentMutationPending || workingMutationFailed || isDirty(ages, budgetCents) || autosaveStatus === 'saving' || autosaveStatus === 'conflict';
+  }, [validateInputs, isDirty, autosaveStatus, componentMutationPending, workingMutationFailed]);
   const latestRefreshState = useRef({hasUnsavedChanges, version: trip.version});
   latestRefreshState.current = {hasUnsavedChanges, version: trip.version};
 
@@ -465,6 +478,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       const count = parseInt(travelerCountInput, 10);
       const updatedTrip = await tripsApi.replaceSharedDetails(trip.id, {
         expectedVersion: trip.version,
+        expectedDraftVersion: activeDraft?.version,
         destinationKey,
         startDate,
         endDate,
@@ -489,9 +503,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         } else if (err.code === 'VERSION_CONFLICT') {
           setAutosaveStatus('conflict');
           setAutosaveMessage('The Trip has changed on the server. Reload before saving.');
-        } else if (err.code === 'IMMUTABLE_TRIP') {
-          setAutosaveStatus('error');
-          setAutosaveMessage('Trips with Planned itineraries cannot change destination, dates, or travelers in place. Use "Revise Trip".');
         } else if (err.code === 'VALIDATION_FAILED' || Object.keys(err.fields).length > 0) {
           setFieldErrors(err.fields);
           setAutosaveStatus('error');
@@ -517,7 +528,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         }, 300);
       }
     }
-  }, [trip.id, trip.version, destinationKey, startDate, endDate, travelerCountInput, validateInputs, isDirty, autosaveStatus, isTripCanceled, onAuthenticationRequired]);
+  }, [trip.id, trip.version, activeDraft?.version, destinationKey, startDate, endDate, travelerCountInput, validateInputs, isDirty, autosaveStatus, isTripCanceled, onAuthenticationRequired]);
 
   const executeAutosaveRef = useRef(executeAutosave);
   useEffect(() => {
@@ -557,6 +568,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     try {
       const freshTrip = await tripsApi.getTrip(trip.id);
       applyTripState(freshTrip);
+      setWorkingMutationFailed(false);
       setRefreshFailed(false);
       setAutosaveStatus('idle');
       setAutosaveMessage(undefined);
@@ -637,11 +649,13 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         returnFlightInstanceId: option.returnFlight.flightInstanceId,
       });
       applyTripState(updatedTrip);
+      setWorkingMutationFailed(false);
       setBudgetOverageAcknowledged(false);
       setAirfareMode('selected');
       setAutosaveStatus('saved');
       setAutosaveMessage('Flight saved to draft.');
     } catch (err) {
+      setWorkingMutationFailed(true);
       if (err instanceof IdentityApiError && err.code === 'VERSION_CONFLICT') {
         setAutosaveStatus('conflict');
         setAutosaveMessage('The Trip has changed on the server. Reload before saving.');
@@ -667,11 +681,13 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         unitCount: option.pricing.requiredRooms,
       });
       applyTripState(updatedTrip);
+      setWorkingMutationFailed(false);
       setBudgetOverageAcknowledged(false);
       setStayMode('selected');
       setAutosaveStatus('saved');
       setAutosaveMessage('Stay saved to draft.');
     } catch (err) {
+      setWorkingMutationFailed(true);
       if (err instanceof IdentityApiError && err.code === 'VERSION_CONFLICT') {
         setAutosaveStatus('conflict');
         setAutosaveMessage('The Trip has changed on the server. Reload before saving.');
@@ -702,11 +718,13 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         returnAt: returnAtIso,
       });
       applyTripState(updatedTrip);
+      setWorkingMutationFailed(false);
       setBudgetOverageAcknowledged(false);
       setRentalMode('selected');
       setAutosaveStatus('saved');
       setAutosaveMessage('Rental car saved to draft.');
     } catch (err) {
+      setWorkingMutationFailed(true);
       if (err instanceof IdentityApiError && err.code === 'VERSION_CONFLICT') {
         setAutosaveStatus('conflict');
         setAutosaveMessage('The Trip has changed on the server. Reload before saving.');
@@ -780,12 +798,14 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         setRentalMode('hidden');
       }
       applyTripState(updatedTrip);
+      setWorkingMutationFailed(false);
       setBudgetOverageAcknowledged(false);
       const title = removeTarget.title;
       setRemoveTarget(null);
       setAutosaveStatus('saved');
       setAutosaveMessage(`${title} removed from draft.`);
     } catch (err) {
+      setWorkingMutationFailed(true);
       if (err instanceof IdentityApiError && err.code === 'VERSION_CONFLICT') {
         setRemoveTarget(null);
         setRemoveError(undefined);
@@ -894,6 +914,112 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       next[index] = val;
       return next;
     });
+  };
+
+  const ensureSavedWorking = () => {
+    if (hasUnsavedChanges() || !activeDraft) {
+      setAutosaveStatus('error');
+      setAutosaveMessage('Save your Working plan before managing options. Retry the save if it failed.');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSaveNamedOption = async () => {
+    if (optionActionPending || !ensureSavedWorking()) return;
+    if (!optionName.trim()) {
+      setAutosaveStatus('error');
+      setAutosaveMessage('Enter a name for the Saved option.');
+      return;
+    }
+    setOptionActionPending(true);
+    setAutosaveStatus('saving');
+    setAutosaveMessage('Saving option…');
+    try {
+      const updated = await tripsApi.saveOption(trip.id, {
+        expectedVersion: trip.version, expectedDraftVersion: activeDraft!.version, name: optionName.trim(),
+      });
+      applyTripState(updated);
+      onTripUpdated?.(updated);
+      setOptionName('');
+      setAutosaveStatus('saved');
+      setAutosaveMessage('Saved as a new option.');
+    } catch (error) {
+      const conflict = error instanceof IdentityApiError && error.code === 'VERSION_CONFLICT';
+      setAutosaveStatus(conflict ? 'conflict' : 'error');
+      setAutosaveMessage(error instanceof IdentityApiError ? error.message : 'Could not save option.');
+    } finally {
+      setOptionActionPending(false);
+    }
+  };
+
+  const handleUpdateNamedOption = async () => {
+    if (optionActionPending || !editingOptionId || !ensureSavedWorking()) return;
+    const option = (trip.savedOptions ?? trip.planned).find(item => item.id === editingOptionId);
+    if (!option) return;
+    setOptionActionPending(true);
+    setAutosaveStatus('saving');
+    setAutosaveMessage('Updating option…');
+    try {
+      const updated = await tripsApi.updateOption(trip.id, option.id, {
+        expectedVersion: trip.version, expectedDraftVersion: activeDraft!.version,
+        expectedOptionVersion: option.version ?? 0, name: optionName.trim() || option.name || 'Saved option',
+      });
+      applyTripState(updated);
+      onTripUpdated?.(updated);
+      setAutosaveStatus('saved');
+      setAutosaveMessage('Option updated.');
+    } catch (error) {
+      const conflict = error instanceof IdentityApiError && error.code === 'VERSION_CONFLICT';
+      setAutosaveStatus(conflict ? 'conflict' : 'error');
+      setAutosaveMessage(error instanceof IdentityApiError ? error.message : 'Could not update option.');
+    } finally {
+      setOptionActionPending(false);
+    }
+  };
+
+  const handleLoadNamedOption = async (keepCurrent: boolean) => {
+    if (optionActionPending || !loadTargetId || !ensureSavedWorking()) return;
+    const option = (trip.savedOptions ?? trip.planned).find(item => item.id === loadTargetId);
+    if (!option) return;
+    if (keepCurrent && !currentPreservedForLoad && !optionName.trim()) {
+      setAutosaveStatus('error');
+      setAutosaveMessage('Name your current Working plan before keeping it as an option.');
+      return;
+    }
+    setOptionActionPending(true);
+    setAutosaveStatus('saving');
+    setAutosaveMessage('Opening option in Working plan…');
+    try {
+      let current = trip;
+      if (keepCurrent && !currentPreservedForLoad) {
+        current = await tripsApi.saveOption(trip.id, {
+          expectedVersion: trip.version, expectedDraftVersion: activeDraft!.version, name: optionName.trim(),
+        });
+        applyTripState(current);
+        onTripUpdated?.(current);
+        setCurrentPreservedForLoad(true);
+      }
+      const working = current.workingPlan ?? current.drafts[0];
+      const updated = await tripsApi.loadOption(trip.id, option.id, {
+        expectedVersion: current.version, expectedDraftVersion: working.version,
+        expectedOptionVersion: option.version ?? 0, replaceWorking: true,
+      });
+      applyTripState(updated);
+      onTripUpdated?.(updated);
+      setEditingOptionId(option.id);
+      setOptionName(option.name || '');
+      setLoadTargetId(null);
+      setCurrentPreservedForLoad(false);
+      setAutosaveStatus('saved');
+      setAutosaveMessage('Option opened in the Working plan. The Saved option is unchanged.');
+    } catch (error) {
+      const conflict = error instanceof IdentityApiError && error.code === 'VERSION_CONFLICT';
+      setAutosaveStatus(conflict ? 'conflict' : 'error');
+      setAutosaveMessage(error instanceof IdentityApiError ? error.message : 'Could not open option.');
+    } finally {
+      setOptionActionPending(false);
+    }
   };
 
   const handlePromoteDraft = async (
@@ -1127,14 +1253,8 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     setTriageAction('use-alternative');
     setTriageError(undefined);
     try {
-      const updatedTrip = await tripsApi.duplicateAlternative(trip.id, plannedId, {
-        expectedVersion: trip.version,
-      });
-      applyTripState(updatedTrip);
       setIsTriageModalOpen(false);
-      setAutosaveStatus('saved');
-      setAutosaveMessage('Planned itinerary copied to new draft.');
-      if (onTripUpdated) onTripUpdated(updatedTrip);
+      setLoadTargetId(plannedId);
     } catch (err) {
       if (err instanceof IdentityApiError) {
         setTriageError(err.message || 'Could not copy alternative.');
@@ -1152,14 +1272,9 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     setTriageAction('create-draft');
     setTriageError(undefined);
     try {
-      const updatedTrip = await tripsApi.createDraft(trip.id, {
-        expectedVersion: trip.version,
-      });
-      applyTripState(updatedTrip);
       setIsTriageModalOpen(false);
       setAutosaveStatus('saved');
-      setAutosaveMessage('New empty draft created.');
-      if (onTripUpdated) onTripUpdated(updatedTrip);
+      setAutosaveMessage('Continue editing the existing Working plan.');
     } catch (err) {
       if (err instanceof IdentityApiError) {
         setTriageError(err.message || 'Could not create draft.');
@@ -1405,8 +1520,8 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
                 type="button"
                 className="secondary-action-button cancel-booking-btn"
                 onClick={handlePromptCancelBooking}
-                disabled={isExpired || temporalStatus === 'PAST'}
-                title={isExpired || temporalStatus === 'PAST' ? 'Past or expired bookings cannot be canceled' : undefined}
+                disabled={bookedOptionExpired}
+                title={bookedOptionExpired ? 'Past or expired bookings cannot be canceled' : undefined}
               >
                 Cancel Booking
               </button>
@@ -1449,15 +1564,16 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         <section className="workspace-section builder-section" aria-labelledby="builder-heading">
           <div className="section-header builder-header">
             <h3 id="builder-heading" tabIndex={-1}>Progressive Trip Builder</h3>
-            <button
-              type="button"
-              className="primary-button promote-draft-btn"
-              disabled={isExpired || promotionPending || isTripCanceled}
-              onClick={() => void handlePromoteDraft(activeDraft.id, activeDraft.version)}
-              aria-label="Save as Planned Itinerary"
-            >
-              {promotionPending ? 'Saving planned itinerary…' : 'Save as Planned Itinerary'}
-            </button>
+            <div className="option-actions">
+              <label htmlFor="option-name">Option name</label>
+              <input id="option-name" value={optionName} maxLength={300}
+                onChange={event => setOptionName(event.target.value)} placeholder="Name this option" />
+              <button type="button" className="primary-button" disabled={optionActionPending || isTripCanceled}
+                onClick={() => void handleSaveNamedOption()}>Save as new option</button>
+              {editingOptionId && <button type="button" className="secondary-action-button"
+                disabled={optionActionPending || isTripCanceled}
+                onClick={() => void handleUpdateNamedOption()}>Update this option</button>}
+            </div>
           </div>
 
           <ItinerarySummaryTally trip={trip} selections={activeDraft.selections} />
@@ -1544,8 +1660,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
 
         {hasPlanned && !isTripCanceled && (
           <p className="hint read-only-hint">
-            Trips with Planned itineraries cannot change destination, dates, or traveler count in place.
-            Use &ldquo;Revise Trip&rdquo; to create a new version.
+            Working dates and budget can change without changing Saved options. Use Revise Trip to change the destination or travelers.
           </p>
         )}
         {isTripCanceled && (
@@ -1581,7 +1696,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
                 type="date"
                 id="workspace-start-date"
                 value={startDate}
-                disabled={hasPlanned || isTripCanceled}
+                disabled={isTripCanceled}
                 min="2027-03-01"
                 max="2027-03-31"
                 onChange={(e) => {
@@ -1598,7 +1713,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
                 type="date"
                 id="workspace-end-date"
                 value={endDate}
-                disabled={hasPlanned || isTripCanceled}
+                disabled={isTripCanceled}
                 min="2027-03-01"
                 max="2027-03-31"
                 onChange={(e) => {
@@ -1743,15 +1858,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
                 )}
               </>
             )}
-            {!isTripCanceled && (
-              <button
-                type="button"
-                className="primary create-empty-draft-btn"
-                onClick={() => void handleCreateEmptyDraft()}
-              >
-                Create empty draft
-              </button>
-            )}
           </div>
         </div>
 
@@ -1779,7 +1885,9 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
               <AlternativeCard
                 key={alt.id}
                 alternative={alt}
-                tripExpired={isExpired}
+                singleWorking
+                onOpenForEditing={(id) => { setCurrentPreservedForLoad(false); setLoadTargetId(id); }}
+                tripExpired={alt.startDate ? alt.startDate <= pacificToday : isExpired}
                 tripCanceled={isTripCanceled}
                 hasBookingHistory={effectiveHasBookingHistory}
                 promotionPending={promotionPending}
@@ -1799,6 +1907,21 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
           </div>
         )}
       </section>
+
+      {loadTargetId && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="load-option-heading">
+            <h3 id="load-option-heading">Open Saved option for editing?</h3>
+            <p>This copies the option into your one Working plan. The Saved option stays unchanged. Different Working dates and selections will be replaced.</p>
+            <p>You can keep the current Working plan as another named Saved option first.</p>
+            <div className="modal-actions">
+              <button type="button" onClick={() => { setCurrentPreservedForLoad(false); setLoadTargetId(null); }} disabled={optionActionPending}>Cancel</button>
+              <button type="button" onClick={() => void handleLoadNamedOption(true)} disabled={optionActionPending}>{currentPreservedForLoad ? 'Retry opening option' : 'Save current first, then open'}</button>
+              <button type="button" className="primary-button" onClick={() => void handleLoadNamedOption(false)} disabled={optionActionPending}>Replace Working plan</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Booking History Section */}
       {(effectiveHasBookingHistory || isTripCanceled) && (

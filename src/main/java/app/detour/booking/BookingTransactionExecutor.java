@@ -83,6 +83,13 @@ public class BookingTransactionExecutor {
         if (selections == null || (selections.airfare() == null && selections.stay() == null && selections.rental() == null)) {
             throw new ApiException(400, "NO_RESERVABLE_COMPONENTS", "The selected itinerary contains no reservable components.");
         }
+        if (trip.travelerAges() == null || trip.travelerAges().stream().noneMatch(age -> age != null && age >= 18)) {
+            throw new ApiException(400, "ADULT_REQUIRED", "At least one traveler must be an adult to book.");
+        }
+        if (selections.rental() != null
+                && trip.travelerAges().stream().noneMatch(age -> age != null && age >= 25)) {
+            throw new ApiException(400, "DRIVER_REQUIRED", "At least one traveler must be 25 or older to book a rental car.");
+        }
 
         // 6. Deterministic locking & availability check
         Map<String, String> conflicts = new LinkedHashMap<>();

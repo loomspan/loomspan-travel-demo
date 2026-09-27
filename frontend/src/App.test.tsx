@@ -342,98 +342,34 @@ describe('App identity experience', () => {
     expect(screen.queryByText(/Booked/)).not.toBeInTheDocument();
   });
 
-  it('creates component-empty draft and explicitly duplicates existing draft with distinct actions', async () => {
+  it('keeps exactly one Working plan and offers explicit named option saving', async () => {
     const tripDetail = {
-      id: 'trip-1',
-      destinationKey: 'destination-sfo',
-      destinationName: 'San Francisco',
-      originAirportCode: 'PDX',
-      startDate: '2027-03-10',
-      endDate: '2027-03-14',
-      travelerCount: 1,
-      travelerAges: null,
-      budgetCents: null,
-      label: 'San Francisco — Mar 10–14, 2027',
-      version: 0,
-      drafts: [{ id: 'draft-1', selections: { airfare: null, stay: null, rental: null } }],
+      id: 'trip-1', destinationKey: 'destination-sfo', destinationName: 'San Francisco',
+      originAirportCode: 'PDX', startDate: '2027-03-10', endDate: '2027-03-14',
+      travelerCount: 1, travelerAges: null, budgetCents: null,
+      label: 'San Francisco — Mar 10–14, 2027', version: 0,
+      drafts: [{id: 'draft-1', version: 0, selections: {airfare: null, stay: null, rental: null}}],
       planned: [],
-      alternatives: [{ id: 'draft-1', lifecycle: 'DRAFT', version: 0, selections: { airfare: null, stay: null, rental: null } }],
+      alternatives: [{id: 'draft-1', lifecycle: 'DRAFT', version: 0,
+        selections: {airfare: null, stay: null, rental: null}}],
       revisionSummary: null,
     };
-
-    const tripAfterEmptyDraft = {
-      ...tripDetail,
-      version: 1,
-      drafts: [
-        tripDetail.drafts[0],
-        { id: 'draft-2', selections: { airfare: null, stay: null, rental: null } },
-      ],
-      alternatives: [
-        tripDetail.alternatives[0],
-        { id: 'draft-2', lifecycle: 'DRAFT', version: 0, selections: { airfare: null, stay: null, rental: null } },
-      ],
-    };
-
-    const tripAfterDuplicate = {
-      ...tripAfterEmptyDraft,
-      version: 2,
-      drafts: [
-        ...tripAfterEmptyDraft.drafts,
-        { id: 'draft-3', selections: { airfare: null, stay: null, rental: null } },
-      ],
-      alternatives: [
-        ...tripAfterEmptyDraft.alternatives,
-        { id: 'draft-3', lifecycle: 'DRAFT', version: 0, selections: { airfare: null, stay: null, rental: null } },
-      ],
-    };
-
-    fetchMock.mockResolvedValueOnce(json(200, {
-      email: 'ada@example.test',
-      upcoming: [{
-        id: 'trip-1',
-        destinationKey: 'destination-sfo',
-        destinationName: 'San Francisco',
-        startDate: '2027-03-10',
-        endDate: '2027-03-14',
-        label: 'San Francisco — Mar 10–14, 2027',
-        version: 0,
-        temporalStatus: 'UPCOMING',
-        draftCount: 1,
-        plannedCount: 0,
-        expiredAlternativeCount: 0,
-        bookedCount: 0,
-        hasBookingHistory: false,
-        alternatives: [{ id: 'draft-1', lifecycle: 'DRAFT', version: 0, status: 'DRAFT', expired: false }],
-      }],
-      past: [],
-    })).mockResolvedValueOnce(json(200, tripDetail))
-      .mockResolvedValueOnce(json(201, tripAfterEmptyDraft))
-      .mockResolvedValueOnce(json(201, tripAfterDuplicate));
-
+    fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [{
+      id: tripDetail.id, destinationKey: tripDetail.destinationKey,
+      destinationName: tripDetail.destinationName, startDate: tripDetail.startDate,
+      endDate: tripDetail.endDate, label: tripDetail.label, version: 0,
+      temporalStatus: 'UPCOMING', draftCount: 1, plannedCount: 0,
+      expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false,
+      alternatives: [],
+    }], past: []})).mockResolvedValueOnce(json(200, tripDetail));
     const user = userEvent.setup();
     render(<App />);
     await showProfile();
-    expect(await screen.findByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
-
     await user.click(screen.getByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
-    expect(await screen.findByRole('heading', {name: 'San Francisco — Mar 10–14, 2027'})).toBeInTheDocument();
-
-    const createEmptyBtn = screen.getByRole('button', {name: 'Create empty draft'});
-    const duplicateBtn = screen.getByRole('button', {name: /Duplicate draft/i});
-    expect(createEmptyBtn).toBeInTheDocument();
-    expect(duplicateBtn).toBeInTheDocument();
-
-    await user.click(createEmptyBtn);
-    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/drafts', expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({expectedVersion: 0}),
-    }));
-
-    await user.click(duplicateBtn);
-    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/drafts/draft-1/duplicate', expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({expectedVersion: 1, expectedDraftVersion: 0}),
-    }));
+    expect(await screen.findByRole('button', {name: 'Save as new option'})).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: /create empty draft/i})).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: /duplicate draft/i})).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([path, init]) => String(path).includes('/drafts') && init?.method === 'POST')).toHaveLength(0);
   });
 
   it('autosaves mutable traveler ages and budget with debouncing, status announcements, and input preservation on error', async () => {
@@ -687,76 +623,6 @@ describe('App identity experience', () => {
     await waitFor(() => {
       expect(screen.queryByText(/The Trip has changed on the server/)).not.toBeInTheDocument();
     });
-  });
-
-  it('displays Planned alternative as visibly read-only and routes editing through Duplicate to Draft', async () => {
-    const tripDetail = {
-      id: 'trip-1',
-      destinationKey: 'destination-sfo',
-      destinationName: 'San Francisco',
-      originAirportCode: 'PDX',
-      startDate: '2027-03-10',
-      endDate: '2027-03-14',
-      travelerCount: 1,
-      travelerAges: [30],
-      budgetCents: 50000,
-      label: 'San Francisco — Mar 10–14, 2027',
-      version: 1,
-      drafts: [],
-      planned: [{ id: 'plan-1', selections: { airfare: null, stay: null, rental: null } }],
-      alternatives: [{ id: 'plan-1', lifecycle: 'PLANNED', version: null, selections: { airfare: null, stay: null, rental: null } }],
-      revisionSummary: null,
-    };
-
-    const tripAfterDuplication = {
-      ...tripDetail,
-      version: 2,
-      drafts: [{ id: 'draft-from-plan', selections: { airfare: null, stay: null, rental: null } }],
-      alternatives: [
-        tripDetail.alternatives[0],
-        { id: 'draft-from-plan', lifecycle: 'DRAFT', version: 0, selections: { airfare: null, stay: null, rental: null } },
-      ],
-    };
-
-    fetchMock.mockResolvedValueOnce(json(200, {
-      email: 'ada@example.test',
-      upcoming: [{
-        id: 'trip-1',
-        destinationKey: 'destination-sfo',
-        destinationName: 'San Francisco',
-        startDate: '2027-03-10',
-        endDate: '2027-03-14',
-        label: 'San Francisco — Mar 10–14, 2027',
-        version: 1,
-        temporalStatus: 'UPCOMING',
-        draftCount: 0,
-        plannedCount: 1,
-        expiredAlternativeCount: 0,
-        bookedCount: 0,
-        hasBookingHistory: false,
-        alternatives: [{ id: 'plan-1', lifecycle: 'PLANNED', version: null, status: 'PLANNED', expired: false }],
-      }],
-      past: [],
-    })).mockResolvedValueOnce(json(200, tripDetail))
-      .mockResolvedValueOnce(json(201, tripAfterDuplication));
-
-    const user = userEvent.setup();
-    render(<App />);
-    await showProfile();
-    await user.click(await screen.findByRole('button', {name: 'Open trip San Francisco — Mar 10–14, 2027'}));
-
-    expect(await screen.findByText('Planned itinerary (read-only)')).toBeInTheDocument();
-    expect(screen.getByText(/This planned itinerary is snapshot-locked and read-only/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Destination')).toBeDisabled();
-    expect(screen.getByLabelText('Departure date')).toBeDisabled();
-
-    const duplicateToDraftBtn = screen.getByRole('button', {name: /Duplicate planned itinerary/i});
-    await user.click(duplicateToDraftBtn);
-
-    expect(fetchMock).toHaveBeenCalledWith('/api/trips/trip-1/alternatives/plan-1/duplicate', expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({expectedVersion: 1}),
-    }));
   });
 
   it('displays structured revision summary (removals and adjustments) when returned by backend', async () => {
@@ -1245,7 +1111,7 @@ describe('App identity experience', () => {
     const reviseBtn = screen.getByRole('button', {name: 'Revise Trip'});
     expect(reviseBtn).toBeInTheDocument();
     expect(screen.getByLabelText('Destination')).toBeDisabled();
-    expect(screen.getByLabelText('Departure date')).toBeDisabled();
+    expect(screen.getByLabelText('Departure date')).toBeEnabled();
     expect(screen.getByLabelText('Traveler 1 age')).toBeDisabled();
 
     await user.click(reviseBtn);

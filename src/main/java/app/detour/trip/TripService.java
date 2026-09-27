@@ -114,6 +114,10 @@ public class TripService {
         LocalDate startDate = required(request.startDate(), "startDate");
         LocalDate endDate = required(request.endDate(), "endDate");
         validateDates(startDate, endDate);
+        if (trip.version() != request.expectedVersion() || draft.version() != request.expectedDraftVersion()) {
+            throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
+        }
+        if (draft.startDate().equals(startDate) && draft.endDate().equals(endDate)) return response(trip);
         if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
             throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
         }
@@ -139,6 +143,7 @@ public class TripService {
             var result = trips.revalidateRental(trip.destination().id(), startDate, endDate,
                     trip.travelerAges(), selections.rental(), draft.publicId());
             if (!result.valid()) { trips.deleteDraftRentalSelection(draft.id()); removals.add(result.removal()); }
+            else if (result.adjustment() != null) adjustments.add(result.adjustment());
         }
         trips.updateWorkingDates(trip.id(), draft.id(), startDate, endDate);
         return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow(),
@@ -177,10 +182,11 @@ public class TripService {
         List<TripProfileSummary> past = new ArrayList<>();
 
         for (Trip trip : allTrips) {
-            boolean pastTrip = isPast(trip.endDate());
+            boolean pastTrip = isPast(trip.drafts().get(0).endDate())
+                    && trip.planned().stream().allMatch(option -> isPast(option.endDate()));
             String temporalStatus = pastTrip ? "PAST" : "UPCOMING";
 
-            boolean expired = isExpired(trip.startDate());
+            boolean expired = isExpired(trip.drafts().get(0).startDate());
             int draftCount = trip.drafts().size();
             int plannedCount = trip.planned().size();
             int expiredCount = expired ? draftCount : 0;
@@ -252,17 +258,20 @@ public class TripService {
         boolean destinationChanged = !trip.destination().key().equals(destinationKey);
         boolean datesChanged = !trip.startDate().equals(startDate) || !trip.endDate().equals(endDate);
         boolean travelersChanged = trip.travelerCount() != travelerCount || !java.util.Objects.equals(trip.travelerAges(), ages);
-
-        if (!trip.planned().isEmpty()) {
-            if (destinationChanged || datesChanged || travelersChanged) {
-                throw new ApiException(409, "IMMUTABLE_TRIP", "Trips with Planned alternatives cannot change destination, dates, or travelers in place. Create a revised trip instead.");
-            }
-            if (!trips.advanceVersion(trip.id(), ownerUserId, request.expectedVersion())) throw parentConflict(ownerUserId, trip.publicId());
-            trips.replaceSharedDetails(trip.id(), destination, startDate, endDate, travelerCount, ages, budgetCents, trip.label());
-            return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+        if (!trip.planned().isEmpty() && (destinationChanged || travelersChanged)) {
+            throw new ApiException(409, "IMMUTABLE_TRIP_PARTY", "Destination and travelers are shared by Saved options. Create a revised Trip to change them.");
         }
-
-        if (!trips.advanceVersion(trip.id(), ownerUserId, request.expectedVersion())) throw parentConflict(ownerUserId, trip.publicId());
+        TripDraft working = trip.drafts().get(0);
+        long expectedDraftVersion = request.expectedDraftVersion() == null ? working.version() : request.expectedDraftVersion();
+        if (trip.version() != request.expectedVersion() || working.version() != expectedDraftVersion) {
+            throw mutationConflict(ownerUserId, trip.publicId(), working.publicId(), expectedDraftVersion);
+        }
+        if (!destinationChanged && !datesChanged && !travelersChanged && java.util.Objects.equals(trip.budgetCents(), budgetCents)) {
+            return response(trip);
+        }
+        if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), working.id(), expectedDraftVersion)) {
+            throw mutationConflict(ownerUserId, trip.publicId(), working.publicId(), expectedDraftVersion);
+        }
         trips.replaceSharedDetails(trip.id(), destination, startDate, endDate, travelerCount, ages, budgetCents, trip.label());
 
         List<ComponentRemovalResponse> removals = new ArrayList<>();
@@ -346,7 +355,7 @@ public class TripService {
         Trip trip = ownedTrip(ownerUserId, tripId);
         requireActiveTrip(trip);
         TripDraft draft = ownedDraft(trip, draftId);
-        if (isExpired(trip.startDate())) {
+        if (isExpired(draft.startDate())) {
             throw new ApiException(400, "ALTERNATIVE_EXPIRED", "Expired alternatives cannot be promoted.");
         }
         Map<String, String> issues = evaluateDraftBlockingIssues(trip, draft);
@@ -365,12 +374,183 @@ public class TripService {
             }
         }
 
-        DraftSelections resolved = trips.resolveSelectionsForPromotion(trip, draft);
+        DraftSelections resolved = trips.resolveSelectionsForOption(trip, draft.selections(), draft.startDate(), draft.endDate());
         if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
             throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
         }
         trips.insertPlanned(trip.id(), UUID.randomUUID(), resolved);
         return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+    }
+
+    @Transactional
+    public TripResponse saveOption(long ownerUserId, String tripId, TripRequests.OptionSave request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
+        TripDraft working = trip.drafts().get(0);
+        String name = validateName(request.name());
+        DraftSelections snapshot = validOptionSnapshot(trip, working);
+        if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(),
+                working.id(), request.expectedDraftVersion())) {
+            throw mutationConflict(ownerUserId, trip.publicId(), working.publicId(), request.expectedDraftVersion());
+        }
+        trips.insertPlanned(trip.id(), UUID.randomUUID(), name, working.startDate(), working.endDate(), snapshot);
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
+    }
+
+    @Transactional
+    public TripResponse updateOption(long ownerUserId, String tripId, String optionId, TripRequests.OptionUpdate request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
+        PlannedItinerary option = ownedOption(trip, optionId);
+        TripDraft working = trip.drafts().get(0);
+        String name = validateName(request.name());
+        if (bookingRepository.isPlannedItineraryBooked(option.id())) {
+            throw new ApiException(409, "IMMUTABLE_BOOKED_OPTION", "An option with booking history cannot be updated.");
+        }
+        if (working.version() != request.expectedDraftVersion()) {
+            throw draftConflict(working.version());
+        }
+        DraftSelections snapshot = validOptionSnapshot(trip, working);
+        if (!trips.advanceVersionForOption(trip.id(), ownerUserId, request.expectedVersion(),
+                option.id(), request.expectedOptionVersion())) {
+            throw parentConflict(ownerUserId, trip.publicId());
+        }
+        trips.replacePlannedSnapshots(option.id(), name, working.startDate(), working.endDate(), snapshot);
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow(),
+                optionReplacementSummary(working.publicId(), option.selections(), snapshot, trip.travelerCount()));
+    }
+
+    @Transactional
+    public TripResponse loadOption(long ownerUserId, String tripId, String optionId, TripRequests.OptionLoad request) {
+        if (request == null) throw validation("request", "A request body is required.");
+        Trip trip = ownedTrip(ownerUserId, tripId);
+        requireActiveTrip(trip);
+        PlannedItinerary option = ownedOption(trip, optionId);
+        TripDraft working = trip.drafts().get(0);
+        if (option.version() != request.expectedOptionVersion()) {
+            throw new ApiException(409, "VERSION_CONFLICT", "The option has changed. Reload before opening.",
+                    Map.of("currentOptionVersion", Long.toString(option.version())));
+        }
+        DraftSelections source = option.selections();
+        if (source == null || (source.airfare() == null && source.stay() == null && source.rental() == null)) {
+            throw validation("components", "This option has no usable selected component.");
+        }
+        boolean different = !working.startDate().equals(option.startDate()) || !working.endDate().equals(option.endDate())
+                || !sameSelectionIdentities(working.selections(), source);
+        if (different && !request.replaceWorking()) {
+            throw new ApiException(409, "WORKING_REPLACEMENT_REQUIRED",
+                    "Opening this option will replace the current Working plan. Confirm replacement or save it as a new option first.");
+        }
+        if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(),
+                working.id(), request.expectedDraftVersion())) {
+            throw mutationConflict(ownerUserId, trip.publicId(), working.publicId(), request.expectedDraftVersion());
+        }
+        List<ComponentRemovalResponse> removals = new ArrayList<>();
+        List<ComponentAdjustmentResponse> adjustments = new ArrayList<>();
+        AirfareSelection airfare = null;
+        StaySelection stay = null;
+        RentalSelection rental = null;
+        if (source.airfare() != null) {
+            var checked = trips.revalidateAirfare(trip.destination().id(), option.startDate(), option.endDate(),
+                    trip.travelerCount(), trip.travelerCount(), source.airfare(), working.publicId());
+            if (checked.valid()) {
+                airfare = new AirfareSelection(source.airfare().outboundFlightInstanceId(),
+                        source.airfare().returnFlightInstanceId(), null, null, 0, 0, 0, 0, 0, 0);
+                if (checked.adjustment() != null) adjustments.add(checked.adjustment());
+            } else if (checked.removal() != null) removals.add(checked.removal());
+        }
+        if (source.stay() != null) {
+            var checked = trips.revalidateStay(trip.destination().id(), option.startDate(), option.endDate(),
+                    option.startDate(), option.endDate(), trip.travelerCount(), trip.travelerCount(),
+                    source.stay(), working.publicId());
+            if (checked.valid()) {
+                stay = new StaySelection(source.stay().accommodationUnitId(), checked.newUnitCount(), null, null, List.of());
+                if (checked.adjustment() != null) adjustments.add(checked.adjustment());
+            } else if (checked.removal() != null) removals.add(checked.removal());
+        }
+        if (source.rental() != null) {
+            var checked = trips.revalidateRental(trip.destination().id(), option.startDate(), option.endDate(),
+                    trip.travelerAges(), source.rental(), working.publicId());
+            if (checked.valid()) {
+                rental = new RentalSelection(source.rental().rentalUnitId(), source.rental().pickupAt(),
+                        source.rental().returnAt(), null, null, null, 0, 0, 0);
+                if (checked.adjustment() != null) adjustments.add(checked.adjustment());
+            } else if (checked.removal() != null) removals.add(checked.removal());
+        }
+        if (airfare == null && stay == null && rental == null) {
+            throw validation("components", "This option no longer has any usable selected component.");
+        }
+        DraftSelections copy = new DraftSelections(
+                airfare, stay, rental);
+        trips.replaceWorkingSelections(trip.id(), working.id(), option.startDate(), option.endDate(), copy);
+        return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow(),
+                new RevisionSummaryResponse(removals, adjustments));
+    }
+
+    private DraftSelections validOptionSnapshot(Trip trip, TripDraft working) {
+        DraftSelections selections = working.selections();
+        if (selections == null || (selections.airfare() == null && selections.stay() == null && selections.rental() == null)) {
+            throw validation("components", "Select at least one component before saving an option.");
+        }
+        DraftSelections resolved = trips.resolveSelectionsForOption(trip, selections, working.startDate(), working.endDate());
+        if (selections.airfare() != null && resolved.airfare() == null) throw validation("airfare", "Selected flights no longer match these dates.");
+        if (selections.stay() != null && resolved.stay() == null) throw validation("stay", "Selected stay no longer matches these dates.");
+        if (selections.rental() != null && resolved.rental() == null) throw validation("rental", "Selected car no longer matches these dates.");
+        return resolved;
+    }
+
+    private RevisionSummaryResponse optionReplacementSummary(UUID workingId, DraftSelections before,
+            DraftSelections after, int travelers) {
+        List<ComponentRemovalResponse> removals = new ArrayList<>();
+        List<ComponentAdjustmentResponse> adjustments = new ArrayList<>();
+        if (before.airfare() != null && after.airfare() == null) {
+            removals.add(new ComponentRemovalResponse(workingId, "airfare", "Flight removed from this option."));
+        } else if (before.airfare() != null && after.airfare() != null) {
+            long oldPrice = tallyEngine.calculateAirfareTotal(before.airfare(), travelers);
+            long newPrice = tallyEngine.calculateAirfareTotal(after.airfare(), travelers);
+            if (oldPrice != newPrice) adjustments.add(new ComponentAdjustmentResponse(workingId, "airfare", "PRICE",
+                    null, null, oldPrice, newPrice, "Flight price refreshed for this option."));
+        }
+        if (before.stay() != null && after.stay() == null) {
+            removals.add(new ComponentRemovalResponse(workingId, "stay", "Stay removed from this option."));
+        } else if (before.stay() != null && after.stay() != null) {
+            long oldPrice = tallyEngine.calculateStayTotal(before.stay());
+            long newPrice = tallyEngine.calculateStayTotal(after.stay());
+            if (oldPrice != newPrice || before.stay().unitCount() != after.stay().unitCount()) {
+                adjustments.add(new ComponentAdjustmentResponse(workingId, "stay", "ROOM_COUNT_AND_PRICE",
+                        before.stay().unitCount(), after.stay().unitCount(), oldPrice, newPrice,
+                        "Stay rooms and price refreshed for this option."));
+            }
+        }
+        if (before.rental() != null && after.rental() == null) {
+            removals.add(new ComponentRemovalResponse(workingId, "rental", "Car removed from this option."));
+        } else if (before.rental() != null && after.rental() != null) {
+            long oldPrice = tallyEngine.calculateRentalTotal(before.rental());
+            long newPrice = tallyEngine.calculateRentalTotal(after.rental());
+            if (oldPrice != newPrice) adjustments.add(new ComponentAdjustmentResponse(workingId, "rental", "PRICE",
+                    null, null, oldPrice, newPrice, "Car price refreshed for this option."));
+        }
+        return new RevisionSummaryResponse(removals, adjustments);
+    }
+
+    private PlannedItinerary ownedOption(Trip trip, String optionId) {
+        try {
+            UUID publicId = UUID.fromString(optionId);
+            return trip.planned().stream().filter(candidate -> candidate.publicId().equals(publicId))
+                    .findFirst().orElseThrow(this::notFound);
+        } catch (IllegalArgumentException exception) { throw notFound(); }
+    }
+
+    private static boolean sameSelectionIdentities(DraftSelections a, DraftSelections b) {
+        if (a == null || b == null) return a == b;
+        return java.util.Objects.equals(a.airfare() == null ? null : List.of(a.airfare().outboundFlightInstanceId(), a.airfare().returnFlightInstanceId()),
+                    b.airfare() == null ? null : List.of(b.airfare().outboundFlightInstanceId(), b.airfare().returnFlightInstanceId()))
+                && java.util.Objects.equals(a.stay() == null ? null : List.of(a.stay().accommodationUnitId(), a.stay().unitCount()),
+                    b.stay() == null ? null : List.of(b.stay().accommodationUnitId(), b.stay().unitCount()))
+                && java.util.Objects.equals(a.rental() == null ? null : List.of(a.rental().rentalUnitId(), a.rental().pickupAt(), a.rental().returnAt()),
+                    b.rental() == null ? null : List.of(b.rental().rentalUnitId(), b.rental().pickupAt(), b.rental().returnAt()));
     }
 
     @Transactional
@@ -514,7 +694,7 @@ public class TripService {
         int optionNumber = 1;
         for (TripRepository.DraftCreationSpec spec : draftsToCreate) {
             TripDraft source = new TripDraft(0, spec.draftPublicId(), 0, spec.selections(), startDate, endDate);
-            DraftSelections snapshot = trips.resolveSelectionsForPromotion(newTrip, source);
+            DraftSelections snapshot = trips.resolveSelectionsForOption(newTrip, source.selections(), startDate, endDate);
             trips.insertPlanned(newTrip.id(), UUID.randomUUID(), "Option " + optionNumber++, startDate, endDate, snapshot);
         }
         newTrip = trips.findByPublicIdAndOwnerUserId(newTripPublicId, ownerUserId).orElseThrow();
@@ -739,14 +919,14 @@ public class TripService {
         if (trip.destination() == null) {
             issues.put("destination", "Select a destination before planning.");
         }
-        if (trip.startDate() == null || trip.endDate() == null) {
+        if (draft.startDate() == null || draft.endDate() == null) {
             issues.put("dates", "Trip dates must be specified.");
-        } else if (trip.startDate().isBefore(FIRST_SUPPORTED_DATE) || trip.endDate().isAfter(LAST_SUPPORTED_DATE)
-                || !trip.startDate().isBefore(trip.endDate())
-                || ChronoUnit.DAYS.between(trip.startDate(), trip.endDate()) < 1
-                || ChronoUnit.DAYS.between(trip.startDate(), trip.endDate()) > 14) {
+        } else if (draft.startDate().isBefore(FIRST_SUPPORTED_DATE) || draft.endDate().isAfter(LAST_SUPPORTED_DATE)
+                || !draft.startDate().isBefore(draft.endDate())
+                || ChronoUnit.DAYS.between(draft.startDate(), draft.endDate()) < 1
+                || ChronoUnit.DAYS.between(draft.startDate(), draft.endDate()) > 14) {
             issues.put("dates", "Trip dates must be between March 1 and March 31, 2027, with a duration between 1 and 14 nights.");
-        } else if (isExpired(trip.startDate())) {
+        } else if (isExpired(draft.startDate())) {
             issues.put("dates", "Trip departure date has passed.");
         }
 
@@ -785,9 +965,9 @@ public class TripService {
                 LocalDate outDate = out.departureTime().atZoneSameInstant(java.time.ZoneId.of(out.departureTimeZone())).toLocalDate();
                 LocalDate retDate = ret.departureTime().atZoneSameInstant(java.time.ZoneId.of(ret.departureTimeZone())).toLocalDate();
                 if (!"PDX".equals(out.originAirportCode()) || destAirportIata == null || !out.destinationAirportCode().equals(destAirportIata)
-                        || trip.startDate() == null || !outDate.equals(trip.startDate())
+                        || draft.startDate() == null || !outDate.equals(draft.startDate())
                         || !ret.originAirportCode().equals(destAirportIata) || !"PDX".equals(ret.destinationAirportCode())
-                        || trip.endDate() == null || !retDate.equals(trip.endDate())) {
+                        || draft.endDate() == null || !retDate.equals(draft.endDate())) {
                     issues.put("airfare", "Selected flights do not match trip route or dates.");
                 } else if (out.availableSeats() < trip.travelerCount() || ret.availableSeats() < trip.travelerCount()) {
                     issues.put("airfare", "Selected flight does not have enough available seats for party size.");
@@ -797,8 +977,8 @@ public class TripService {
 
         if (selections != null && selections.stay() != null) {
             StaySelection st = selections.stay();
-            if (trip.startDate() != null && trip.endDate() != null && trip.startDate().isBefore(trip.endDate())) {
-                var stayOpt = staySearchRepository.findCandidateById(st.accommodationUnitId(), trip.startDate(), trip.endDate());
+            if (draft.startDate() != null && draft.endDate() != null && draft.startDate().isBefore(draft.endDate())) {
+                var stayOpt = staySearchRepository.findCandidateById(st.accommodationUnitId(), draft.startDate(), draft.endDate());
                 if (stayOpt.isEmpty() || (trip.destination() != null && stayOpt.get().destinationId() != trip.destination().id())) {
                     issues.put("stay", "Selected accommodation unit was not found or does not match destination.");
                 } else {
@@ -806,7 +986,7 @@ public class TripService {
                     if (candidate.guestCapacity() * st.unitCount() < trip.travelerCount()) {
                         issues.put("stay", "Selected accommodation unit capacity is insufficient for party size.");
                     } else {
-                        long expectedNights = ChronoUnit.DAYS.between(trip.startDate(), trip.endDate());
+                        long expectedNights = ChronoUnit.DAYS.between(draft.startDate(), draft.endDate());
                         if (candidate.nights().size() != expectedNights || candidate.nights().stream().anyMatch(n -> n.availableInventory() < st.unitCount())) {
                             issues.put("stay", "Selected accommodation has insufficient inventory for the requested dates.");
                         }
@@ -828,8 +1008,8 @@ public class TripService {
                     issues.put("rental", "Selected rental car does not match trip destination.");
                 } else if (!rn.pickupAt().isBefore(rn.returnAt())) {
                     issues.put("rental", "Rental pickup time must be before return time.");
-                } else if (trip.startDate() != null && trip.endDate() != null
-                        && (rn.pickupAt().toLocalDate().isBefore(trip.startDate()) || rn.returnAt().toLocalDate().isAfter(trip.endDate()))) {
+                } else if (draft.startDate() != null && draft.endDate() != null
+                        && (rn.pickupAt().toLocalDate().isBefore(draft.startDate()) || rn.returnAt().toLocalDate().isAfter(draft.endDate()))) {
                     issues.put("rental", "Rental dates must be within the trip interval.");
                 } else if (trip.travelerAges() == null || trip.travelerAges().stream().noneMatch(a -> a != null && a >= 25)) {
                     issues.put("rental", "At least one traveler must be 25 or older to rent a vehicle.");
@@ -849,11 +1029,12 @@ public class TripService {
             draft = ownedDraft(trip, draftId);
         }
         AirfareSort sort = AirfareSort.from(sortStr);
+        TripDraft working = draft != null ? draft : trip.drafts().get(0);
         return airfareSearchService.search(
                 trip.destination().id(),
                 trip.destination().key(),
-                trip.startDate(),
-                trip.endDate(),
+                working.startDate(),
+                working.endDate(),
                 trip.travelerCount(),
                 trip.publicId(),
                 draft != null ? draft.publicId() : null,
@@ -890,7 +1071,7 @@ public class TripService {
 
         boolean outboundMatches = "PDX".equals(outbound.originAirportCode())
                 && expectedDestAirport.equals(outbound.destinationAirportCode())
-                && trip.startDate().equals(outbound.departureTime().atZoneSameInstant(java.time.ZoneId.of(outbound.departureTimeZone())).toLocalDate())
+                && draft.startDate().equals(outbound.departureTime().atZoneSameInstant(java.time.ZoneId.of(outbound.departureTimeZone())).toLocalDate())
                 && outbound.availableSeats() >= trip.travelerCount();
 
         if (!outboundMatches) {
@@ -899,7 +1080,7 @@ public class TripService {
 
         boolean returnMatches = expectedDestAirport.equals(returnFlight.originAirportCode())
                 && "PDX".equals(returnFlight.destinationAirportCode())
-                && trip.endDate().equals(returnFlight.departureTime().atZoneSameInstant(java.time.ZoneId.of(returnFlight.departureTimeZone())).toLocalDate())
+                && draft.endDate().equals(returnFlight.departureTime().atZoneSameInstant(java.time.ZoneId.of(returnFlight.departureTimeZone())).toLocalDate())
                 && returnFlight.availableSeats() >= trip.travelerCount();
 
         if (!returnMatches) {
@@ -943,12 +1124,13 @@ public class TripService {
                 draft != null ? draft.selections() : null,
                 trip.travelerCount()
         );
+        TripDraft working = draft != null ? draft : trip.drafts().get(0);
 
         return staySearchService.search(
                 trip.destination().id(),
                 trip.destination().key(),
-                trip.startDate(),
-                trip.endDate(),
+                working.startDate(),
+                working.endDate(),
                 trip.travelerCount(),
                 trip.publicId(),
                 draft != null ? draft.publicId() : null,
@@ -965,7 +1147,7 @@ public class TripService {
         requireActiveTrip(trip);
         TripDraft draft = ownedDraft(trip, draftId);
 
-        var candidateOpt = staySearchRepository.findCandidateById(request.accommodationUnitId(), trip.startDate(), trip.endDate());
+        var candidateOpt = staySearchRepository.findCandidateById(request.accommodationUnitId(), draft.startDate(), draft.endDate());
         if (candidateOpt.isEmpty()) {
             throw validation("accommodationUnitId", "Selected accommodation unit was not found or is unavailable.");
         }
@@ -989,7 +1171,7 @@ public class TripService {
             throw validation("unitCount", "Unit count must be " + requiredRooms + " for " + trip.travelerCount() + " travelers.");
         }
 
-        long requiredNights = java.time.temporal.ChronoUnit.DAYS.between(trip.startDate(), trip.endDate());
+        long requiredNights = java.time.temporal.ChronoUnit.DAYS.between(draft.startDate(), draft.endDate());
         if (candidate.nights().size() != requiredNights) {
             throw validation("accommodationUnitId", "Selected accommodation has no inventory for trip dates.");
         }
@@ -1065,12 +1247,13 @@ public class TripService {
                 draft != null ? draft.selections() : null,
                 trip.travelerCount()
         );
+        TripDraft working = draft != null ? draft : trip.drafts().get(0);
 
         return rentalSearchService.search(
                 trip.destination().id(),
                 trip.destination().key(),
-                trip.startDate(),
-                trip.endDate(),
+                working.startDate(),
+                working.endDate(),
                 trip.travelerAges(),
                 trip.publicId(),
                 draft != null ? draft.publicId() : null,
@@ -1101,7 +1284,7 @@ public class TripService {
             throw validation("rentalUnitId", "Selected rental car does not match trip destination.");
         }
 
-        rentalSearchService.validateInterval(trip.destination().id(), trip.startDate(), trip.endDate(), request.pickupAt(), request.returnAt());
+        rentalSearchService.validateInterval(trip.destination().id(), draft.startDate(), draft.endDate(), request.pickupAt(), request.returnAt());
 
         if (!rentalSearchRepository.isUnitAvailable(unit.unitId(), request.pickupAt(), request.returnAt())) {
             throw validation("rentalUnitId", "Selected rental car is unavailable for the requested interval.");

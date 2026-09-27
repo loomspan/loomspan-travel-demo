@@ -253,24 +253,28 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
     expect(screen.queryByRole('heading', {name: 'Active Booking'})).not.toBeInTheDocument();
   });
 
-  // Test 3: Triage option 1: Use a saved alternative duplicates planned alternative into a fresh draft
-  it('Triage option 1: Use a saved alternative duplicates planned alternative into a fresh draft', async () => {
-    const trip = createMockTrip();
+  // Test 3: Open a saved alternative in the existing Working plan.
+  it('Triage option 1: opens a saved option in the one Working plan', async () => {
+    const base = createMockTrip();
+    const trip = createMockTrip({drafts: [{id: 'working-1', version: 0,
+      selections: {airfare: null, stay: null, rental: null}}],
+      alternatives: [{id: 'working-1', lifecycle: 'DRAFT', version: 0,
+        selections: {airfare: null, stay: null, rental: null}}, ...base.alternatives]});
     const activeBooking = createMockBooking();
     const tripWithNewDraft = createMockTrip({
       version: 2,
       drafts: [
         {
-          id: 'alt-draft-new',
+          id: 'working-1',
           version: 1,
           selections: trip.planned[0].selections,
           tally: trip.planned[0].tally,
         },
       ],
       alternatives: [
-        trip.alternatives[0],
+        trip.alternatives[1],
         {
-          id: 'alt-draft-new',
+          id: 'working-1',
           lifecycle: 'DRAFT',
           version: 1,
           selections: trip.planned[0].selections,
@@ -280,7 +284,7 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
     });
 
     vi.spyOn(tripsApi, 'cancelBooking').mockResolvedValueOnce(trip);
-    const duplicateAltSpy = vi.spyOn(tripsApi, 'duplicateAlternative').mockResolvedValueOnce(tripWithNewDraft);
+    const loadSpy = vi.spyOn(tripsApi, 'loadOption').mockResolvedValueOnce(tripWithNewDraft);
     vi.spyOn(tripsApi, 'getBookingHistory').mockResolvedValue([]);
 
     const user = userEvent.setup();
@@ -302,13 +306,15 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
     const triageDialog = await screen.findByRole('dialog', {name: /reservation canceled/i});
     expect(triageDialog).toBeInTheDocument();
 
-    // Click "Use this alternative"
-    const useAltBtn = within(triageDialog).getByRole('button', {name: /use this alternative/i});
+    // Choose the option, then explicitly replace the Working plan.
+    const useAltBtn = within(triageDialog).getByRole('button', {name: /open this option/i});
     await user.click(useAltBtn);
+    const loadDialog = await screen.findByRole('dialog', {name: /open saved option for editing/i});
+    await user.click(within(loadDialog).getByRole('button', {name: /replace working plan/i}));
 
     await waitFor(() => {
-      expect(duplicateAltSpy).toHaveBeenCalledWith('trip-1', 'alt-planned-1', {
-        expectedVersion: 1,
+      expect(loadSpy).toHaveBeenCalledWith('trip-1', 'alt-planned-1', {
+        expectedVersion: 1, expectedDraftVersion: 0, expectedOptionVersion: 0, replaceWorking: true,
       });
     });
 
@@ -318,8 +324,8 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
     });
   });
 
-  // Test 4: Triage option 2: Create a new Draft creates an empty draft alternative
-  it('Triage option 2: Create a new Draft creates an empty draft alternative', async () => {
+  // Test 4: Continue the existing Working plan without creating a Draft.
+  it('Triage option 2: continues the existing Working plan without a write', async () => {
     const trip = createMockTrip();
     const activeBooking = createMockBooking();
     const tripWithEmptyDraft = createMockTrip({
@@ -382,15 +388,10 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
 
     const triageDialog = await screen.findByRole('dialog', {name: /reservation canceled/i});
 
-    // Click "Create a new Draft"
-    const createDraftBtn = within(triageDialog).getByRole('button', {name: /create a new draft/i});
+    // Continue the Working plan without a request.
+    const createDraftBtn = within(triageDialog).getByRole('button', {name: /continue working plan/i});
     await user.click(createDraftBtn);
-
-    await waitFor(() => {
-      expect(createDraftSpy).toHaveBeenCalledWith('trip-1', {
-        expectedVersion: 1,
-      });
-    });
+    expect(createDraftSpy).not.toHaveBeenCalled();
 
     // Triage modal dismissed
     await waitFor(() => {
@@ -555,8 +556,8 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
       />
     );
 
-    // Builder slots and promotion are disabled
-    expect(screen.getByRole('button', {name: /save as planned itinerary/i})).toBeDisabled();
+    // Builder slots and option save are disabled
+    expect(screen.getByRole('button', {name: /save as new option/i})).toBeDisabled();
     expect(screen.getByRole('button', {name: /add airfare/i})).toBeDisabled();
     expect(screen.getByRole('button', {name: /add stay/i})).toBeDisabled();
 

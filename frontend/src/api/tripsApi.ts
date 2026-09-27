@@ -439,6 +439,7 @@ export type CreateTripRequest = {
 
 export type SharedDetailsUpdateRequest = {
   expectedVersion: number;
+  expectedDraftVersion?: number;
   destinationKey: string;
   startDate: string;
   endDate: string;
@@ -446,6 +447,10 @@ export type SharedDetailsUpdateRequest = {
   travelerAges?: number[] | null;
   budgetCents?: number | null;
 };
+
+export type OptionSaveRequest = {expectedVersion: number; expectedDraftVersion: number; name: string};
+export type OptionUpdateRequest = OptionSaveRequest & {expectedOptionVersion: number};
+export type OptionLoadRequest = {expectedVersion: number; expectedDraftVersion: number; expectedOptionVersion: number; replaceWorking: boolean};
 
 export type TripRevisionRequest = {
   expectedVersion: number;
@@ -548,6 +553,7 @@ function cleanUpdatePayload(p: SharedDetailsUpdateRequest): Record<string, unkno
     endDate: p.endDate,
     travelerCount: p.travelerCount,
   };
+  if (p.expectedDraftVersion !== undefined) body.expectedDraftVersion = p.expectedDraftVersion;
   if (p.travelerAges !== undefined) body.travelerAges = p.travelerAges;
   if (p.budgetCents !== undefined) body.budgetCents = p.budgetCents;
   return body;
@@ -669,6 +675,15 @@ export const tripsApi = {
 
   replaceSharedDetails: (tripId: string, payload: SharedDetailsUpdateRequest): Promise<TripResponse> =>
     request<TripResponse>(`/api/trips/${tripId}`, 'PUT', cleanUpdatePayload(payload)),
+
+  saveOption: (tripId: string, payload: OptionSaveRequest): Promise<TripResponse> =>
+    request<TripResponse>(`/api/trips/${tripId}/options`, 'POST', payload),
+
+  updateOption: (tripId: string, optionId: string, payload: OptionUpdateRequest): Promise<TripResponse> =>
+    request<TripResponse>(`/api/trips/${tripId}/options/${optionId}`, 'PUT', payload),
+
+  loadOption: (tripId: string, optionId: string, payload: OptionLoadRequest): Promise<TripResponse> =>
+    request<TripResponse>(`/api/trips/${tripId}/options/${optionId}/load`, 'POST', payload),
 
   duplicateTrip: (tripId: string, payload: TripRevisionRequest): Promise<TripResponse> =>
     request<TripResponse>(`/api/trips/${tripId}/duplicate`, 'POST', cleanRevisionPayload(payload)),

@@ -20,8 +20,12 @@ public final class TripRequests {
     }
     public record Rename(long expectedVersion, String name) { }
     public record WorkingDates(long expectedVersion, long expectedDraftVersion, LocalDate startDate, LocalDate endDate) { }
+    public record OptionSave(long expectedVersion, long expectedDraftVersion, String name) { }
+    public record OptionUpdate(long expectedVersion, long expectedDraftVersion, long expectedOptionVersion, String name) { }
+    public record OptionLoad(long expectedVersion, long expectedDraftVersion, long expectedOptionVersion,
+            boolean replaceWorking) { }
 
-    public record SharedDetailsUpdate(long expectedVersion, String destinationKey, LocalDate startDate, LocalDate endDate,
+    public record SharedDetailsUpdate(long expectedVersion, Long expectedDraftVersion, String destinationKey, LocalDate startDate, LocalDate endDate,
             Integer travelerCount, List<Integer> travelerAges, JsonNode budgetCents) { }
 
     public record TripRevision(long expectedVersion, String destinationKey, LocalDate startDate, LocalDate endDate,
@@ -66,9 +70,30 @@ public final class TripRequests {
                 date(body.get("startDate"), "startDate"), date(body.get("endDate"), "endDate"));
     }
 
+    static OptionSave optionSave(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion", "expectedDraftVersion", "name"));
+        return new OptionSave(version(body.get("expectedVersion"), "expectedVersion"),
+                version(body.get("expectedDraftVersion"), "expectedDraftVersion"), text(body.get("name"), "name"));
+    }
+
+    static OptionUpdate optionUpdate(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion", "expectedDraftVersion", "expectedOptionVersion", "name"));
+        return new OptionUpdate(version(body.get("expectedVersion"), "expectedVersion"),
+                version(body.get("expectedDraftVersion"), "expectedDraftVersion"),
+                version(body.get("expectedOptionVersion"), "expectedOptionVersion"), text(body.get("name"), "name"));
+    }
+
+    static OptionLoad optionLoad(JsonNode body) {
+        requireObject(body, Set.of("expectedVersion", "expectedDraftVersion", "expectedOptionVersion", "replaceWorking"));
+        return new OptionLoad(version(body.get("expectedVersion"), "expectedVersion"),
+                version(body.get("expectedDraftVersion"), "expectedDraftVersion"),
+                version(body.get("expectedOptionVersion"), "expectedOptionVersion"),
+                body.get("replaceWorking") != null && booleanValue(body.get("replaceWorking"), "replaceWorking"));
+    }
+
     static SharedDetailsUpdate update(JsonNode body) {
-        requireObject(body, Set.of("expectedVersion", "destinationKey", "startDate", "endDate", "travelerCount", "travelerAges", "budgetCents"));
-        return new SharedDetailsUpdate(version(body.get("expectedVersion"), "expectedVersion"), text(body.get("destinationKey"), "destinationKey"),
+        requireObject(body, Set.of("expectedVersion", "expectedDraftVersion", "destinationKey", "startDate", "endDate", "travelerCount", "travelerAges", "budgetCents"));
+        return new SharedDetailsUpdate(version(body.get("expectedVersion"), "expectedVersion"), optionalVersion(body.get("expectedDraftVersion"), "expectedDraftVersion"), text(body.get("destinationKey"), "destinationKey"),
                 date(body.get("startDate"), "startDate"), date(body.get("endDate"), "endDate"), integer(body.get("travelerCount"), "travelerCount"),
                 ages(body.get("travelerAges")), body.get("budgetCents"));
     }

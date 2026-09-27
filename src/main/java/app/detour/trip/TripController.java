@@ -65,6 +65,27 @@ public class TripController {
         return trips.changeWorkingDates(requirePrincipal(principal).userId(), tripId, TripRequests.workingDates(request));
     }
 
+    @PostMapping("/{tripId}/options")
+    ResponseEntity<TripResponse> saveOption(@AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId, @RequestBody JsonNode request) {
+        return ResponseEntity.status(201).body(trips.saveOption(requirePrincipal(principal).userId(), tripId,
+                TripRequests.optionSave(request)));
+    }
+
+    @PutMapping("/{tripId}/options/{optionId}")
+    TripResponse updateOption(@AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId, @PathVariable String optionId, @RequestBody JsonNode request) {
+        return trips.updateOption(requirePrincipal(principal).userId(), tripId, optionId,
+                TripRequests.optionUpdate(request));
+    }
+
+    @PostMapping("/{tripId}/options/{optionId}/load")
+    TripResponse loadOption(@AuthenticationPrincipal DetourUserPrincipal principal,
+            @PathVariable String tripId, @PathVariable String optionId, @RequestBody JsonNode request) {
+        return trips.loadOption(requirePrincipal(principal).userId(), tripId, optionId,
+                TripRequests.optionLoad(request));
+    }
+
     @PostMapping("/{tripId}/duplicate")
     ResponseEntity<TripResponse> duplicateTrip(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @RequestBody JsonNode request) {
         return ResponseEntity.status(201).body(trips.duplicateTrip(requirePrincipal(principal).userId(), tripId, TripRequests.revision(request)));

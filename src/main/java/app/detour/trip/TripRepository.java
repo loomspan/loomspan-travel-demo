@@ -62,6 +62,12 @@ public interface TripRepository {
     void insertPlanned(long tripId, UUID publicId, String name, LocalDate startDate, LocalDate endDate,
             DraftSelections selections);
 
+    void replacePlannedSnapshots(long plannedId, String name, LocalDate startDate, LocalDate endDate,
+            DraftSelections selections);
+
+    void replaceWorkingSelections(long tripId, long draftId, LocalDate startDate, LocalDate endDate,
+            DraftSelections selections);
+
     void deletePlanned(long tripId, long plannedId);
 
     void createAggregateWithDrafts(long ownerUserId, UUID tripPublicId, Destination destination, LocalDate startDate,
@@ -90,8 +96,9 @@ public interface TripRepository {
     RentalRevalidation revalidateRental(long destinationId, LocalDate startDate, LocalDate endDate,
             List<Integer> ages, RentalSelection selection, UUID draftPublicId);
 
-    /** Returns only components structurally consistent with the supplied Trip. */
-    DraftSelections resolveSelectionsForPromotion(Trip trip, TripDraft draft);
+    /** Resolve current catalog facts for the dated Working plan or target option. */
+    DraftSelections resolveSelectionsForOption(Trip trip, DraftSelections selections,
+            LocalDate startDate, LocalDate endDate);
 
     record DraftCreationSpec(UUID draftPublicId, DraftSelections selections) { }
     record AirfareRevalidation(boolean valid, AirfareSelection retained, ComponentRemovalResponse removal, ComponentAdjustmentResponse adjustment) { }

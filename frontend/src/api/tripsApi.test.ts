@@ -82,6 +82,23 @@ describe('tripsApi client', () => {
     });
   });
 
+  it('sends named option lifecycle versions and explicit Working replacement', async () => {
+    fetchMock.mockImplementation(async () => json(200, {id: 'trip-1'}));
+    await tripsApi.saveOption('trip-1', {expectedVersion: 2, expectedDraftVersion: 1, name: 'March stay'});
+    await tripsApi.updateOption('trip-1', 'option-1', {
+      expectedVersion: 3, expectedDraftVersion: 1, expectedOptionVersion: 0, name: 'March stay updated',
+    });
+    await tripsApi.loadOption('trip-1', 'option-1', {
+      expectedVersion: 4, expectedDraftVersion: 1, expectedOptionVersion: 1, replaceWorking: true,
+    });
+    expect(fetchMock.mock.calls.map(([path, options]) => [path, options.method, JSON.parse(options.body)])).toEqual([
+      ['/api/trips/trip-1/options', 'POST', {expectedVersion: 2, expectedDraftVersion: 1, name: 'March stay'}],
+      ['/api/trips/trip-1/options/option-1', 'PUT', {expectedVersion: 3, expectedDraftVersion: 1, expectedOptionVersion: 0, name: 'March stay updated'}],
+      ['/api/trips/trip-1/options/option-1/load', 'POST', {expectedVersion: 4, expectedDraftVersion: 1, expectedOptionVersion: 1, replaceWorking: true}],
+    ]);
+    expect(fetchMock.mock.calls.every(([, options]) => options.headers['X-XSRF-TOKEN'] === 'secret-token')).toBe(true);
+  });
+
   it('duplicateTrip sends revision payload with sourcePlannedItineraryIds', async () => {
     fetchMock.mockResolvedValueOnce(json(201, {id: 'trip-new', version: 0}));
 

@@ -831,9 +831,9 @@ describe('Itinerary Comparison and Booking Selection', () => {
       screen.getByText(/this trip already has an active booking\. only one active booking is permitted per trip\./i)
     ).toBeInTheDocument();
 
-    // Creating drafts and duplicating remains enabled
-    expect(screen.getByRole('button', {name: /create empty draft/i})).toBeEnabled();
-    expect(screen.getByRole('button', {name: /duplicate planned itinerary planned-2 to draft/i})).toBeEnabled();
+    // The one Working plan can be populated from a Saved option without creating another Draft.
+    expect(screen.queryByRole('button', {name: /create empty draft/i})).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', {name: /open for editing/i})).toHaveLength(2);
 
     // Clicking "View Booking Details" navigates to confirmation view
     await user.click(screen.getByRole('button', {name: /view booking details for itinerary planned-1/i}));

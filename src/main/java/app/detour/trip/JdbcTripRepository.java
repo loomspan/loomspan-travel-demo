@@ -275,7 +275,7 @@ class JdbcTripRepository implements TripRepository {
 
     @Override public void replaceSharedDetails(long tripId, Destination destination, LocalDate startDate, LocalDate endDate, int travelerCount, List<Integer> ages, Long budget, String label) {
         jdbc.update("UPDATE detour_trip SET catalog_destination_id = ?, start_date = ?, end_date = ?, traveler_count = ?, budget_cents = ?, display_label = ?, name = ? WHERE id = ?", destination.id(), startDate, endDate, travelerCount, budget, label, label, tripId);
-        jdbc.update("UPDATE detour_trip_draft SET start_date = ?, end_date = ? WHERE trip_id = ?", startDate, endDate, tripId);
+        jdbc.update("UPDATE detour_trip_draft SET start_date = ?, end_date = ?, version = version + 1 WHERE trip_id = ?", startDate, endDate, tripId);
         jdbc.update("DELETE FROM detour_trip_traveler WHERE trip_id = ?", tripId);
         for (int ordinal = 0; ordinal < travelerCount; ordinal++) jdbc.update("INSERT INTO detour_trip_traveler (trip_id, traveler_ordinal, age) VALUES (?, ?, ?)", tripId, ordinal + 1, ages.get(ordinal));
     }
@@ -344,6 +344,30 @@ class JdbcTripRepository implements TripRepository {
         Number key = keys.getKeys() == null ? null : (Number) keys.getKeys().get("ID");
         if (key == null) throw new IllegalStateException("Planned insert did not return a key");
         long id = key.longValue();
+
+        insertPlannedSnapshots(id, s);
+    }
+
+    @Override
+    public void replacePlannedSnapshots(long id, String name, LocalDate startDate, LocalDate endDate, DraftSelections s) {
+        jdbc.update("DELETE FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = ?", id);
+        jdbc.update("DELETE FROM detour_planned_stay_night_snapshot WHERE planned_itinerary_id = ?", id);
+        jdbc.update("DELETE FROM detour_planned_stay_snapshot WHERE planned_itinerary_id = ?", id);
+        jdbc.update("DELETE FROM detour_planned_rental_snapshot WHERE planned_itinerary_id = ?", id);
+        jdbc.update("UPDATE detour_planned_itinerary SET name = ?, start_date = ?, end_date = ? WHERE id = ?", name, startDate, endDate, id);
+        insertPlannedSnapshots(id, s);
+    }
+
+    @Override
+    public void replaceWorkingSelections(long tripId, long draftId, LocalDate startDate, LocalDate endDate, DraftSelections s) {
+        deleteDraftAirfareSelection(draftId);
+        deleteDraftStaySelection(draftId);
+        deleteDraftRentalSelection(draftId);
+        insertDraftSelections(draftId, s);
+        updateWorkingDates(tripId, draftId, startDate, endDate);
+    }
+
+    private void insertPlannedSnapshots(long id, DraftSelections s) {
 
         if (s.airfare() != null) {
             AirfareSelection a = s.airfare();
@@ -419,15 +443,16 @@ class JdbcTripRepository implements TripRepository {
         }
     }
 
-    @Override public DraftSelections resolveSelectionsForPromotion(Trip trip, TripDraft draft) {
-        DraftSelections raw = draft.selections();
-        AirfareSelection airfare = raw.airfare() == null ? null : resolveAirfare(trip, raw.airfare());
-        StaySelection stay = raw.stay() == null ? null : resolveStay(trip, raw.stay());
-        RentalSelection rental = raw.rental() == null ? null : resolveRental(trip, raw.rental());
+    @Override public DraftSelections resolveSelectionsForOption(Trip trip, DraftSelections raw,
+            LocalDate startDate, LocalDate endDate) {
+        AirfareSelection airfare = raw.airfare() == null ? null : resolveAirfare(trip, raw.airfare(), startDate, endDate);
+        StaySelection stay = raw.stay() == null ? null : resolveStay(trip, raw.stay(), startDate, endDate);
+        RentalSelection rental = raw.rental() == null ? null : resolveRental(trip, raw.rental(), startDate, endDate);
         return new DraftSelections(airfare, stay, rental);
     }
 
-    private AirfareSelection resolveAirfare(Trip trip, AirfareSelection selected) {
+    private AirfareSelection resolveAirfare(Trip trip, AirfareSelection selected,
+            LocalDate startDate, LocalDate endDate) {
         return jdbc.query("""
                 SELECT out_i.id AS out_id, in_i.id AS in_id,
                        out_s.flight_number AS out_fn, in_s.flight_number AS in_fn,
@@ -494,11 +519,12 @@ class JdbcTripRepository implements TripRepository {
                     );
                 },
                 selected.returnFlightInstanceId(), selected.outboundFlightInstanceId(),
-                trip.destination().id(), trip.startDate(), trip.destination().id(), trip.endDate())
+                trip.destination().id(), startDate, trip.destination().id(), endDate)
                 .stream().findFirst().orElse(null);
     }
 
-    private StaySelection resolveStay(Trip trip, StaySelection selected) {
+    private StaySelection resolveStay(Trip trip, StaySelection selected,
+            LocalDate startDate, LocalDate endDate) {
         return jdbc.query("""
                 SELECT unit.id, unit.guest_capacity, property.name, unit.name,
                        property.property_category, property.location_description,
@@ -516,7 +542,7 @@ class JdbcTripRepository implements TripRepository {
                             ORDER BY night_date ASC
                             """,
                             (x, i) -> new StayNight(x.getObject(1, LocalDate.class), x.getLong(2), x.getLong(3), x.getLong(4)),
-                            selected.accommodationUnitId(), trip.startDate(), trip.endDate());
+                            selected.accommodationUnitId(), startDate, endDate);
                     int guestCapacity = r.getInt(2);
                     int unitCount = selected.unitCount();
                     int requiredRooms = (int) Math.ceil((double) trip.travelerCount() / guestCapacity);
@@ -525,11 +551,12 @@ class JdbcTripRepository implements TripRepository {
                             r.getString(5), r.getString(6), (Integer) r.getObject(7), guestCapacity, requiredRooms);
                 },
                 selected.accommodationUnitId(), trip.destination().id(), selected.unitCount(), trip.travelerCount(),
-                trip.startDate(), trip.endDate(), trip.startDate(), trip.endDate())
+                startDate, endDate, startDate, endDate)
                 .stream().findFirst().orElse(null);
     }
 
-    private RentalSelection resolveRental(Trip trip, RentalSelection selected) {
+    private RentalSelection resolveRental(Trip trip, RentalSelection selected,
+            LocalDate startDate, LocalDate endDate) {
         return jdbc.query("""
                 SELECT unit.id, location.name, class.name, unit.unit_identifier,
                        class.daily_base_price_cents, class.daily_tax_cents, class.daily_fee_cents,
@@ -544,8 +571,8 @@ class JdbcTripRepository implements TripRepository {
                         r.getString(2), r.getString(3), r.getString(4),
                         r.getLong(5), r.getLong(6), r.getLong(7),
                         r.getString(8)),
-                selected.rentalUnitId(), trip.destination().id(), selected.pickupAt(), trip.startDate(),
-                selected.returnAt(), trip.endDate())
+                selected.rentalUnitId(), trip.destination().id(), selected.pickupAt(), startDate,
+                selected.returnAt(), endDate)
                 .stream().findFirst().orElse(null);
     }
     @Override public void deleteDraftAirfareSelection(long draftId) {
