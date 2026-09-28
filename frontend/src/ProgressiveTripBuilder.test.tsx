@@ -151,7 +151,7 @@ describe('Progressive Trip Builder Experience', () => {
     // Trips navigation refreshes data; replay the loaded profile so queued workflow responses stay intact.
     vi.mocked(identityApi.getProfile).mockResolvedValueOnce(lastProfile);
     await userEvent.setup().click(screen.getByRole('button', {name: 'Trips'}));
-    return screen.findByRole('heading', {name: 'Trips'});
+    return screen.findByRole('heading', {name: 'Your trips'});
   }
 
   it('keeps the active Draft through Home and Profile and returns to the same saved tally', async () => {

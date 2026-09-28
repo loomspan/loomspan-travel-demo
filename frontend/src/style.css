@@ -724,6 +724,16 @@ a:focus-visible, summary:focus-visible { outline: 3px solid #d26521; outline-off
 /* Shared page widths: forms stay readable while travel content uses the screen. */
 .auth-card { margin: clamp(1rem, 6vh, 4rem) auto; }
 .profile-card { width: min(100%, 90rem); margin: 0 auto; padding: clamp(1.25rem, 2.5vw, 2.5rem); }
+.trips-page { width: min(100%, 90rem); margin: 0 auto; padding: clamp(1.25rem, 2.5vw, 2.5rem); }
+.trips-page-header { display: flex; justify-content: space-between; align-items: end; gap: 1.5rem; flex-wrap: wrap; padding-bottom: 1.25rem; border-bottom: 1px solid var(--line); }
+.trips-page-header .eyebrow { margin-bottom: .5rem; }
+.trips-page .trips-container { margin-bottom: 0; }
+.trips-page .trips-section:last-child { margin-bottom: 0; }
+.trips-empty-prompt { margin-top: 1.5rem; padding: clamp(1.5rem, 3vw, 2.5rem); border: 1px solid var(--line); border-radius: .75rem; background: var(--teal-soft); }
+.trips-empty-prompt h2 { margin: 0; }
+.trips-empty-prompt p { max-width: 60ch; }
+.trip-start-view { width: min(100%, 90rem); margin: 0 auto; }
+.trip-list-back { margin: 0 0 .75rem; padding-left: 0; }
 .home-card { width: min(100%, 75rem); }
 .home-card > p:not(.eyebrow), .empty-state > p { max-width: 70ch; }
 .profile-card > .identity,
@@ -752,6 +762,7 @@ a:focus-visible, summary:focus-visible { outline: 3px solid #d26521; outline-off
 
 @media (max-width: 520px) {
   .auth-card, .primary-navigation, .workspace-card, .profile-card { margin-top: 0; }
+  .trips-page-header .primary, .trips-empty-prompt .primary { width: 100%; }
   .empty-state-actions { grid-template-columns: minmax(0, 1fr); }
 }
 

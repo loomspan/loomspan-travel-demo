@@ -35,7 +35,7 @@ describe('App identity experience', () => {
     await showProfile();
     if (lastProfile) vi.mocked(identityApi.getProfile).mockResolvedValueOnce(lastProfile);
     await userEvent.setup().click(screen.getByRole('button', {name: 'Trips'}));
-    return screen.findByRole('heading', {name: 'Trips'});
+    return screen.findByRole('heading', {name: 'Your trips'});
   }
   it('shows the owned Trip list in Trips and account controls only in Profile', async () => {
     const summary = {id: 'trip-1', name: 'Family trip', label: 'Family trip', destinationKey: 'destination-sfo', destinationName: 'San Francisco', startDate: '2027-03-10', endDate: '2027-03-14', version: 0, temporalStatus: 'UPCOMING', draftCount: 0, plannedCount: 0, expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: []};
@@ -44,7 +44,12 @@ describe('App identity experience', () => {
     await screen.findByRole('button', {name: 'Profile'});
     await user.click(screen.getByRole('button', {name: 'Trips'}));
     expect(await screen.findByRole('heading', {name: 'Family trip'})).toBeInTheDocument();
+    expect(screen.queryByLabelText('Trip name')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Plan a new trip'})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Plan a new trip'}));
     expect(screen.getByLabelText('Trip name')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: '← Back to your trips'}));
+    expect(screen.getByRole('heading', {name: 'Family trip'})).toBeInTheDocument();
     await user.click(screen.getByRole('button', {name: 'Profile'}));
     expect(screen.getByText('ada@example.test')).toBeInTheDocument();
     expect(screen.getByRole('heading', {name: 'Change password'})).toBeInTheDocument();
@@ -71,8 +76,8 @@ describe('App identity experience', () => {
     expect(screen.getByText('2027-03-20 to 2027-03-25')).toBeInTheDocument();
     expect(screen.getByText('Working plan: 2027-03-10 to 2027-03-14')).toBeInTheDocument();
     await user.click(screen.getByRole('button', {name: 'Rename trip'}));
-    await user.clear(screen.getAllByLabelText('Trip name')[1]);
-    await user.type(screen.getAllByLabelText('Trip name')[1], 'Spring break');
+    await user.clear(screen.getByLabelText('Trip name'));
+    await user.type(screen.getByLabelText('Trip name'), 'Spring break');
     await user.click(screen.getByRole('button', {name: 'Save name'}));
     expect(await screen.findByText(/changed on the server/)).toBeInTheDocument();
     expect(screen.getByRole('heading', {name: 'Original trip'})).toBeInTheDocument();
@@ -104,8 +109,8 @@ describe('App identity experience', () => {
     expect(await screen.findByRole('heading', {name: 'Original trip'})).toBeInTheDocument();
     await user.click(screen.getByRole('button', {name: 'Trips'}));
     await user.click(screen.getByRole('button', {name: 'Rename trip'}));
-    await user.clear(screen.getAllByLabelText('Trip name')[1]);
-    await user.type(screen.getAllByLabelText('Trip name')[1], 'Renamed trip');
+    await user.clear(screen.getByLabelText('Trip name'));
+    await user.type(screen.getByLabelText('Trip name'), 'Renamed trip');
     await user.click(screen.getByRole('button', {name: 'Save name'}));
     expect(await screen.findByRole('heading', {name: 'Renamed trip'})).toBeInTheDocument();
     await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips/trip-1')).toHaveLength(2));
@@ -332,7 +337,9 @@ describe('App identity experience', () => {
     render(<App />);
     expect(await showTrips()).toBeInTheDocument();
 
-    expect(screen.getByRole('heading', {name: 'Trips'})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'Your trips'})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'No trips yet'})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Plan a new trip'}));
     await user.clear(screen.getByLabelText('Trip name'));
     await user.type(screen.getByLabelText('Trip name'), 'Spring break');
     await user.selectOptions(screen.getByLabelText('Destination'), 'destination-sfo');
@@ -362,8 +369,8 @@ describe('App identity experience', () => {
     expect(screen.getByRole('button', {name: 'Trips'})).toHaveAttribute('aria-current', 'page');
     fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [], past: []}));
     await user.click(screen.getByRole('button', {name: /Back to all trips/}));
-    expect(screen.getByRole('heading', {name: 'Trips'})).toBeInTheDocument();
-    expect(screen.getByLabelText('Trip name')).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'Your trips'})).toBeInTheDocument();
+    expect(screen.queryByLabelText('Trip name')).not.toBeInTheDocument();
   });
 
   it('renders Upcoming and Past trips in backend order with clear nested hierarchy and status badges', async () => {
@@ -579,7 +586,7 @@ describe('App identity experience', () => {
     expect(await screen.findByRole('button', {name: 'Retry save'})).toBeInTheDocument();
     await user.click(screen.getByRole('button', {name: 'Trips'}));
     expect(await screen.findByRole('alert')).toHaveTextContent('We could not reach DeTour');
-    expect(screen.getByRole('heading', {name: 'Trips'})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'Your trips'})).toBeInTheDocument();
     await user.click(screen.getByRole('button', {name: `Open trip ${trip.label}`}));
     expect(screen.getByLabelText('Budget (USD)')).toHaveValue(2500);
     expect(screen.getByRole('button', {name: 'Retry save'})).toBeInTheDocument();

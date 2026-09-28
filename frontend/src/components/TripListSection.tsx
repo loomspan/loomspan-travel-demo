@@ -13,6 +13,8 @@ type TripListSectionProps = {
   onStartPlanTrip?: () => void;
   onStartAirfare?: () => void;
   onStartStay?: () => void;
+  hideHeading?: boolean;
+  headingLevel?: 2 | 3;
 };
 
 function AlternativeSummaryItem({alt}: {alt: AlternativeProfileSummary}) {
@@ -185,12 +187,15 @@ export function TripListSection({
   onStartPlanTrip,
   onStartAirfare,
   onStartStay,
+  hideHeading = false,
+  headingLevel = 3,
 }: TripListSectionProps) {
   const handlePlanTrip = onStartPlanTrip ?? onPlanTrip;
+  const SectionHeading = headingLevel === 2 ? 'h2' : 'h3';
 
   return (
     <div className="trips-container">
-      <div className="trips-header">
+      {!hideHeading && <div className="trips-header">
         <h2>Your trips</h2>
         {handlePlanTrip && <div className="trips-header-actions" style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
           <button type="button" className="primary" onClick={handlePlanTrip}>
@@ -211,12 +216,12 @@ export function TripListSection({
             Stay
           </button>
         </div>}
-      </div>
+      </div>}
 
       <section className="trips-section" aria-labelledby="upcoming-trips-heading">
-        <h3 id="upcoming-trips-heading" className="section-title" tabIndex={-1}>
+        <SectionHeading id="upcoming-trips-heading" className="section-title" tabIndex={-1}>
           Upcoming trips ({upcoming.length})
-        </h3>
+        </SectionHeading>
         {upcoming.length === 0 ? (
           <p className="hint">No upcoming trips planned yet.</p>
         ) : (
@@ -236,9 +241,9 @@ export function TripListSection({
       </section>
 
       <section className="trips-section" aria-labelledby="past-trips-heading">
-        <h3 id="past-trips-heading" className="section-title" tabIndex={-1}>
+        <SectionHeading id="past-trips-heading" className="section-title" tabIndex={-1}>
           Past trips ({past.length})
-        </h3>
+        </SectionHeading>
         {past.length === 0 ? (
           <p className="hint">No past trips.</p>
         ) : (

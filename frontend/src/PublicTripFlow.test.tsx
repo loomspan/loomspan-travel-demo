@@ -15,6 +15,8 @@ const ownedProfile = {email: 'ada@example.test', upcoming: [{id: trip.id, label:
 
 async function fillTrip(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', {name: 'Trips'}));
+  const planNewTrip = screen.queryByRole('button', {name: 'Plan a new trip'});
+  if (planNewTrip) await user.click(planNewTrip);
   await user.clear(screen.getByLabelText('Trip name'));
   await user.type(screen.getByLabelText('Trip name'), 'Family visit');
   await user.selectOptions(screen.getByLabelText('Destination'), 'destination-muc');
@@ -182,6 +184,7 @@ describe('public trip start and authentication handoff', () => {
     const user = userEvent.setup(); render(<App />);
     await screen.findByRole('button', {name: 'Profile'});
     await user.click(screen.getByRole('button', {name: 'Trips'}));
+    await user.click(screen.getByRole('button', {name: 'Plan a new trip'}));
     expect(screen.getByLabelText('Trip name')).toHaveValue('San Francisco trip');
     await user.clear(screen.getByLabelText('Trip name'));
     await user.type(screen.getByLabelText('Trip name'), 'My spring trip');
@@ -293,7 +296,7 @@ describe('public trip start and authentication handoff', () => {
     await user.type(screen.getByLabelText('Password'), 'aaaaaaaaaaaa');
     fetchMock.mockResolvedValueOnce(noContent()).mockResolvedValueOnce(json(200, {email: 'bob@example.test', upcoming: [], past: []}));
     await user.click(screen.getByRole('button', {name: 'Log in'}));
-    expect(await screen.findByRole('heading', {name: 'Trips'})).toBeInTheDocument();
+    expect(await screen.findByRole('heading', {name: 'Your trips'})).toBeInTheDocument();
     expect(screen.queryByRole('button', {name: `Trip: ${trip.label}`})).not.toBeInTheDocument();
     expect(screen.queryByRole('button', {name: 'Retry save'})).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'PUT')).toHaveLength(1);

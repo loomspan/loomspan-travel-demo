@@ -47,6 +47,10 @@ export function ProfileScreen({
   const [viewMode, setViewMode] = useState<'home' | 'trips' | 'profile'>(initialDestination);
   const [showWorkspace, setShowWorkspace] = useState(false);
   const [startMode, setStartMode] = useState<StartMode>(initialStartMode);
+  const [showStartForm, setShowStartForm] = useState(
+    initialDestination === 'trips' &&
+    (initialStartMode !== 'PLAN_TRIP' || JSON.stringify(tripDraft) !== JSON.stringify(emptyTripStartDraft))
+  );
   const [activeTrip, setActiveTrip] = useState<TripResponse | null>(null);
   const workspaceRef = useRef<TripWorkspaceHandle>(null);
   const openingSequence = useRef(0);
@@ -63,7 +67,7 @@ export function ProfileScreen({
       heading?.focus();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [viewMode, showWorkspace, activeTrip?.id]);
+  }, [viewMode, showWorkspace, showStartForm, activeTrip?.id]);
 
   // Modals state
   const [entryContext, setEntryContext] = useState<{
@@ -143,6 +147,7 @@ export function ProfileScreen({
   const startCreateTrip = (mode: 'PLAN_TRIP' | 'AIRFARE' | 'STAY') => {
     if (workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and start another Trip?')) return;
     setStartMode(mode);
+    setShowStartForm(true);
     setViewMode('trips'); setShowWorkspace(false);
     rememberScreen('trips');
   };
@@ -153,7 +158,7 @@ export function ProfileScreen({
     setOpenError(null);
     setViewMode(destination);
     rememberScreen(destination);
-    if (destination === 'trips') { setShowWorkspace(false); if (onRefreshProfile) void onRefreshProfile(); }
+    if (destination === 'trips') { setShowWorkspace(false); setShowStartForm(false); if (onRefreshProfile) void onRefreshProfile(); }
   };
 
   useEffect(() => {
@@ -167,6 +172,7 @@ export function ProfileScreen({
       setOpeningTripId(null);
       setOpenError(null);
       setShowWorkspace(false);
+      setShowStartForm(false);
       const destination = previous?.destination;
       setViewMode(destination === 'trips' || destination === 'profile' ? destination : 'home');
       if (destination === 'trips' && onRefreshProfile) void onRefreshProfile();
@@ -336,16 +342,26 @@ export function ProfileScreen({
       />
     </div>}
     {viewMode === 'home' && <HomeScreen onStart={startCreateTrip} onReturn={activeTrip ? {label: activeTrip.label, open: () => void handleOpenTrip(activeTrip.id)} : undefined} />}
-    {viewMode === 'trips' && !showWorkspace && <><TripStartForm draft={tripDraft} onChange={onTripDraftChange} mode={startMode} authenticated onAuthenticationRequired={onAuthenticationRequired} onSuccess={(createdTrip, mode, accommodationType) => {
+    {viewMode === 'trips' && !showWorkspace && (showStartForm ? <div className="trip-start-view">
+      <button type="button" className="text-button trip-list-back" onClick={() => setShowStartForm(false)}>← Back to your trips</button>
+      <TripStartForm draft={tripDraft} onChange={onTripDraftChange} mode={startMode} authenticated onAuthenticationRequired={onAuthenticationRequired} onSuccess={(createdTrip, mode, accommodationType) => {
       openingSequence.current += 1;
       setEntryContext({mode, accommodationType});
       setActiveTrip(createdTrip);
       setShowWorkspace(true);
+      setShowStartForm(false);
       rememberScreen('trips', createdTrip.id);
       if (onRefreshProfile) void onRefreshProfile();
     }} />
-      <TripListSection upcoming={upcoming} past={past} onSelectTrip={(id) => void handleOpenTrip(id)} onDeleteTrip={handlePromptDeleteTrip} onCancelTrip={handlePromptCancelTrip} onRenameTrip={handleRenameTrip} />
-    </>}
+    </div> : <section className="card trips-page" aria-labelledby="trips-heading">
+      <div className="trips-page-header">
+        <div><p className="eyebrow wordmark">DeTour</p><h1 id="trips-heading" tabIndex={-1}>Your trips</h1></div>
+        {(upcoming.length > 0 || past.length > 0) && <button type="button" className="primary" onClick={() => { setStartMode('PLAN_TRIP'); setShowStartForm(true); }}>Plan a new trip</button>}
+      </div>
+      {upcoming.length === 0 && past.length === 0
+        ? <div className="trips-empty-prompt"><h2>No trips yet</h2><p>Your trips will appear here when you start planning.</p><button type="button" className="primary" onClick={() => { setStartMode('PLAN_TRIP'); setShowStartForm(true); }}>Plan a new trip</button></div>
+        : <TripListSection upcoming={upcoming} past={past} onSelectTrip={(id) => void handleOpenTrip(id)} onDeleteTrip={handlePromptDeleteTrip} onCancelTrip={handlePromptCancelTrip} onRenameTrip={handleRenameTrip} hideHeading headingLevel={2} />}
+    </section>)}
     {viewMode === 'profile' && <section className="card profile-card" aria-labelledby="profile-heading">
       <div className="profile-heading">
         <div>
