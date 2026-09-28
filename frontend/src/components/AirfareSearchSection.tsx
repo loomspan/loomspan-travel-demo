@@ -12,9 +12,11 @@ type AirfareSearchSectionProps = {
   trip: TripResponse;
   draftId: string;
   onSelect: (option: FlightCombinationResponse) => Promise<void>;
-  onCancel: () => void;
+  onCancel?: () => void;
   pending: boolean;
   publicSearch?: boolean;
+  inTabs?: boolean;
+  selectedKey?: string;
 };
 
 export function formatMinutes(minutes: number): string {
@@ -30,6 +32,8 @@ export function AirfareSearchSection({
   onCancel,
   pending,
   publicSearch = false,
+  inTabs = false,
+  selectedKey,
 }: AirfareSearchSectionProps) {
   const [directOnly, setDirectOnly] = useState(false);
   const [sort, setSort] = useState<AirfareSort>('DEFAULT');
@@ -64,8 +68,8 @@ export function AirfareSearchSection({
   }, [trip.id, trip.destinationKey, trip.startDate, trip.endDate, trip.travelerCount, draftId, publicSearch, directOnly, sort, retryKey]);
 
   return (
-    <div className="component-search-section airfare-search" aria-labelledby="airfare-search-heading">
-      <div className="search-header">
+    <div className="component-search-section airfare-search" aria-label={inTabs ? 'Flight search options' : undefined} aria-labelledby={inTabs ? undefined : 'airfare-search-heading'}>
+      {!inTabs && <div className="search-header">
         <h4 id="airfare-search-heading">Search flights</h4>
         <button
           type="button"
@@ -75,7 +79,7 @@ export function AirfareSearchSection({
         >
           Cancel
         </button>
-      </div>
+      </div>}
 
       <div className="search-controls field-group">
         <div className="field-checkbox">
@@ -164,9 +168,9 @@ export function AirfareSearchSection({
                   type="button"
                   className="primary"
                   onClick={() => void onSelect(opt)}
-                  disabled={pending}
+                  disabled={pending || opt.combinationKey === selectedKey}
                 >
-                  Select flight
+                  {opt.combinationKey === selectedKey ? 'Selected' : 'Select flight'}
                 </button>
               </div>
             </article>

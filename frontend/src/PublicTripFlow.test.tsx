@@ -62,20 +62,59 @@ describe('public trip start and authentication handoff', () => {
     const user = userEvent.setup(); render(<App />);
     await fillTrip(user);
     await user.click(screen.getByRole('button', {name: 'Search options'}));
-    await user.click(screen.getByRole('button', {name: 'Search stays'}));
+    await user.click(screen.getByRole('tab', {name: 'Search stays'}));
     await user.click(await screen.findByRole('button', {name: 'Select stay'}));
-    expect(screen.getByText(/Selected stay: Central Hotel/)).toBeInTheDocument();
+    expect(screen.getByText('Selected stay')).toBeInTheDocument();
+    expect(screen.getByRole('tab', {name: 'Search stays'})).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', {name: 'Selected'})).toBeDisabled();
+    const selection = screen.getByText('Selected stay').closest('article')!;
+    const save = screen.getByRole('button', {name: 'Save selections'});
+    const compare = screen.getByRole('heading', {name: 'Compare more options'});
+    expect(selection.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(save.compareDocumentPosition(compare) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips')).toHaveLength(0);
     await user.click(screen.getByRole('button', {name: 'Home'}));
     expect(screen.getByRole('dialog', {name: 'Save your selections?'})).toBeInTheDocument();
     await user.click(screen.getByRole('button', {name: 'Keep planning'}));
-    expect(screen.getByText(/Selected stay: Central Hotel/)).toBeInTheDocument();
+    expect(screen.getByText('Selected stay')).toBeInTheDocument();
     await user.click(screen.getByRole('button', {name: 'Save selections'}));
     await user.type(screen.getByLabelText('Email address'), 'ada@example.test');
     await user.type(screen.getByLabelText('Password'), 'aaaaaaaaaaaa');
     await user.click(screen.getByRole('button', {name: 'Log in'}));
     await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips')).toHaveLength(1));
     await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips/trip-1/drafts/draft-1/stays')).toHaveLength(1));
+  });
+
+  it('keeps a selected flight prominent above searchable options', async () => {
+    const flight = {
+      combinationKey: 'meridian-round-trip',
+      outbound: {carrier: 'Meridian Air', flightNumber: 'MA118', originAirportCode: 'PDX', destinationAirportCode: 'MUC',
+        departureTime: '2027-03-10T21:40:00Z', arrivalTime: '2027-03-11T23:45:00Z', departureTimeZone: 'America/Los_Angeles',
+        arrivalTimeZone: 'Europe/Berlin', durationMinutes: 845, stopCount: 1},
+      returnFlight: {carrier: 'Meridian Air', flightNumber: 'MA119', originAirportCode: 'MUC', destinationAirportCode: 'PDX',
+        departureTime: '2027-03-14T15:20:00Z', arrivalTime: '2027-03-15T03:20:00Z', departureTimeZone: 'Europe/Berlin',
+        arrivalTimeZone: 'America/Los_Angeles', durationMinutes: 780, stopCount: 1},
+      pricing: {travelerCount: 2, partyTotalPriceCents: 68200},
+    };
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/profile') return json(401, {code: 'UNAUTHENTICATED'});
+      if (url.startsWith('/api/public/airfare')) return json(200, {options: [flight]});
+      if (url.startsWith('/api/public/stays')) return json(200, {options: []});
+      throw new Error(`Unexpected request ${url}`);
+    });
+    const user = userEvent.setup(); render(<App />);
+    await fillTrip(user);
+    await user.click(screen.getByRole('button', {name: 'Search options'}));
+    await user.click(await screen.findByRole('button', {name: 'Select flight'}));
+    const selection = screen.getByText('Selected flight').closest('article')!;
+    expect(selection).toHaveTextContent('MA118');
+    expect(selection).toHaveTextContent('MA119');
+    expect(selection).toHaveTextContent('$682.00');
+    expect(screen.getByRole('button', {name: 'Selected'})).toBeDisabled();
+    expect(selection.compareDocumentPosition(screen.getByRole('button', {name: 'Save selections'})) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(screen.getByRole('tab', {name: 'Search stays'}));
+    expect(screen.getByText('Selected flight')).toBeInTheDocument();
+    expect(screen.getByRole('tabpanel', {name: 'Search stays'})).toBeVisible();
   });
 
   it('discards an unsaved selection when the guest chooses not to save on navigation', async () => {
@@ -88,14 +127,14 @@ describe('public trip start and authentication handoff', () => {
     const user = userEvent.setup(); render(<App />);
     await fillTrip(user);
     await user.click(screen.getByRole('button', {name: 'Search options'}));
-    await user.click(screen.getByRole('button', {name: 'Search stays'}));
+    await user.click(screen.getByRole('tab', {name: 'Search stays'}));
     await user.click(await screen.findByRole('button', {name: 'Select stay'}));
     await user.click(screen.getByRole('button', {name: 'Home'}));
     await user.click(screen.getByRole('button', {name: 'No, discard'}));
     expect(screen.getByRole('heading', {name: 'Home'})).toBeInTheDocument();
     await user.click(screen.getByRole('button', {name: 'Trips'}));
     expect(screen.getByLabelText('Trip name')).toHaveValue('San Francisco trip');
-    expect(screen.queryByText(/Selected stay:/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Selected stay')).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips')).toHaveLength(0);
   });
 
@@ -115,7 +154,7 @@ describe('public trip start and authentication handoff', () => {
     const user = userEvent.setup(); render(<App />);
     await fillTrip(user);
     await user.click(screen.getByRole('button', {name: 'Search options'}));
-    await user.click(screen.getByRole('button', {name: 'Search stays'}));
+    await user.click(screen.getByRole('tab', {name: 'Search stays'}));
     await user.click(await screen.findByRole('button', {name: 'Select stay'}));
     await user.click(screen.getByRole('button', {name: 'Home'}));
     await user.click(screen.getByRole('button', {name: 'Yes, save'}));

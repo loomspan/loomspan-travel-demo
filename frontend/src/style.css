@@ -829,3 +829,58 @@ input[type="checkbox"]:disabled { opacity: .55; cursor: not-allowed; }
   .home-hero, .home-start, .featured-destinations { padding: 1.25rem; }
   .featured-destinations { padding-top: .25rem; }
 }
+
+/* Guest trip discovery: selected choices lead, search stays beneath them. */
+.guest-trip-intro { margin: .8rem 0 1.5rem; color: var(--muted); }
+.guest-section-heading { margin-bottom: .85rem; }
+.guest-section-heading h2 { margin: 0; font-size: 1.3rem; }
+.guest-section-heading p { margin: .2rem 0 0; color: var(--muted); font-size: .9rem; }
+.guest-selection-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 29rem), 1fr)); gap: 1rem; }
+.guest-selection-card { min-width: 0; display: flex; flex-direction: column; padding: 1.2rem; border: 1px solid var(--line); border-left: .3rem solid var(--teal); border-radius: .65rem; background: var(--surface); }
+.guest-selection-card-header { display: flex; justify-content: space-between; align-items: start; gap: 1rem; }
+.guest-selection-card-header > div { min-width: 0; }
+.guest-selection-label { display: block; margin-bottom: .3rem; color: var(--teal-deep); font-size: .75rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.guest-selection-card h3 { margin: 0; font-size: 1.15rem; }
+.guest-selection-card-header p { margin: .15rem 0 0; color: var(--muted); font-size: .88rem; }
+.guest-selection-price { color: var(--ink-strong); font-size: 1.4rem; white-space: nowrap; }
+.guest-selected-legs, .guest-selected-stay-details { display: grid; gap: .75rem; margin: 1.1rem 0; }
+.guest-selected-leg, .guest-selected-stay-details p { display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); gap: .6rem; margin: 0; font-size: .88rem; }
+.guest-selected-leg-label, .guest-selected-stay-details p > strong { color: var(--muted); font-weight: 700; }
+.guest-selected-leg p { margin: .1rem 0 0; }
+.guest-selected-leg .guest-selected-meta { color: var(--muted); font-size: .8rem; }
+.guest-selection-card-footer { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-top: auto; padding-top: .7rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .8rem; }
+.guest-selection-card-footer .text-button { padding: .2rem; white-space: nowrap; }
+.guest-selection-actions { display: flex; justify-content: flex-end; margin-top: .9rem; }
+.guest-compare { margin-top: 1.7rem; }
+.guest-search-tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--line); }
+.guest-search-tabs button { min-height: 2.9rem; padding: .65rem 1.2rem; border: 0; border-bottom: .2rem solid transparent; border-radius: .5rem .5rem 0 0; background: transparent; color: var(--muted); font-weight: 700; cursor: pointer; }
+.guest-search-tabs button[aria-selected="true"] { border-bottom-color: var(--teal); background: #f1f8f5; color: var(--teal-deep); }
+.guest-compare .component-search-section { width: 100%; margin: 0; padding: 1.1rem; border-color: var(--line); border-top: 0; border-radius: 0 0 .65rem .65rem; }
+.guest-compare .search-controls { display: flex; align-items: end; flex-wrap: wrap; gap: .75rem 1.5rem; }
+.guest-compare .search-controls .field, .guest-compare .search-controls .field-checkbox { margin: 0; }
+.guest-compare .search-controls .field { flex: 0 1 15rem; }
+.guest-compare .search-controls select { width: 100%; }
+.guest-compare .field-checkbox label { display: inline-flex; align-items: center; min-height: 2.85rem; gap: .35rem; margin: 0; }
+.guest-compare .flight-option-card, .guest-compare .stay-option-card { width: 100%; max-width: none; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 1.5rem; padding: 1.1rem 1.25rem; box-shadow: 0 .2rem .8rem #17383b0b; }
+.guest-compare .flight-legs { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.guest-compare .flight-leg { min-width: 0; }
+.guest-compare .leg-badge { flex: none; white-space: nowrap; }
+.guest-compare .flight-pricing-action, .guest-compare .stay-pricing-action { min-width: 10rem; }
+.guest-compare .flight-pricing-action .primary, .guest-compare .stay-pricing-action .primary { white-space: nowrap; }
+.guest-compare .flight-pricing-action .primary:disabled, .guest-compare .stay-pricing-action .primary:disabled { opacity: 1; background: var(--teal-soft); color: var(--teal-deep); cursor: default; }
+.guest-compare .flight-options-list, .guest-compare .stay-options-list { width: 100%; }
+@media (max-width: 1050px) {
+  .guest-compare .flight-legs { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .guest-compare .flight-option-card, .guest-compare .stay-option-card { grid-template-columns: minmax(0, 1fr); }
+  .guest-compare .flight-pricing-action, .guest-compare .stay-pricing-action { width: 100%; align-items: stretch; }
+  .guest-selection-card-header { flex-wrap: wrap; }
+  .guest-selection-actions .primary { width: 100%; }
+}
+@media (max-width: 420px) {
+  .guest-search-tabs button { flex: 1; padding: .65rem .45rem; }
+  .guest-selected-leg, .guest-selected-stay-details p { grid-template-columns: 1fr; gap: .1rem; }
+  .guest-selection-card { padding: 1rem; }
+  .guest-compare .flight-option-card, .guest-compare .stay-option-card { padding: 1rem; }
+}

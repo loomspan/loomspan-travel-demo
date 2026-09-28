@@ -13,9 +13,11 @@ type StaySearchSectionProps = {
   draftId: string;
   initialType?: AccommodationType;
   onSelect: (option: StayOptionResponse) => Promise<void>;
-  onCancel: () => void;
+  onCancel?: () => void;
   pending: boolean;
   publicSearch?: boolean;
+  inTabs?: boolean;
+  selectedUnitId?: number;
 };
 
 export function StaySearchSection({
@@ -26,6 +28,8 @@ export function StaySearchSection({
   onCancel,
   pending,
   publicSearch = false,
+  inTabs = false,
+  selectedUnitId,
 }: StaySearchSectionProps) {
   const [type, setType] = useState<AccommodationType>(initialType);
   const [sort, setSort] = useState<StaySort>('DEFAULT');
@@ -61,8 +65,8 @@ export function StaySearchSection({
   }, [trip.id, trip.destinationKey, trip.startDate, trip.endDate, trip.travelerCount, trip.budgetCents, draftId, publicSearch, type, sort, retryKey]);
 
   return (
-    <div className="component-search-section stay-search" aria-labelledby="stay-search-heading">
-      <div className="search-header">
+    <div className="component-search-section stay-search" aria-label={inTabs ? 'Stay search options' : undefined} aria-labelledby={inTabs ? undefined : 'stay-search-heading'}>
+      {!inTabs && <div className="search-header">
         <h4 id="stay-search-heading">Search stays</h4>
         <button
           type="button"
@@ -72,7 +76,7 @@ export function StaySearchSection({
         >
           Cancel
         </button>
-      </div>
+      </div>}
 
       <div className="search-controls field-group">
         <div className="field">
@@ -159,9 +163,9 @@ export function StaySearchSection({
                   type="button"
                   className="primary"
                   onClick={() => void onSelect(opt)}
-                  disabled={pending}
+                  disabled={pending || opt.accommodationUnitId === selectedUnitId}
                 >
-                  Select stay
+                  {opt.accommodationUnitId === selectedUnitId ? 'Selected' : 'Select stay'}
                 </button>
               </div>
             </article>
