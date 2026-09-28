@@ -17,6 +17,7 @@ type AirfareSearchSectionProps = {
   publicSearch?: boolean;
   inTabs?: boolean;
   selectedKey?: string;
+  selectedFlightIds?: [number, number];
 };
 
 export function formatMinutes(minutes: number): string {
@@ -34,6 +35,7 @@ export function AirfareSearchSection({
   publicSearch = false,
   inTabs = false,
   selectedKey,
+  selectedFlightIds,
 }: AirfareSearchSectionProps) {
   const [directOnly, setDirectOnly] = useState(false);
   const [sort, setSort] = useState<AirfareSort>('DEFAULT');
@@ -168,9 +170,9 @@ export function AirfareSearchSection({
                   type="button"
                   className="primary"
                   onClick={() => void onSelect(opt)}
-                  disabled={pending || opt.combinationKey === selectedKey}
+                  disabled={pending || (selectedKey !== undefined && opt.combinationKey === selectedKey) || Boolean(selectedFlightIds && opt.outbound.flightInstanceId === selectedFlightIds[0] && opt.returnFlight.flightInstanceId === selectedFlightIds[1])}
                 >
-                  {opt.combinationKey === selectedKey ? 'Selected' : 'Select flight'}
+                  {(selectedKey !== undefined && opt.combinationKey === selectedKey) || (selectedFlightIds && opt.outbound.flightInstanceId === selectedFlightIds[0] && opt.returnFlight.flightInstanceId === selectedFlightIds[1]) ? 'Selected' : 'Select flight'}
                 </button>
               </div>
             </article>

@@ -519,10 +519,10 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
       />
     );
 
-    // Builder slots and option save are disabled
+    // Comparison search and option save are disabled.
     expect(screen.getByRole('button', {name: /save as new option/i})).toBeDisabled();
-    expect(screen.getByRole('button', {name: /add airfare/i})).toBeDisabled();
-    expect(screen.getByRole('button', {name: /add stay/i})).toBeDisabled();
+    expect(screen.getByRole('tab', {name: 'Search flights'})).toBeDisabled();
+    expect(screen.getByRole('tab', {name: 'Search stays'})).toBeDisabled();
 
     // Details fields are disabled
     expect(screen.getByLabelText(/destination/i)).toBeDisabled();

@@ -30,8 +30,7 @@ import {
   computeStayTotalCents,
   computeRentalTotalCents,
 } from './ItinerarySummaryTally';
-import {AirfareSlot} from './AirfareSlot';
-import {StaySlot} from './StaySlot';
+import {TripComparisonPage} from './TripComparisonPage';
 import {RentalSlot} from './RentalSlot';
 import {ConfirmRemoveModal} from './ConfirmRemoveModal';
 
@@ -126,18 +125,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
   const savedOptions: AlternativeResponse[] = (trip.savedOptions ?? trip.planned ?? []).map(option => ({
     ...option, lifecycle: 'PLANNED', version: option.version ?? 0,
   }));
-
-  const [airfareMode, setAirfareMode] = useState<'empty' | 'searching' | 'selected'>(() => {
-    if (initialTrip.drafts?.[0]?.selections?.airfare) return 'selected';
-    if (initialEntryMode === 'AIRFARE') return 'searching';
-    return 'empty';
-  });
-
-  const [stayMode, setStayMode] = useState<'empty' | 'searching' | 'selected'>(() => {
-    if (initialTrip.drafts?.[0]?.selections?.stay) return 'selected';
-    if (initialEntryMode === 'STAY') return 'searching';
-    return 'empty';
-  });
 
   const [rentalMode, setRentalMode] = useState<'hidden' | 'searching' | 'selected'>(() => {
     if (initialTrip.drafts?.[0]?.selections?.rental) return 'selected';
@@ -300,22 +287,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     );
     setSelectedForCompareIds((prev) => prev.filter((id) => validIds.has(id)));
   }, [trip.savedOptions, trip.planned]);
-
-  useEffect(() => {
-    if (activeDraft?.selections?.airfare) {
-      setAirfareMode('selected');
-    } else {
-      setAirfareMode((prev) => (prev === 'selected' ? 'empty' : prev));
-    }
-  }, [activeDraft?.selections?.airfare]);
-
-  useEffect(() => {
-    if (activeDraft?.selections?.stay) {
-      setStayMode('selected');
-    } else {
-      setStayMode((prev) => (prev === 'selected' ? 'empty' : prev));
-    }
-  }, [activeDraft?.selections?.stay]);
 
   useEffect(() => {
     if (activeDraft?.selections?.rental) {
@@ -630,7 +601,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       });
       applyTripState(updatedTrip);
       setWorkingMutationFailed(false);
-      setAirfareMode('selected');
       setAutosaveStatus('saved');
       setAutosaveMessage('Flight saved to Working plan.');
     } catch (err) {
@@ -661,7 +631,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       });
       applyTripState(updatedTrip);
       setWorkingMutationFailed(false);
-      setStayMode('selected');
       setAutosaveStatus('saved');
       setAutosaveMessage('Stay saved to Working plan.');
     } catch (err) {
@@ -760,13 +729,11 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
           expectedVersion: trip.version,
           expectedDraftVersion: activeDraft.version,
         });
-        setAirfareMode('empty');
       } else if (removeTarget.component === 'STAY') {
         updatedTrip = await tripsApi.removeStay(trip.id, activeDraft.id, {
           expectedVersion: trip.version,
           expectedDraftVersion: activeDraft.version,
         });
-        setStayMode('empty');
       } else {
         updatedTrip = await tripsApi.removeRental(trip.id, activeDraft.id, {
           expectedVersion: trip.version,
@@ -1406,37 +1373,20 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
           <ItinerarySummaryTally trip={trip} selections={activeDraft.selections} />
 
           <div className="component-slots-grid">
-            <AirfareSlot
-              trip={trip}
+            <TripComparisonPage
+              trip={{...trip, startDate: activeDraft.startDate ?? trip.startDate, endDate: activeDraft.endDate ?? trip.endDate}}
               draftId={activeDraft.id}
-              selectedAirfare={activeDraft.selections.airfare}
-              mode={airfareMode}
-              onStartSearch={() => setAirfareMode('searching')}
-              onSelect={handleSelectAirfare}
-              onChange={() => setAirfareMode('searching')}
-              onRemove={promptRemoveAirfare}
-              onCancelSearch={() =>
-                setAirfareMode(activeDraft.selections.airfare ? 'selected' : 'empty')
-              }
+              name={trip.name ?? trip.label}
+              initialSearch={initialEntryMode === 'STAY' ? 'STAY' : initialEntryMode === 'AIRFARE' ? 'AIRFARE' : null}
+              accommodationType={stayAccommodationType}
+              savedAirfare={activeDraft.selections.airfare}
+              savedStay={activeDraft.selections.stay}
+              onSelectAirfare={handleSelectAirfare}
+              onSelectStay={handleSelectStay}
+              onRemoveAirfare={promptRemoveAirfare}
+              onRemoveStay={promptRemoveStay}
               pending={componentMutationPending || isTripCanceled}
             />
-
-            <StaySlot
-              trip={trip}
-              draftId={activeDraft.id}
-              selectedStay={activeDraft.selections.stay}
-              mode={stayMode}
-              initialType={stayAccommodationType}
-              onStartSearch={() => setStayMode('searching')}
-              onSelect={handleSelectStay}
-              onChange={() => setStayMode('searching')}
-              onRemove={promptRemoveStay}
-              onCancelSearch={() =>
-                setStayMode(activeDraft.selections.stay ? 'selected' : 'empty')
-              }
-              pending={componentMutationPending || isTripCanceled}
-            />
-
             <RentalSlot
               trip={trip}
               draftId={activeDraft.id}

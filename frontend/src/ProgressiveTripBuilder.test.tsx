@@ -112,7 +112,7 @@ describe('Progressive Trip Builder Experience', () => {
     vi.spyOn(tripsApi, 'removeAirfare').mockRejectedValue(new Error('Network unavailable'));
     const save = vi.spyOn(tripsApi, 'saveOption').mockResolvedValue(trip);
     render(<TripWorkspace initialTrip={trip} onBack={() => {}} onTripDeleted={() => {}} />);
-    await user.click(screen.getByRole('button', {name: 'Remove'}));
+    await user.click(screen.getByRole('button', {name: 'Remove flight'}));
     const modal = await screen.findByRole('dialog', {name: /remove airfare\?/i});
     await user.click(within(modal).getByRole('button', {name: 'Remove airfare'}));
     expect((await screen.findAllByText('Network unavailable')).length).toBeGreaterThan(0);
@@ -328,8 +328,8 @@ describe('Progressive Trip Builder Experience', () => {
 
     await screen.findByText('Trip to San Francisco');
 
-    expect(await screen.findByRole('heading', {name: /search flights/i})).toBeInTheDocument();
-    expect(screen.getByRole('button', {name: /add stay/i})).toBeInTheDocument();
+    expect(await screen.findByRole('tab', {name: 'Search flights'})).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', {name: 'Search stays'})).toBeInTheDocument();
     expect(screen.queryByRole('heading', {name: /rental car|search rental cars/i})).not.toBeInTheDocument();
     expect(screen.getByRole('button', {name: /add a car/i})).toBeInTheDocument();
 
@@ -348,8 +348,7 @@ describe('Progressive Trip Builder Experience', () => {
     await user.click(screen.getByRole('button', {name: 'Trips'}));
     await user.click(await screen.findByRole('button', {name: `Open trip ${anotherTrip.label}`}));
     expect(await screen.findByRole('heading', {name: 'Working plan'})).toBeInTheDocument();
-    expect(screen.getByRole('button', {name: /add airfare/i})).toBeInTheDocument();
-    expect(screen.queryByRole('heading', {name: /search flights/i})).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', {name: 'Search flights'})).toHaveAttribute('aria-selected', 'false');
   });
 
   it('initiates trip creation through Stay entry point with upfront accommodation type preference and opens stay search', async () => {
@@ -421,14 +420,13 @@ describe('Progressive Trip Builder Experience', () => {
 
     await screen.findByText('Trip to San Francisco');
 
-    // Stay slot is directly searching
-    expect(await screen.findByRole('heading', {name: /search stays/i})).toBeInTheDocument();
+    // Stay search opens first in the shared comparison page.
+    expect(await screen.findByRole('tab', {name: 'Search stays'})).toHaveAttribute('aria-selected', 'true');
     // The search section initialized with VACATION_RENTAL
     const staySearchType = screen.getByLabelText('Accommodation type');
     expect(staySearchType).toHaveValue('VACATION_RENTAL');
 
-    // Airfare slot is empty ("Add airfare")
-    expect(screen.getByRole('button', {name: /add airfare/i})).toBeInTheDocument();
+    expect(screen.getByRole('tab', {name: 'Search flights'})).toBeInTheDocument();
     // Rental slot is hidden
     expect(screen.queryByRole('heading', {name: /rental car|search rental cars/i})).not.toBeInTheDocument();
     expect(screen.getByRole('button', {name: /add a car/i})).toBeInTheDocument();
@@ -477,11 +475,9 @@ describe('Progressive Trip Builder Experience', () => {
 
     await screen.findByText('Trip to San Francisco');
 
-    // Both slots ready / empty
-    expect(screen.getByRole('button', {name: /add airfare/i})).toBeInTheDocument();
-    expect(screen.getByRole('button', {name: /add stay/i})).toBeInTheDocument();
-    expect(screen.queryByRole('heading', {name: /search flights/i})).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', {name: /search stays/i})).not.toBeInTheDocument();
+    // Both searches are available without creating separate slots.
+    expect(screen.getByRole('tab', {name: 'Search flights'})).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', {name: 'Search stays'})).toHaveAttribute('aria-selected', 'false');
 
     // Rental slot is hidden
     expect(screen.queryByRole('heading', {name: /rental car|search rental cars/i})).not.toBeInTheDocument();
@@ -656,7 +652,7 @@ describe('Progressive Trip Builder Experience', () => {
       })
     );
 
-    await user.click(screen.getByRole('button', {name: 'Add airfare'}));
+    await user.click(screen.getByRole('tab', {name: 'Search flights'}));
 
     expect(await screen.findByText('SkyWays • #SK101')).toBeInTheDocument();
     expect(screen.getByText('$540.00')).toBeInTheDocument();
@@ -716,10 +712,9 @@ describe('Progressive Trip Builder Experience', () => {
 
     await user.click(screen.getByRole('button', {name: 'Select flight'}));
 
-    // Airfare slot is now selected
-    expect(await screen.findByText('Flight #101 / #202')).toBeInTheDocument();
-    expect(screen.getByRole('button', {name: 'Change flight'})).toBeInTheDocument();
-    expect(screen.getByRole('button', {name: 'Remove'})).toBeInTheDocument();
+    // The selection appears above the same searchable options.
+    expect(await screen.findByText('Selected flight')).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Remove flight'})).toBeInTheDocument();
 
     // Persistent tally updated
     expect(screen.getByTestId('tally-airfare-price')).toHaveTextContent('$540.00');
@@ -796,7 +791,7 @@ describe('Progressive Trip Builder Experience', () => {
       })
     );
 
-    await user.click(screen.getByRole('button', {name: 'Add stay'}));
+    await user.click(screen.getByRole('tab', {name: 'Search stays'}));
 
     // Verify card display
     expect(await screen.findByText('Pacific View Hotel')).toBeInTheDocument();
@@ -832,9 +827,9 @@ describe('Progressive Trip Builder Experience', () => {
 
     await user.click(screen.getByRole('button', {name: 'Select stay'}));
 
-    // Slot is now selected
-    expect(await screen.findByText('Pacific View Hotel')).toBeInTheDocument();
-    expect(screen.getByRole('button', {name: 'Change stay'})).toBeInTheDocument();
+    // The saved stay appears above the same searchable options.
+    expect((await screen.findAllByText('Pacific View Hotel')).length).toBeGreaterThan(1);
+    expect(screen.getByRole('button', {name: 'Remove stay'})).toBeInTheDocument();
 
     // Tally updated
     expect(screen.getByTestId('tally-stay-price')).toHaveTextContent('$720.00');
@@ -1045,10 +1040,10 @@ describe('Progressive Trip Builder Experience', () => {
     fetchMock.mockResolvedValueOnce(json(200, tripWithAirfare));
     await user.click(screen.getByRole('button', {name: /open trip/i}));
 
-    await screen.findByText('Flight #101 / #202');
+    await screen.findByText('Selected flight');
 
     // Click "Remove"
-    await user.click(screen.getByRole('button', {name: 'Remove'}));
+    await user.click(screen.getByRole('button', {name: 'Remove flight'}));
 
     // Confirmation modal opens naming component and discarded price
     const modal = await screen.findByRole('dialog', {name: /remove airfare\?/i});
@@ -1061,10 +1056,10 @@ describe('Progressive Trip Builder Experience', () => {
     // Click Cancel -> modal closes, selection remains intact
     await user.click(within(modal).getByRole('button', {name: 'Cancel'}));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByText('Flight #101 / #202')).toBeInTheDocument();
+    expect(screen.getByText('Selected flight')).toBeInTheDocument();
 
     // Click Remove again and confirm
-    await user.click(screen.getByRole('button', {name: 'Remove'}));
+    await user.click(screen.getByRole('button', {name: 'Remove flight'}));
     const confirmModal = await screen.findByRole('dialog', {name: /remove airfare\?/i});
 
     const tripCleared = createMockTrip({
@@ -1091,8 +1086,8 @@ describe('Progressive Trip Builder Experience', () => {
       })
     );
 
-    // Slot is now empty
-    expect(await screen.findByRole('button', {name: 'Add airfare'})).toBeInTheDocument();
+    expect(screen.queryByText('Selected flight')).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', {name: 'Search flights'})).toBeInTheDocument();
     expect(screen.getByTestId('tally-airfare-price')).toHaveTextContent('Not selected');
   });
 
@@ -1187,7 +1182,7 @@ describe('Progressive Trip Builder Experience', () => {
       })
     );
 
-    await user.click(screen.getByRole('button', {name: 'Add airfare'}));
+    await user.click(screen.getByRole('tab', {name: 'Search flights'}));
     expect(await screen.findByText('SkyWays • #SK101')).toBeInTheDocument();
 
     // Select flight fails with 409 VERSION_CONFLICT
@@ -1337,9 +1332,9 @@ describe('Progressive Trip Builder Experience', () => {
     fetchMock.mockResolvedValueOnce(json(200, tripWithAirfare));
     await user.click(screen.getByRole('button', {name: /open trip/i}));
 
-    expect(await screen.findByText('Flight #101 / #202')).toBeInTheDocument();
+    expect(await screen.findByText('Selected flight')).toBeInTheDocument();
 
-    // Mock searchAirfare when clicking Change flight
+    // Search for another flight from the shared comparison page.
     fetchMock.mockResolvedValueOnce(
       json(200, {
         tripId: 'trip-1',
@@ -1348,7 +1343,7 @@ describe('Progressive Trip Builder Experience', () => {
           {
             combinationKey: 'comb-1',
             outbound: {
-              flightInstanceId: 101,
+              flightInstanceId: 303,
               catalogKey: 'cat-1',
               carrier: 'SkyWays',
               flightNumber: 'SK101',
@@ -1370,7 +1365,7 @@ describe('Progressive Trip Builder Experience', () => {
               layover: null,
             },
             returnFlight: {
-              flightInstanceId: 202,
+              flightInstanceId: 404,
               catalogKey: 'cat-2',
               carrier: 'SkyWays',
               flightNumber: 'SK202',
@@ -1409,7 +1404,7 @@ describe('Progressive Trip Builder Experience', () => {
       })
     );
 
-    await user.click(screen.getByRole('button', {name: 'Change flight'}));
+    await user.click(screen.getByRole('tab', {name: 'Search flights'}));
     expect(await screen.findByText('SkyWays • #SK101')).toBeInTheDocument();
     expect(screen.getByText(/Departure: PDX.*March 10, 2027.*America\/Los_Angeles/)).toBeInTheDocument();
     expect(screen.getByText(/Arrival: SFO.*March 10, 2027.*America\/Los_Angeles/)).toBeInTheDocument();
@@ -1442,10 +1437,8 @@ describe('Progressive Trip Builder Experience', () => {
     fetchMock.mockResolvedValueOnce(json(200, tripWithClearedAirfare));
     await user.click(screen.getByRole('button', {name: 'Reload from server'}));
 
-    // Context is preserved on reload; clicking Cancel gracefully transitions to empty slot since airfare was cleared
-    await user.click(screen.getByRole('button', {name: 'Cancel'}));
-
-    // Slot gracefully switches to empty with "Add airfare" button instead of blank card
-    expect(await screen.findByRole('button', {name: 'Add airfare'})).toBeInTheDocument();
+    // The cleared selection disappears while search remains available.
+    expect(screen.queryByText('Selected flight')).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', {name: 'Search flights'})).toBeInTheDocument();
   });
 });

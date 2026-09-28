@@ -844,14 +844,14 @@ input[type="checkbox"]:disabled { opacity: .55; cursor: not-allowed; }
 /* Guest trip discovery: selected choices lead, search stays beneath them. */
 .guest-trip-intro { margin: .8rem 0 1.5rem; color: var(--muted); }
 .guest-section-heading { margin-bottom: .85rem; }
-.guest-section-heading h2 { margin: 0; font-size: 1.3rem; }
+.guest-section-heading :is(h2, h5) { margin: 0; font-size: 1.3rem; }
 .guest-section-heading p { margin: .2rem 0 0; color: var(--muted); font-size: .9rem; }
 .guest-selection-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 29rem), 1fr)); gap: 1rem; }
 .guest-selection-card { min-width: 0; display: flex; flex-direction: column; padding: 1.2rem; border: 1px solid var(--line); border-left: .3rem solid var(--teal); border-radius: .65rem; background: var(--surface); }
 .guest-selection-card-header { display: flex; justify-content: space-between; align-items: start; gap: 1rem; }
 .guest-selection-card-header > div { min-width: 0; }
 .guest-selection-label { display: block; margin-bottom: .3rem; color: var(--teal-deep); font-size: .75rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.guest-selection-card h3 { margin: 0; font-size: 1.15rem; }
+.guest-selection-card :is(h3, h6) { margin: 0; font-size: 1.15rem; }
 .guest-selection-card-header p { margin: .15rem 0 0; color: var(--muted); font-size: .88rem; }
 .guest-selection-price { color: var(--ink-strong); font-size: 1.4rem; white-space: nowrap; }
 .guest-selected-legs, .guest-selected-stay-details { display: grid; gap: .75rem; margin: 1.1rem 0; }

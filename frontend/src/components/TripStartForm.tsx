@@ -14,6 +14,15 @@ export const emptyTripStartDraft: TripStartDraft = {
   travelerCount: '1', ages: [''], budget: '', accommodationType: 'HOTEL',
 };
 
+export function createTripFromDraft(draft: TripStartDraft): Promise<TripResponse> {
+  const travelerCount = Number(draft.travelerCount);
+  return tripsApi.createTrip({
+    name: draft.name.trim(), destinationKey: draft.destinationKey, startDate: draft.startDate, endDate: draft.endDate,
+    travelerCount, travelerAges: draft.ages.slice(0, travelerCount).map(Number),
+    ...(draft.budget ? {budgetCents: Math.round(Number(draft.budget) * 100)} : {}),
+  });
+}
+
 const suggestedName = (destinationKey: string) => ({'destination-sfo': 'San Francisco trip', 'destination-muc': 'Munich trip', 'destination-mex': 'Mexico City trip'}[destinationKey] ?? 'My trip');
 
 type Props = {
@@ -59,11 +68,7 @@ export function TripStartForm({draft, onChange, mode, authenticated, onAuthentic
     if (!authenticated) { setMessage(undefined); onAuthenticationRequired(); return; }
     pendingRef.current = true; setPending(true); setMessage(undefined);
     try {
-      const trip = await tripsApi.createTrip({
-        name: draft.name.trim(), destinationKey: draft.destinationKey, startDate: draft.startDate, endDate: draft.endDate,
-        travelerCount: count, travelerAges: draft.ages.slice(0, count).map(Number),
-        ...(draft.budget ? {budgetCents} : {}),
-      });
+      const trip = await createTripFromDraft(draft);
       onSuccess(trip, mode, mode === 'STAY' ? draft.accommodationType : undefined);
     } catch (error) {
       if (error instanceof IdentityApiError && error.code === 'UNAUTHENTICATED') {

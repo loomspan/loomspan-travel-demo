@@ -163,9 +163,9 @@ export function StaySearchSection({
                   type="button"
                   className="primary"
                   onClick={() => void onSelect(opt)}
-                  disabled={pending || opt.accommodationUnitId === selectedUnitId}
+                  disabled={pending || (selectedUnitId !== undefined && opt.accommodationUnitId === selectedUnitId)}
                 >
-                  {opt.accommodationUnitId === selectedUnitId ? 'Selected' : 'Select stay'}
+                  {selectedUnitId !== undefined && opt.accommodationUnitId === selectedUnitId ? 'Selected' : 'Select stay'}
                 </button>
               </div>
             </article>

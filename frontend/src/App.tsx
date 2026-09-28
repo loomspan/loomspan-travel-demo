@@ -4,7 +4,7 @@ import {AboutDemoTab} from './components/AboutDemoTab';
 import {AuthScreen, type FormFailure} from './components/AuthScreen';
 import {ProfileScreen} from './components/ProfileScreen';
 import {HomeScreen, type StartMode} from './components/HomeScreen';
-import {TripStartForm, emptyTripStartDraft, type TripStartDraft} from './components/TripStartForm';
+import {TripStartForm, createTripFromDraft, emptyTripStartDraft, type TripStartDraft} from './components/TripStartForm';
 import {ActionIcon} from './components/ActionIcon';
 import {StatusRegion} from './components/StatusRegion';
 import {GuestTripExplorer, type GuestSelections} from './components/GuestTripExplorer';
@@ -96,11 +96,7 @@ export default function App() {
     guestSaveInFlight.current = true;
     const save = async () => {
       try {
-        const count = Number(tripDraft.travelerCount);
-        let trip = guestSavedTrip.current ?? await tripsApi.createTrip({name: tripDraft.name.trim(), destinationKey: tripDraft.destinationKey,
-          startDate: tripDraft.startDate, endDate: tripDraft.endDate, travelerCount: count,
-          travelerAges: tripDraft.ages.slice(0, count).map(Number),
-          ...(tripDraft.budget ? {budgetCents: Math.round(Number(tripDraft.budget) * 100)} : {})});
+        let trip = guestSavedTrip.current ?? await createTripFromDraft(tripDraft);
         guestSavedTrip.current = trip;
         let draft = trip.workingPlan ?? trip.drafts[0];
         if (guestSelections.airfare && !draft.selections.airfare) {
