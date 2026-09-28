@@ -69,6 +69,8 @@ h1, h2 { color: #12333c; } h1 { margin: 0; font-family: Georgia, serif; font-siz
 .trips-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; gap: 1rem; flex-wrap: wrap; }
 .trips-header h2 { margin: 0; }
 .trips-section { margin-bottom: 2rem; }
+.trip-filters { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0 0 1.5rem; }
+.trip-filters button[aria-pressed="true"] { background: var(--teal-soft); border-color: var(--teal); color: var(--teal-deep); font-weight: 700; }
 .section-title { font-size: 1.1rem; color: #17614f; border-bottom: 2px solid #c7dcda; padding-bottom: 0.4rem; margin-bottom: 1rem; }
 .trips-grid { display: grid; gap: 1rem; grid-template-columns: 1fr; }
 .trip-card { width: 100%; padding: 1.25rem; box-shadow: 0 0.25rem 1rem #17383b0f; border-left: 0.35rem solid #17614f; }

@@ -239,7 +239,7 @@ export default function App() {
       : !authActive && <>
         <nav className="card primary-navigation" aria-label="Primary navigation">
           <button type="button" className="text-button" aria-current={publicDestination === 'home' ? 'page' : undefined} onClick={() => navigatePublic('home')}><ActionIcon name="home" />Home</button>
-          <button type="button" className="text-button" aria-current={publicDestination === 'trips' ? 'page' : undefined} onClick={() => navigatePublic('trips')}><ActionIcon name="trip" />Trips</button>
+          <button type="button" className="text-button" aria-current={publicDestination === 'trips' ? 'page' : undefined} onClick={() => navigatePublic('trips')}><ActionIcon name="trip" />Plan a Trip</button>
           <button type="button" className="text-button" onClick={() => navigatePublic('auth')}><ActionIcon name="profile" />Log in</button>
         </nav>
         {publicDestination === 'home' ? <HomeScreen onStart={mode => { setStartMode(mode); navigatePublic('trips'); }} />

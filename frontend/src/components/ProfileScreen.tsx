@@ -302,7 +302,8 @@ export function ProfileScreen({
     <>
     <nav className="card primary-navigation" aria-label="Primary navigation">
       <button type="button" className="text-button" aria-current={viewMode === 'home' ? 'page' : undefined} onClick={() => navigateTo('home')}><ActionIcon name="home" />Home</button>
-      <button type="button" className="text-button" aria-current={viewMode === 'trips' ? 'page' : undefined} onClick={() => navigateTo('trips')}><ActionIcon name="trip" />Trips</button>
+      <button type="button" className="text-button" aria-current={viewMode === 'trips' && showStartForm && !showWorkspace ? 'page' : undefined} onClick={() => startCreateTrip('PLAN_TRIP')}><ActionIcon name="trip" />Plan a Trip</button>
+      <button type="button" className="text-button" aria-current={viewMode === 'trips' && (!showStartForm || showWorkspace) ? 'page' : undefined} onClick={() => navigateTo('trips')}><ActionIcon name="trip" />My Trips</button>
       <button type="button" className="text-button" aria-current={viewMode === 'profile' ? 'page' : undefined} onClick={() => navigateTo('profile')}><ActionIcon name="profile" />Profile</button>
       <button type="button" className="text-button" disabled={logoutPending} onClick={() => {
         if (workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and log out?')) return;
@@ -355,11 +356,11 @@ export function ProfileScreen({
     }} />
     </div> : <section className="card trips-page" aria-labelledby="trips-heading">
       <div className="trips-page-header">
-        <div><p className="eyebrow wordmark">DeTour</p><h1 id="trips-heading" tabIndex={-1}>Your trips</h1></div>
+        <div><p className="eyebrow wordmark">DeTour</p><h1 id="trips-heading" tabIndex={-1}>My Trips</h1></div>
         {(upcoming.length > 0 || past.length > 0) && <button type="button" className="primary" onClick={() => { setStartMode('PLAN_TRIP'); setShowStartForm(true); }}>Plan a new trip</button>}
       </div>
       {upcoming.length === 0 && past.length === 0
-        ? <div className="trips-empty-prompt"><h2>No trips yet</h2><p>Your trips will appear here when you start planning.</p><button type="button" className="primary" onClick={() => { setStartMode('PLAN_TRIP'); setShowStartForm(true); }}>Plan a new trip</button></div>
+        ? <div className="trips-empty-prompt"><h2>No trips yet</h2><p>Trips you save will appear here.</p><button type="button" className="primary" onClick={() => { setStartMode('PLAN_TRIP'); setShowStartForm(true); }}>Plan a new trip</button></div>
         : <TripListSection upcoming={upcoming} past={past} onSelectTrip={(id) => void handleOpenTrip(id)} onDeleteTrip={handlePromptDeleteTrip} onCancelTrip={handlePromptCancelTrip} onRenameTrip={handleRenameTrip} hideHeading headingLevel={2} />}
     </section>)}
     {viewMode === 'profile' && <section className="card profile-card" aria-labelledby="profile-heading">

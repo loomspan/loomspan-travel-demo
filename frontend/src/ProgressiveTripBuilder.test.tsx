@@ -150,8 +150,8 @@ describe('Progressive Trip Builder Experience', () => {
     if (!lastProfile) throw new Error('Expected a loaded profile before navigating');
     // Trips navigation refreshes data; replay the loaded profile so queued workflow responses stay intact.
     vi.mocked(identityApi.getProfile).mockResolvedValueOnce(lastProfile);
-    await userEvent.setup().click(screen.getByRole('button', {name: 'Trips'}));
-    return screen.findByRole('heading', {name: 'Your trips'});
+    await userEvent.setup().click(screen.getByRole('button', {name: 'My Trips'}));
+    return screen.findByRole('heading', {name: 'My Trips'});
   }
 
   it('keeps the active Draft through Home and Profile and returns to the same saved tally', async () => {
@@ -225,7 +225,7 @@ describe('Progressive Trip Builder Experience', () => {
     }
     for (const name of ['Plan Trip', 'Airfare', 'Stay'] as const) {
       await user.click(screen.getByRole('button', {name}));
-      expect(screen.getByRole('heading', {name: 'Trips'})).toBeInTheDocument();
+      expect(screen.getByRole('heading', {name: 'Plan a Trip'})).toBeInTheDocument();
       await user.click(screen.getByRole('button', {name: 'Home'}));
     }
     expect(fetchMock.mock.calls.filter((call) => ['POST', 'PUT', 'DELETE'].includes(call[1]?.method as string))).toHaveLength(0);
@@ -290,7 +290,7 @@ describe('Progressive Trip Builder Experience', () => {
     const airfareBtn = screen.getByRole('button', {name: 'Airfare'});
     await user.click(airfareBtn);
 
-    await screen.findByRole('heading', {name: 'Trips'});
+    await screen.findByRole('heading', {name: 'Plan a Trip'});
     await user.clear(screen.getByLabelText('Trip name'));
     await user.type(screen.getByLabelText('Trip name'), 'Flight trip');
 
@@ -345,7 +345,7 @@ describe('Progressive Trip Builder Experience', () => {
           expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: []},
       ], past: [],
     })).mockResolvedValueOnce(json(200, anotherTrip));
-    await user.click(screen.getByRole('button', {name: 'Trips'}));
+    await user.click(screen.getByRole('button', {name: 'My Trips'}));
     await user.click(await screen.findByRole('button', {name: `Open trip ${anotherTrip.label}`}));
     expect(await screen.findByRole('heading', {name: 'Working plan'})).toBeInTheDocument();
     expect(screen.getByRole('tab', {name: 'Search flights'})).toHaveAttribute('aria-selected', 'false');
@@ -369,7 +369,7 @@ describe('Progressive Trip Builder Experience', () => {
     const stayBtn = screen.getByRole('button', {name: 'Stay'});
     await user.click(stayBtn);
 
-    await screen.findByRole('heading', {name: 'Trips'});
+    await screen.findByRole('heading', {name: 'Plan a Trip'});
     await user.clear(screen.getByLabelText('Trip name'));
     await user.type(screen.getByLabelText('Trip name'), 'Stay trip');
 
@@ -450,7 +450,7 @@ describe('Progressive Trip Builder Experience', () => {
     const planBtn = screen.getByRole('button', {name: 'Plan Trip'});
     await user.click(planBtn);
 
-    await screen.findByRole('heading', {name: 'Trips'});
+    await screen.findByRole('heading', {name: 'Plan a Trip'});
     await user.clear(screen.getByLabelText('Trip name'));
     await user.type(screen.getByLabelText('Trip name'), 'Whole trip');
 

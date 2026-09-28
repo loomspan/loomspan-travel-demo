@@ -71,12 +71,9 @@ function TripCard({
     <article className="card trip-card" aria-labelledby={`trip-heading-${trip.id}`}>
       <div className="trip-card-header">
         <div>
-          <span className={`badge ${isPast ? 'badge-past' : 'badge-upcoming'}`}>
-            {isPast ? 'Past' : 'Upcoming'}
+          <span className={`badge ${isCanceled ? 'badge-canceled' : isPast ? 'badge-past' : 'badge-upcoming'}`}>
+            {isCanceled ? 'Canceled Trip' : isPast ? 'Past' : 'Upcoming'}
           </span>
-          {isCanceled && (
-            <span className="badge badge-canceled">Canceled Trip</span>
-          )}
           {trip.bookedCount > 0 && (
             <span className="badge badge-booked">Booking</span>
           )}
@@ -190,13 +187,17 @@ export function TripListSection({
   hideHeading = false,
   headingLevel = 3,
 }: TripListSectionProps) {
+  const [filter, setFilter] = useState<'all' | 'upcoming' | 'past' | 'canceled'>('all');
+  const upcomingTrips = upcoming.filter(trip => trip.status !== 'CANCELED');
+  const pastTrips = past.filter(trip => trip.status !== 'CANCELED');
+  const canceledTrips = [...upcoming, ...past].filter(trip => trip.status === 'CANCELED');
   const handlePlanTrip = onStartPlanTrip ?? onPlanTrip;
   const SectionHeading = headingLevel === 2 ? 'h2' : 'h3';
 
   return (
     <div className="trips-container">
       {!hideHeading && <div className="trips-header">
-        <h2>Your trips</h2>
+        <h2>My Trips</h2>
         {handlePlanTrip && <div className="trips-header-actions" style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
           <button type="button" className="primary" onClick={handlePlanTrip}>
             Plan Trip
@@ -218,15 +219,27 @@ export function TripListSection({
         </div>}
       </div>}
 
-      <section className="trips-section" aria-labelledby="upcoming-trips-heading">
+      <div className="trip-filters" role="group" aria-label="Filter my trips">
+        {([
+          ['all', 'All trips', upcoming.length + past.length],
+          ['upcoming', 'Upcoming', upcomingTrips.length],
+          ['past', 'Past', pastTrips.length],
+          ['canceled', 'Canceled', canceledTrips.length],
+        ] as const).map(([value, label, count]) => (
+          <button key={value} type="button" className={filter === value ? 'secondary selected' : 'secondary'}
+            aria-pressed={filter === value} onClick={() => setFilter(value)}>{label} ({count})</button>
+        ))}
+      </div>
+
+      {(filter === 'all' || filter === 'upcoming') && <section className="trips-section" aria-labelledby="upcoming-trips-heading">
         <SectionHeading id="upcoming-trips-heading" className="section-title" tabIndex={-1}>
-          Upcoming trips ({upcoming.length})
+          Upcoming trips ({upcomingTrips.length})
         </SectionHeading>
-        {upcoming.length === 0 ? (
+        {upcomingTrips.length === 0 ? (
           <p className="hint">No upcoming trips planned yet.</p>
         ) : (
           <div className="trips-grid">
-            {upcoming.map((trip) => (
+            {upcomingTrips.map((trip) => (
               <TripCard
                 key={trip.id}
                 trip={trip}
@@ -238,17 +251,17 @@ export function TripListSection({
             ))}
           </div>
         )}
-      </section>
+      </section>}
 
-      <section className="trips-section" aria-labelledby="past-trips-heading">
+      {(filter === 'all' || filter === 'past') && <section className="trips-section" aria-labelledby="past-trips-heading">
         <SectionHeading id="past-trips-heading" className="section-title" tabIndex={-1}>
-          Past trips ({past.length})
+          Past trips ({pastTrips.length})
         </SectionHeading>
-        {past.length === 0 ? (
+        {pastTrips.length === 0 ? (
           <p className="hint">No past trips.</p>
         ) : (
           <div className="trips-grid">
-            {past.map((trip) => (
+            {pastTrips.map((trip) => (
               <TripCard
                 key={trip.id}
                 trip={trip}
@@ -260,7 +273,23 @@ export function TripListSection({
             ))}
           </div>
         )}
-      </section>
+      </section>}
+
+      {(filter === 'canceled' || (filter === 'all' && canceledTrips.length > 0)) && <section className="trips-section" aria-labelledby="canceled-trips-heading">
+        <SectionHeading id="canceled-trips-heading" className="section-title" tabIndex={-1}>
+          Canceled trips ({canceledTrips.length})
+        </SectionHeading>
+        {canceledTrips.length === 0 ? (
+          <p className="hint">No canceled trips.</p>
+        ) : (
+          <div className="trips-grid">
+            {canceledTrips.map(trip => (
+              <TripCard key={trip.id} trip={trip} onSelect={onSelectTrip} onDelete={onDeleteTrip}
+                onCancel={onCancelTrip} onRename={onRenameTrip} />
+            ))}
+          </div>
+        )}
+      </section>}
     </div>
   );
 }

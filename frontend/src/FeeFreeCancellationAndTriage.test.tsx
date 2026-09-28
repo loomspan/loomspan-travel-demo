@@ -733,7 +733,7 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
       />
     );
 
-    await user.click(screen.getByRole('button', {name: 'Trips'}));
+    await user.click(screen.getByRole('button', {name: 'My Trips'}));
 
     // Canceled trip displays Canceled badge and does not display Cancel trip or Delete trip
     expect(screen.getByText('Canceled Trip', {selector: '.badge-canceled'})).toBeInTheDocument();

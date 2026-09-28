@@ -89,7 +89,7 @@ export function TripStartForm({draft, onChange, mode, authenticated, onAuthentic
   };
 
   return <section className="card profile-card" aria-labelledby="trips-heading">
-    <p className="eyebrow wordmark">DeTour</p><h1 id="trips-heading" tabIndex={-1}>Trips</h1>
+    <p className="eyebrow wordmark">DeTour</p><h1 id="trips-heading" tabIndex={-1}>Plan a Trip</h1>
     <h2>Start a new trip</h2>
     <p>Explore your trip details now. An account is required when you save your selections.</p>
     {message && <p className="field-error" role="alert">{message}</p>}
