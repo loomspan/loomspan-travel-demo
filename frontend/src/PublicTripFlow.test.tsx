@@ -28,7 +28,7 @@ async function fillTrip(user: ReturnType<typeof userEvent.setup>) {
 
 describe('public trip start and authentication handoff', () => {
   const fetchMock = vi.fn();
-  beforeEach(() => { vi.stubGlobal('fetch', fetchMock); document.cookie = 'XSRF-TOKEN=token; path=/'; });
+  beforeEach(() => { vi.stubGlobal('fetch', fetchMock); document.cookie = 'XSRF-TOKEN=token; path=/'; window.history.replaceState({}, '', '/'); });
   afterEach(() => { vi.unstubAllGlobals(); fetchMock.mockReset(); document.cookie = 'XSRF-TOKEN=; max-age=0; path=/'; });
 
   it('shows Home immediately, and guest Trips only holds local form data', async () => {
@@ -46,45 +46,85 @@ describe('public trip start and authentication handoff', () => {
     localSpy.mockRestore(); sessionSpy.mockRestore();
   });
 
-  it('keeps all fields through cancel and registration, then creates once on explicit continuation', async () => {
-    fetchMock.mockResolvedValueOnce(json(401, {code: 'UNAUTHENTICATED'}));
+  it('searches and selects a stay before login, then saves after explicit confirmation', async () => {
+    const stay = {accommodationUnitId: 17, propertyId: 2, propertyCatalogKey: 'hotel', unitCatalogKey: 'room', propertyName: 'Central Hotel', unitName: 'Double room', propertyCategory: 'HOTEL', unitKind: 'ROOM', locationDescription: 'Center', guestRating: 4.5, distanceToCityCenterMeters: 1000, latitude: 0, longitude: 0, guestCapacity: 2, inventoryCapacity: 4, pricing: {requiredRooms: 1, nightCount: 4, perRoomTotalPriceCents: 40000, totalPriceCents: 40000, nights: []}, fitsBudget: null};
+    const created = {...trip, drafts: [{id: 'draft-1', version: 0, selections: {airfare: null, stay: null, rental: null}}]};
+    fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url === '/api/profile') return json(fetchMock.mock.calls.some(([path]) => path === '/api/auth/login') ? 200 : 401,
+        fetchMock.mock.calls.some(([path]) => path === '/api/auth/login') ? {email: 'ada@example.test', upcoming: [], past: []} : {code: 'UNAUTHENTICATED'});
+      if (url.startsWith('/api/public/stays')) return json(200, {options: [stay]});
+      if (url.startsWith('/api/public/airfare')) return json(200, {options: []});
+      if (url === '/api/auth/login') return noContent();
+      if (url === '/api/trips' && options?.method === 'POST') return json(201, created);
+      if (url === '/api/trips/trip-1/drafts/draft-1/stays') return json(200, {...created, version: 1, drafts: [{...created.drafts[0], version: 1, selections: {airfare: null, stay: {accommodationUnitId: 17}, rental: null}}]});
+      throw new Error(`Unexpected request ${url}`);
+    });
     const user = userEvent.setup(); render(<App />);
     await fillTrip(user);
-    await user.type(screen.getByLabelText('Budget (optional, dollars)'), '19.99');
-    await user.clear(screen.getByLabelText('Travelers'));
-    await user.type(screen.getByLabelText('Travelers'), '1');
-    await user.clear(screen.getByLabelText('Travelers'));
-    await user.type(screen.getByLabelText('Travelers'), '2');
-    expect(screen.getByLabelText('Traveler 2 age')).toHaveValue(12);
-    await user.click(screen.getByRole('button', {name: 'Start planning'}));
-    expect(await screen.findByRole('heading', {name: 'Welcome back'})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Search options'}));
+    await user.click(screen.getByRole('button', {name: 'Search stays'}));
+    await user.click(await screen.findByRole('button', {name: 'Select stay'}));
+    expect(screen.getByText(/Selected stay: Central Hotel/)).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips')).toHaveLength(0);
-    await user.click(screen.getByRole('button', {name: 'Cancel'}));
-    expect(screen.getByLabelText('Trip name')).toHaveValue('Family visit');
-    expect(screen.getByLabelText('Traveler 2 age')).toHaveValue(12);
-    expect(screen.getByLabelText('Budget (optional, dollars)')).toHaveValue(19.99);
-    await user.click(screen.getByRole('button', {name: 'Start planning'}));
-    await user.click(screen.getByRole('button', {name: 'Register'}));
+    await user.click(screen.getByRole('button', {name: 'Home'}));
+    expect(screen.getByRole('dialog', {name: 'Save your selections?'})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Keep planning'}));
+    expect(screen.getByText(/Selected stay: Central Hotel/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Save selections'}));
     await user.type(screen.getByLabelText('Email address'), 'ada@example.test');
     await user.type(screen.getByLabelText('Password'), 'aaaaaaaaaaaa');
-    fetchMock.mockResolvedValueOnce(json(201, {email: 'ada@example.test'}))
-      .mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [], past: []}));
-    await user.click(screen.getByRole('button', {name: 'Create account'}));
-    expect(await screen.findByRole('heading', {name: 'Trips'})).toBeInTheDocument();
-    expect(screen.getByLabelText('Trip name')).toHaveValue('Family visit');
-    expect(screen.getByLabelText('Destination')).toHaveValue('destination-muc');
-    expect(screen.getByLabelText('Departure date')).toHaveValue('2027-03-10');
-    expect(screen.getByLabelText('Return date')).toHaveValue('2027-03-14');
-    expect(screen.getByLabelText('Travelers')).toHaveValue(2);
-    expect(screen.getByLabelText('Traveler 1 age')).toHaveValue(30);
-    expect(screen.getByLabelText('Traveler 2 age')).toHaveValue(12);
+    await user.click(screen.getByRole('button', {name: 'Log in'}));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips')).toHaveLength(1));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips/trip-1/drafts/draft-1/stays')).toHaveLength(1));
+  });
+
+  it('discards an unsaved selection when the guest chooses not to save on navigation', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/profile') return json(401, {code: 'UNAUTHENTICATED'});
+      if (url.startsWith('/api/public/stays')) return json(200, {options: [{accommodationUnitId: 17, propertyName: 'Central Hotel', unitName: 'Double room', guestRating: 4.5, distanceToCityCenterMeters: 1000, pricing: {requiredRooms: 1, nightCount: 4, perRoomTotalPriceCents: 40000, totalPriceCents: 40000}}]});
+      if (url.startsWith('/api/public/airfare')) return json(200, {options: []});
+      throw new Error(`Unexpected request ${url}`);
+    });
+    const user = userEvent.setup(); render(<App />);
+    await fillTrip(user);
+    await user.click(screen.getByRole('button', {name: 'Search options'}));
+    await user.click(screen.getByRole('button', {name: 'Search stays'}));
+    await user.click(await screen.findByRole('button', {name: 'Select stay'}));
+    await user.click(screen.getByRole('button', {name: 'Home'}));
+    await user.click(screen.getByRole('button', {name: 'No, discard'}));
+    expect(screen.getByRole('heading', {name: 'Home'})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Trips'}));
+    expect(screen.getByLabelText('Trip name')).toHaveValue('San Francisco trip');
+    expect(screen.queryByText(/Selected stay:/)).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips')).toHaveLength(0);
-    fetchMock.mockResolvedValueOnce(json(201, trip)).mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [], past: []}));
-    await user.click(screen.getByRole('button', {name: 'Start planning'}));
-    await screen.findByRole('heading', {name: trip.label});
-    const writes = fetchMock.mock.calls.filter(([url, options]) => url === '/api/trips' && options?.method === 'POST');
-    expect(writes).toHaveLength(1);
-    expect(JSON.parse(writes[0][1].body)).toEqual({name: 'Family visit', destinationKey: 'destination-muc', startDate: '2027-03-10', endDate: '2027-03-14', travelerCount: 2, travelerAges: [30, 12], budgetCents: 1999});
+  });
+
+  it('offers login from the leave prompt and saves the selection afterward', async () => {
+    const stay = {accommodationUnitId: 17, propertyName: 'Central Hotel', unitName: 'Double room', guestRating: 4.5, distanceToCityCenterMeters: 1000, pricing: {requiredRooms: 1, nightCount: 4, perRoomTotalPriceCents: 40000, totalPriceCents: 40000}};
+    const created = {...trip, drafts: [{id: 'draft-1', version: 0, selections: {airfare: null, stay: null, rental: null}}]};
+    fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url === '/api/profile') return fetchMock.mock.calls.some(([path]) => path === '/api/auth/login')
+        ? json(200, {email: 'ada@example.test', upcoming: [], past: []}) : json(401, {code: 'UNAUTHENTICATED'});
+      if (url.startsWith('/api/public/stays')) return json(200, {options: [stay]});
+      if (url.startsWith('/api/public/airfare')) return json(200, {options: []});
+      if (url === '/api/auth/login') return noContent();
+      if (url === '/api/trips' && options?.method === 'POST') return json(201, created);
+      if (url === '/api/trips/trip-1/drafts/draft-1/stays') return json(200, {...created, version: 1, drafts: [{...created.drafts[0], version: 1, selections: {airfare: null, stay: {accommodationUnitId: 17}, rental: null}}]});
+      throw new Error(`Unexpected request ${url}`);
+    });
+    const user = userEvent.setup(); render(<App />);
+    await fillTrip(user);
+    await user.click(screen.getByRole('button', {name: 'Search options'}));
+    await user.click(screen.getByRole('button', {name: 'Search stays'}));
+    await user.click(await screen.findByRole('button', {name: 'Select stay'}));
+    await user.click(screen.getByRole('button', {name: 'Home'}));
+    await user.click(screen.getByRole('button', {name: 'Yes, save'}));
+    expect(screen.getByRole('heading', {name: 'Welcome back'})).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Email address'), 'ada@example.test');
+    await user.type(screen.getByLabelText('Password'), 'aaaaaaaaaaaa');
+    await user.click(screen.getByRole('button', {name: 'Log in'}));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips/trip-1/drafts/draft-1/stays')).toHaveLength(1));
+    expect(await screen.findByRole('heading', {name: 'Home'})).toBeInTheDocument();
   });
 
   it('requires every traveler age before saving', async () => {
@@ -94,7 +134,7 @@ describe('public trip start and authentication handoff', () => {
     await fillTrip(user);
     await user.clear(screen.getByLabelText('Traveler 2 age'));
     await user.click(screen.getByRole('button', {name: 'Start planning'}));
-    expect(screen.getByText('Enter an age between 0 and 120 for each traveler.')).toBeInTheDocument();
+    expect(screen.getByText('Select an age from under 1 through 95 for each traveler.')).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips')).toHaveLength(0);
   });
 
@@ -214,7 +254,7 @@ describe('public trip start and authentication handoff', () => {
     await user.type(screen.getByLabelText('Password'), 'aaaaaaaaaaaa');
     fetchMock.mockResolvedValueOnce(noContent()).mockResolvedValueOnce(json(200, {email: 'bob@example.test', upcoming: [], past: []}));
     await user.click(screen.getByRole('button', {name: 'Log in'}));
-    expect(await screen.findByRole('heading', {name: 'Home'})).toBeInTheDocument();
+    expect(await screen.findByRole('heading', {name: 'Trips'})).toBeInTheDocument();
     expect(screen.queryByRole('button', {name: `Trip: ${trip.label}`})).not.toBeInTheDocument();
     expect(screen.queryByRole('button', {name: 'Retry save'})).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'PUT')).toHaveLength(1);

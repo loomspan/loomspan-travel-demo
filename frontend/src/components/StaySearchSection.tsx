@@ -15,6 +15,7 @@ type StaySearchSectionProps = {
   onSelect: (option: StayOptionResponse) => Promise<void>;
   onCancel: () => void;
   pending: boolean;
+  publicSearch?: boolean;
 };
 
 export function StaySearchSection({
@@ -24,6 +25,7 @@ export function StaySearchSection({
   onSelect,
   onCancel,
   pending,
+  publicSearch = false,
 }: StaySearchSectionProps) {
   const [type, setType] = useState<AccommodationType>(initialType);
   const [sort, setSort] = useState<StaySort>('DEFAULT');
@@ -37,8 +39,9 @@ export function StaySearchSection({
     setLoading(true);
     setError(undefined);
 
-    tripsApi
-      .searchStays(trip.id, draftId, {type, sort})
+    (publicSearch ? tripsApi.searchPublicStays({destinationKey: trip.destinationKey, startDate: trip.startDate, endDate: trip.endDate, travelerCount: trip.travelerCount, type, sort,
+        ...(trip.budgetCents !== null && trip.budgetCents !== undefined ? {budgetCents: trip.budgetCents} : {})})
+      : tripsApi.searchStays(trip.id, draftId, {type, sort}))
       .then((res) => {
         if (active) {
           setOptions(res.options || []);
@@ -55,7 +58,7 @@ export function StaySearchSection({
     return () => {
       active = false;
     };
-  }, [trip.id, draftId, type, sort, retryKey]);
+  }, [trip.id, trip.destinationKey, trip.startDate, trip.endDate, trip.travelerCount, trip.budgetCents, draftId, publicSearch, type, sort, retryKey]);
 
   return (
     <div className="component-search-section stay-search" aria-labelledby="stay-search-heading">

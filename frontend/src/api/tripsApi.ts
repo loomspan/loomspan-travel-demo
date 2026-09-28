@@ -630,6 +630,12 @@ function buildQueryString(params?: Record<string, string | number | boolean | un
 }
 
 export const tripsApi = {
+  searchPublicAirfare: (params: {destinationKey: string; startDate: string; endDate: string; travelerCount: number; directOnly?: boolean; sort?: AirfareSort}): Promise<AirfareSearchResponse> =>
+    request<AirfareSearchResponse>(`/api/public/airfare${buildQueryString(params)}`, 'GET'),
+
+  searchPublicStays: (params: {destinationKey: string; startDate: string; endDate: string; travelerCount: number; budgetCents?: number; type?: AccommodationType; sort?: StaySort}): Promise<StaySearchResponse> =>
+    request<StaySearchResponse>(`/api/public/stays${buildQueryString(params)}`, 'GET'),
+
   createTrip: (payload: CreateTripRequest): Promise<TripResponse> =>
     request<TripResponse>('/api/trips', 'POST', cleanCreatePayload(payload)),
 

@@ -1041,6 +1041,30 @@ public class TripService {
         );
     }
 
+    public AirfareSearchResponse searchPublicAirfare(String destinationKey, LocalDate startDate, LocalDate endDate,
+            int travelerCount, boolean directOnly, String sortStr) {
+        Destination destination = validatePublicSearch(destinationKey, startDate, endDate, travelerCount);
+        return airfareSearchService.search(destination.id(), destination.key(), startDate, endDate,
+                travelerCount, null, null, directOnly, AirfareSort.from(sortStr));
+    }
+
+    public StaySearchResponse searchPublicStays(String destinationKey, LocalDate startDate, LocalDate endDate,
+            int travelerCount, Long budgetCents, String typeStr, String sortStr) {
+        Destination destination = validatePublicSearch(destinationKey, startDate, endDate, travelerCount);
+        if (budgetCents != null && (budgetCents < 0 || budgetCents > MAX_BUDGET_CENTS))
+            throw validation("budgetCents", "Budget must be between 0 and 100000000 cents.");
+        return staySearchService.search(destination.id(), destination.key(), startDate, endDate,
+                travelerCount, null, null, AccommodationType.from(typeStr), StaySort.from(sortStr), budgetCents);
+    }
+
+    private Destination validatePublicSearch(String destinationKey, LocalDate startDate, LocalDate endDate, int travelerCount) {
+        Destination destination = trips.findSupportedDestination(required(destinationKey, "destinationKey"))
+                .orElseThrow(() -> validation("destinationKey", "Choose a supported destination."));
+        validateDates(required(startDate, "startDate"), required(endDate, "endDate"));
+        if (travelerCount < 1 || travelerCount > 8) throw validation("travelerCount", "Traveler count must be between 1 and 8.");
+        return destination;
+    }
+
     @Transactional
     public TripResponse selectDraftAirfare(long ownerUserId, String tripId, String draftId, TripRequests.AirfareSelectionRequest request) {
         if (request == null) throw validation("request", "A request body is required.");

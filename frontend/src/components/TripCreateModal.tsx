@@ -1,6 +1,7 @@
 import {FormEvent, useEffect, useRef, useState} from 'react';
 import {tripsApi, type TripResponse, type AccommodationType} from '../api/tripsApi';
 import {IdentityApiError} from '../api/identityApi';
+import {TravelerAgeInput} from './TravelerAgeInput';
 
 type TripCreateModalProps = {
   isOpen: boolean;
@@ -106,8 +107,8 @@ export function TripCreateModal({isOpen, mode = 'PLAN_TRIP', onClose, onSuccess}
     if (isNaN(count) || count < 1 || count > 8) {
       errors.travelerCount = 'Traveler count must be between 1 and 8.';
     }
-    if (ages.slice(0, count).length !== count || ages.slice(0, count).some(age => !/^\d+$/.test(age) || Number(age) > 120)) {
-      errors.travelerAges = 'Enter an age between 0 and 120 for each traveler.';
+    if (ages.slice(0, count).length !== count || ages.slice(0, count).some(age => !/^\d+$/.test(age) || Number(age) > 95)) {
+      errors.travelerAges = 'Select an age from under 1 through 95 for each traveler.';
     }
 
     if (Object.keys(errors).length > 0) {
@@ -276,7 +277,7 @@ export function TripCreateModal({isOpen, mode = 'PLAN_TRIP', onClose, onSuccess}
             )}
           </div>
           {Number.isInteger(Number(travelerCount)) && Number(travelerCount) >= 1 && Number(travelerCount) <= 8 &&
-            Array.from({length: Number(travelerCount)}, (_, i) => <div className="field" key={i}><label htmlFor={`trip-age-${i}`}>Traveler {i + 1} age</label><input id={`trip-age-${i}`} type="number" min="0" max="120" value={ages[i] ?? ''} onChange={e => { const next = [...ages]; next[i] = e.target.value; setAges(next); }} /></div>)}
+            Array.from({length: Number(travelerCount)}, (_, i) => <div className="field" key={i}><label htmlFor={`trip-age-${i}`}>Traveler {i + 1} age</label><TravelerAgeInput id={`trip-age-${i}`} value={ages[i] ?? ''} onChange={value => { const next = [...ages]; next[i] = value; setAges(next); }} /></div>)}
           {fieldErrors.travelerAges && <p className="field-error">{fieldErrors.travelerAges}</p>}
 
           <div className="modal-actions">

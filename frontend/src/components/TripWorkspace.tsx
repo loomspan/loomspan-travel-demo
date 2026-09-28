@@ -20,6 +20,7 @@ import {TripRevisionModal} from './TripRevisionModal';
 import {ConfirmDeleteModal, type DeleteTarget} from './ConfirmDeleteModal';
 import {CancelBookingModal} from './CancelBookingModal';
 import {PostCancellationTriageModal} from './PostCancellationTriageModal';
+import {TravelerAgeInput} from './TravelerAgeInput';
 import {CancelTripModal} from './CancelTripModal';
 import {BookingHistorySection} from './BookingHistorySection';
 import {
@@ -385,8 +386,8 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
       if (ageStr !== '') {
         hasAnyAge = true;
         const ageNum = parseInt(ageStr, 10);
-        if (isNaN(ageNum) || ageNum < 0 || ageNum > 120) {
-          errors[`age_${i}`] = 'Age must be between 0 and 120.';
+        if (!/^\d+$/.test(ageStr) || ageNum > 95 && ageNum !== initialTrip.travelerAges?.[i]) {
+          errors[`age_${i}`] = 'Select an age from under 1 through 95.';
         } else {
           agesList.push(ageNum);
         }
@@ -1605,21 +1606,18 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
 
           <div className="field">
             <fieldset>
-              <legend>Traveler Ages (0–120)</legend>
+              <legend>Traveler ages</legend>
               <p className="hint">Optional while editing the Working plan. Enter all traveler ages before saving an option for booking.</p>
               <div className="ages-grid">
                 {Array.from({length: travelerCount}, (_, i) => (
                   <div key={i} className="field age-field">
                     <label htmlFor={`traveler-age-${i}`}>Traveler {i + 1} age</label>
-                    <input
-                      type="number"
+                    <TravelerAgeInput
                       id={`traveler-age-${i}`}
-                      min="0"
-                      max="120"
                       disabled={hasPlanned || isTripCanceled}
-                      placeholder="Age"
+                      placeholder="Select or type age"
                       value={travelerAges[i] ?? ''}
-                      onChange={(e) => updateTravelerAge(i, e.target.value)}
+                      onChange={(value) => updateTravelerAge(i, value)}
                       aria-describedby={fieldErrors[`age_${i}`] ? `age-error-${i}` : undefined}
                     />
                     {fieldErrors[`age_${i}`] && (

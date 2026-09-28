@@ -45,6 +45,7 @@ class SecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/", "/index.html", "/assets/**", "/images/**", "/favicon.ico").permitAll()
                         .requestMatchers(HttpMethod.GET, "/profile").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/public/airfare", "/api/public/stays").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions

@@ -2,6 +2,7 @@ import {useRef, useState, type FormEvent} from 'react';
 import {tripsApi, type AccommodationType, type TripResponse} from '../api/tripsApi';
 import {IdentityApiError} from '../api/identityApi';
 import type {StartMode} from './HomeScreen';
+import {TravelerAgeInput} from './TravelerAgeInput';
 
 export type TripStartDraft = {
   name: string; destinationKey: string; startDate: string; endDate: string;
@@ -22,9 +23,10 @@ type Props = {
   authenticated: boolean;
   onAuthenticationRequired: () => void;
   onSuccess: (trip: TripResponse, mode: StartMode, accommodationType?: AccommodationType) => void;
+  onExplore?: () => void;
 };
 
-export function TripStartForm({draft, onChange, mode, authenticated, onAuthenticationRequired, onSuccess}: Props) {
+export function TripStartForm({draft, onChange, mode, authenticated, onAuthenticationRequired, onSuccess, onExplore}: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string>();
   const [pending, setPending] = useState(false);
@@ -47,12 +49,13 @@ export function TripStartForm({draft, onChange, mode, authenticated, onAuthentic
       if (nights < 1 || nights > 14) nextErrors.dates = 'Trip duration must be between 1 and 14 nights.';
     }
     if (!Number.isInteger(count) || count < 1 || count > 8) nextErrors.travelerCount = 'Traveler count must be between 1 and 8.';
-    if (draft.ages.slice(0, count).length !== count || draft.ages.slice(0, count).some(age => !/^\d+$/.test(age) || Number(age) > 120)) nextErrors.ages = 'Enter an age between 0 and 120 for each traveler.';
+    if (draft.ages.slice(0, count).length !== count || draft.ages.slice(0, count).some(age => !/^\d+$/.test(age) || Number(age) > 95)) nextErrors.ages = 'Select an age from under 1 through 95 for each traveler.';
     const [budgetDollars, budgetFraction = ''] = draft.budget.split('.');
     const budgetCents = Number(budgetDollars) * 100 + Number(budgetFraction.padEnd(2, '0'));
     if (draft.budget && (!/^\d+(\.\d{1,2})?$/.test(draft.budget) || !Number.isSafeInteger(budgetCents) || budgetCents > 100000000)) nextErrors.budget = 'Enter a budget between $0 and $1,000,000 with at most two decimal places.';
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
+    if (onExplore) { setMessage(undefined); onExplore(); return; }
     if (!authenticated) { setMessage(undefined); onAuthenticationRequired(); return; }
     pendingRef.current = true; setPending(true); setMessage(undefined);
     try {
@@ -83,7 +86,7 @@ export function TripStartForm({draft, onChange, mode, authenticated, onAuthentic
   return <section className="card profile-card" aria-labelledby="trips-heading">
     <p className="eyebrow wordmark">DeTour</p><h1 id="trips-heading" tabIndex={-1}>Trips</h1>
     <h2>Start a new trip</h2>
-    <p>Explore your trip details now. An account is required when you save and start planning.</p>
+    <p>Explore your trip details now. An account is required when you save your selections.</p>
     {message && <p className="field-error" role="alert">{message}</p>}
     <form onSubmit={submit} noValidate>
       <div className="field"><label htmlFor="trip-name">Trip name</label><input id="trip-name" value={draft.name} aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? 'trip-name-error' : undefined} onChange={e => change({name: e.target.value})} />{errors.name && <p id="trip-name-error" className="field-error">{errors.name}</p>}</div>
@@ -93,9 +96,9 @@ export function TripStartForm({draft, onChange, mode, authenticated, onAuthentic
       <p className="hint">Travel must take place between March 1 and March 31, 2027 (1–14 nights).</p>{errors.dates && <p id="trip-dates-error" className="field-error">{errors.dates}</p>}
       <div className="field"><label htmlFor="trip-budget">Budget (optional, dollars)</label><input id="trip-budget" type="number" min="0" max="1000000" step="0.01" value={draft.budget} aria-invalid={Boolean(errors.budget)} aria-describedby={errors.budget ? 'trip-budget-error' : undefined} onChange={e => change({budget: e.target.value})} />{errors.budget && <p id="trip-budget-error" className="field-error">{errors.budget}</p>}</div>
       <div className="field"><label htmlFor="trip-traveler-count">Travelers</label><input id="trip-traveler-count" type="number" min="1" max="8" value={draft.travelerCount} aria-invalid={Boolean(errors.travelerCount)} aria-describedby={errors.travelerCount ? 'trip-traveler-count-error' : undefined} onChange={e => change({travelerCount: e.target.value})} />{errors.travelerCount && <p id="trip-traveler-count-error" className="field-error">{errors.travelerCount}</p>}</div>
-      {Number.isInteger(count) && count >= 1 && count <= 8 && <div className="field-group">{Array.from({length: count}, (_, i) => <div className="field" key={i}><label htmlFor={`trip-age-${i}`}>Traveler {i + 1} age</label><input id={`trip-age-${i}`} type="number" min="0" max="120" value={draft.ages[i] ?? ''} aria-invalid={Boolean(errors.ages)} aria-describedby={errors.ages ? 'trip-ages-error' : undefined} onChange={e => { const ages = [...draft.ages]; ages[i] = e.target.value; change({ages}); }} /></div>)}</div>}
+      {Number.isInteger(count) && count >= 1 && count <= 8 && <div className="field-group">{Array.from({length: count}, (_, i) => <div className="field" key={i}><label htmlFor={`trip-age-${i}`}>Traveler {i + 1} age</label><TravelerAgeInput id={`trip-age-${i}`} value={draft.ages[i] ?? ''} aria-invalid={Boolean(errors.ages)} aria-describedby={errors.ages ? 'trip-ages-error' : undefined} onChange={value => { const ages = [...draft.ages]; ages[i] = value; change({ages}); }} /></div>)}</div>}
       {errors.ages && <p id="trip-ages-error" className="field-error">{errors.ages}</p>}
-      <button className="primary" type="submit" disabled={pending}>{pending ? 'Starting…' : 'Start planning'}</button>
+      <button className="primary" type="submit" disabled={pending}>{pending ? 'Starting…' : onExplore ? 'Search options' : 'Start planning'}</button>
     </form>
   </section>;
 }

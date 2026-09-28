@@ -7,6 +7,8 @@ import {HomeScreen, type StartMode} from './components/HomeScreen';
 import {TripStartForm, emptyTripStartDraft, type TripStartDraft} from './components/TripStartForm';
 import {ActionIcon} from './components/ActionIcon';
 import {StatusRegion} from './components/StatusRegion';
+import {GuestTripExplorer, type GuestSelections} from './components/GuestTripExplorer';
+import {tripsApi, type TripResponse} from './api/tripsApi';
 import {currentScreen, rememberScreen} from './screenHistory';
 
 type Screen = {kind: 'public'} | {kind: 'profile'; profile: Profile};
@@ -30,6 +32,15 @@ export default function App() {
   const [publicDestination, setPublicDestination] = useState<'home' | 'trips'>('home');
   const [startMode, setStartMode] = useState<StartMode>('PLAN_TRIP');
   const [tripDraft, setTripDraft] = useState<TripStartDraft>(emptyTripStartDraft);
+  const [guestExploring, setGuestExploring] = useState(false);
+  const [guestSelections, setGuestSelections] = useState<GuestSelections>({});
+  const [leaveTarget, setLeaveTarget] = useState<'home' | 'trips' | 'auth' | null>(null);
+  const [saveAfterLogin, setSaveAfterLogin] = useState(false);
+  const [afterSaveDestination, setAfterSaveDestination] = useState<'home' | 'trips'>('trips');
+  const [profileViewNonce, setProfileViewNonce] = useState(0);
+  const guestSaveInFlight = useRef(false);
+  const guestSavedTrip = useRef<TripResponse | null>(null);
+  const [guestSaveFailed, setGuestSaveFailed] = useState(false);
   const [authActive, setAuthActive] = useState(false);
   const [notice, setNotice] = useState<Notice | undefined>();
   const errorRef = useRef<HTMLDivElement>(null);
@@ -68,12 +79,63 @@ export default function App() {
     const restoreScreen = () => {
       if (screen.kind !== 'public') return;
       const previous = currentScreen();
+      if ((guestSelections.airfare || guestSelections.stay) && previous?.destination !== 'auth' &&
+          (previous?.destination !== 'trips' || !guestExploring)) {
+        rememberScreen('trips', undefined, false);
+        setLeaveTarget(previous?.destination === 'home' ? 'home' : 'trips');
+        return;
+      }
       setAuthActive(previous?.destination === 'auth');
       if (previous?.destination === 'home' || previous?.destination === 'trips') setPublicDestination(previous.destination);
     };
     window.addEventListener('popstate', restoreScreen);
     return () => window.removeEventListener('popstate', restoreScreen);
-  }, [screen.kind]);
+  }, [screen.kind, guestSelections, guestExploring]);
+  useEffect(() => {
+    if (!saveAfterLogin || screen.kind !== 'profile' || guestSaveInFlight.current) return;
+    guestSaveInFlight.current = true;
+    const save = async () => {
+      try {
+        const count = Number(tripDraft.travelerCount);
+        let trip = guestSavedTrip.current ?? await tripsApi.createTrip({name: tripDraft.name.trim(), destinationKey: tripDraft.destinationKey,
+          startDate: tripDraft.startDate, endDate: tripDraft.endDate, travelerCount: count,
+          travelerAges: tripDraft.ages.slice(0, count).map(Number),
+          ...(tripDraft.budget ? {budgetCents: Math.round(Number(tripDraft.budget) * 100)} : {})});
+        guestSavedTrip.current = trip;
+        let draft = trip.workingPlan ?? trip.drafts[0];
+        if (guestSelections.airfare && !draft.selections.airfare) {
+          trip = await tripsApi.selectAirfare(trip.id, draft.id, {expectedVersion: trip.version,
+            expectedDraftVersion: draft.version, outboundFlightInstanceId: guestSelections.airfare.outbound.flightInstanceId,
+            returnFlightInstanceId: guestSelections.airfare.returnFlight.flightInstanceId});
+          draft = trip.workingPlan ?? trip.drafts[0];
+          guestSavedTrip.current = trip;
+        }
+        if (guestSelections.stay && !draft.selections.stay) {
+          trip = await tripsApi.selectStay(trip.id, draft.id, {expectedVersion: trip.version,
+            expectedDraftVersion: draft.version, accommodationUnitId: guestSelections.stay.accommodationUnitId,
+            unitCount: guestSelections.stay.pricing.requiredRooms});
+          guestSavedTrip.current = trip;
+        }
+        setGuestSelections({}); setGuestExploring(false); setTripDraft(emptyTripStartDraft);
+        guestSavedTrip.current = null; setGuestSaveFailed(false);
+        rememberScreen(afterSaveDestination); setPublicDestination(afterSaveDestination);
+        await loadProfile();
+        setProfileViewNonce(value => value + 1);
+        setNotice({kind: 'status', message: 'Your selections were saved to your Trip.'});
+      } catch (error) {
+        setGuestSaveFailed(true);
+        setNotice({kind: 'error', message: error instanceof Error ? `Your selections were not fully saved. ${error.message}` : 'Your selections could not be saved.'});
+        if (guestSavedTrip.current) await loadProfile();
+      } finally { setSaveAfterLogin(false); guestSaveInFlight.current = false; }
+    };
+    void save();
+  }, [screen.kind, saveAfterLogin]);
+  useEffect(() => {
+    if (!guestSelections.airfare && !guestSelections.stay) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [guestSelections]);
   useEffect(() => { void loadProfile(); }, []);
   useEffect(() => { if (notice?.kind === 'error') errorRef.current?.focus(); }, [notice]);
   useEffect(() => {
@@ -129,6 +191,22 @@ export default function App() {
     }
   };
 
+  const navigatePublic = (destination: 'home' | 'trips' | 'auth') => {
+    if ((guestSelections.airfare || guestSelections.stay) && destination !== 'trips') { setLeaveTarget(destination); return; }
+    rememberScreen(destination);
+    if (destination === 'auth') setAuthActive(true);
+    else setPublicDestination(destination);
+  };
+  const discardAndNavigate = () => {
+    if (!leaveTarget) return;
+    const destination = leaveTarget;
+    setLeaveTarget(null); setGuestSelections({}); setGuestExploring(false); setTripDraft(emptyTripStartDraft);
+    guestSavedTrip.current = null; setGuestSaveFailed(false);
+    rememberScreen(destination);
+    if (destination === 'auth') setAuthActive(true);
+    else setPublicDestination(destination);
+  };
+
   return <main className="shell">
     {notice?.kind === 'error' && <div className="error-summary" role="alert" tabIndex={-1} ref={errorRef}>
       <strong>We need your attention.</strong><p>{notice.message}</p>
@@ -140,11 +218,13 @@ export default function App() {
       </ul>}
     </div>}
     <StatusRegion message={notice?.kind === 'status' ? notice.message : undefined} />
+    {screen.kind === 'profile' && saveAfterLogin && <p className="card" role="status">Saving your selections…</p>}
+    {screen.kind === 'profile' && guestSaveFailed && <button type="button" className="primary" onClick={() => { setGuestSaveFailed(false); setSaveAfterLogin(true); }}>Retry saving selections</button>}
     <AboutDemoTab />
     {screen.kind === 'profile'
       ? <div hidden={authActive}>
         <ProfileScreen
-          key={screen.profile.email}
+          key={`${screen.profile.email}:${profileViewNonce}`}
           email={screen.profile.email}
           upcoming={screen.profile.upcoming}
           past={screen.profile.past}
@@ -162,13 +242,15 @@ export default function App() {
         </div>
       : !authActive && <>
         <nav className="card primary-navigation" aria-label="Primary navigation">
-          <button type="button" className="text-button" aria-current={publicDestination === 'home' ? 'page' : undefined} onClick={() => { rememberScreen('home'); setPublicDestination('home'); }}><ActionIcon name="home" />Home</button>
-          <button type="button" className="text-button" aria-current={publicDestination === 'trips' ? 'page' : undefined} onClick={() => { rememberScreen('trips'); setPublicDestination('trips'); }}><ActionIcon name="trip" />Trips</button>
-          <button type="button" className="text-button" onClick={() => { rememberScreen('auth'); setAuthActive(true); }}><ActionIcon name="profile" />Log in</button>
+          <button type="button" className="text-button" aria-current={publicDestination === 'home' ? 'page' : undefined} onClick={() => navigatePublic('home')}><ActionIcon name="home" />Home</button>
+          <button type="button" className="text-button" aria-current={publicDestination === 'trips' ? 'page' : undefined} onClick={() => navigatePublic('trips')}><ActionIcon name="trip" />Trips</button>
+          <button type="button" className="text-button" onClick={() => navigatePublic('auth')}><ActionIcon name="profile" />Log in</button>
         </nav>
-        {publicDestination === 'home' ? <HomeScreen onStart={mode => { setStartMode(mode); rememberScreen('trips'); setPublicDestination('trips'); }} />
-          : <TripStartForm draft={tripDraft} onChange={setTripDraft} mode={startMode} authenticated={false} onAuthenticationRequired={() => { rememberScreen('auth'); setAuthActive(true); }} onSuccess={() => {}} />}
+        {publicDestination === 'home' ? <HomeScreen onStart={mode => { setStartMode(mode); navigatePublic('trips'); }} />
+          : guestExploring ? <GuestTripExplorer draft={tripDraft} mode={startMode} selections={guestSelections} onChange={setGuestSelections} onSave={() => { setAfterSaveDestination('trips'); setSaveAfterLogin(true); rememberScreen('auth'); setAuthActive(true); }} />
+          : <TripStartForm draft={tripDraft} onChange={setTripDraft} mode={startMode} authenticated={false} onAuthenticationRequired={() => navigatePublic('auth')} onSuccess={() => {}} onExplore={() => setGuestExploring(true)} />}
       </>}
-    {authActive && <AuthScreen onRegister={register} onLogin={login} onFailure={showFailure} onCancel={screen.kind === 'public' ? () => { window.history.back(); setAuthActive(false); } : undefined} />}
+    {leaveTarget && <div className="modal-backdrop"><section className="card modal" role="dialog" aria-modal="true" aria-labelledby="leave-guest-heading"><h2 id="leave-guest-heading">Save your selections?</h2><p>You have a flight or stay selected. Save it before leaving this page?</p><div className="modal-actions"><button type="button" className="primary" onClick={() => { setAfterSaveDestination(leaveTarget === 'home' ? 'home' : 'trips'); setLeaveTarget(null); setSaveAfterLogin(true); rememberScreen('auth'); setAuthActive(true); }}>Yes, save</button><button type="button" className="secondary" onClick={discardAndNavigate}>No, discard</button><button type="button" className="text-button" onClick={() => setLeaveTarget(null)}>Keep planning</button></div></section></div>}
+    {authActive && <AuthScreen onRegister={register} onLogin={login} onFailure={showFailure} onCancel={screen.kind === 'public' ? () => { setSaveAfterLogin(false); window.history.back(); setAuthActive(false); } : undefined} />}
   </main>;
 }

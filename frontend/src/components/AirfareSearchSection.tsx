@@ -14,6 +14,7 @@ type AirfareSearchSectionProps = {
   onSelect: (option: FlightCombinationResponse) => Promise<void>;
   onCancel: () => void;
   pending: boolean;
+  publicSearch?: boolean;
 };
 
 export function formatMinutes(minutes: number): string {
@@ -28,6 +29,7 @@ export function AirfareSearchSection({
   onSelect,
   onCancel,
   pending,
+  publicSearch = false,
 }: AirfareSearchSectionProps) {
   const [directOnly, setDirectOnly] = useState(false);
   const [sort, setSort] = useState<AirfareSort>('DEFAULT');
@@ -41,8 +43,8 @@ export function AirfareSearchSection({
     setLoading(true);
     setError(undefined);
 
-    tripsApi
-      .searchAirfare(trip.id, draftId, {directOnly, sort})
+    (publicSearch ? tripsApi.searchPublicAirfare({destinationKey: trip.destinationKey, startDate: trip.startDate, endDate: trip.endDate, travelerCount: trip.travelerCount, directOnly, sort})
+      : tripsApi.searchAirfare(trip.id, draftId, {directOnly, sort}))
       .then((res) => {
         if (active) {
           setOptions(res.options || []);
@@ -59,7 +61,7 @@ export function AirfareSearchSection({
     return () => {
       active = false;
     };
-  }, [trip.id, draftId, directOnly, sort, retryKey]);
+  }, [trip.id, trip.destinationKey, trip.startDate, trip.endDate, trip.travelerCount, draftId, publicSearch, directOnly, sort, retryKey]);
 
   return (
     <div className="component-search-section airfare-search" aria-labelledby="airfare-search-heading">
