@@ -15,7 +15,7 @@ export function HomeScreen({onStart, onReturn}: {onStart: (mode: StartMode) => v
     <section className="home-start" aria-labelledby="home-start-heading">
       <div className="home-start-heading"><p className="eyebrow">MAKE IT YOURS</p><h2 id="home-start-heading">Start planning</h2></div>
       <div className="home-action-grid">
-        <article className="home-action-card"><ActionIcon name="trip" /><h3>Plan the whole trip</h3><p>Bring your travel details together and compare the possibilities.</p><button type="button" className="primary" onClick={() => onStart('PLAN_TRIP')}>Plan Trip</button></article>
+        <article className="home-action-card"><ActionIcon name="trip" /><h3>Plan the whole trip</h3><p>Bring your travel details together and compare the possibilities.</p><button type="button" className="secondary" onClick={() => onStart('PLAN_TRIP')}>Plan Trip</button></article>
         <article className="home-action-card"><ActionIcon name="airfare" /><h3>Find your flight</h3><p>Start with airfare and build the rest when you are ready.</p><button type="button" className="secondary" onClick={() => onStart('AIRFARE')}>Airfare</button></article>
         <article className="home-action-card"><ActionIcon name="stay" /><h3>Choose your stay</h3><p>Begin with a place to land, then make it a journey.</p><button type="button" className="secondary" onClick={() => onStart('STAY')}>Stay</button></article>
       </div>

@@ -10,6 +10,7 @@ import {ConfirmDeleteModal, type DeleteTarget} from './ConfirmDeleteModal';
 import {CancelTripModal} from './CancelTripModal';
 import {tripsApi, type TripProfileSummary, type TripResponse, type AccommodationType} from '../api/tripsApi';
 import {IdentityApiError} from '../api/identityApi';
+import {currentScreen, rememberScreen} from '../screenHistory';
 
 type ProfileScreenProps = {
   email: string;
@@ -20,7 +21,7 @@ type ProfileScreenProps = {
   onPasswordChange: (currentPassword: string, newPassword: string) => Promise<void>;
   onFailure: (failure: FormFailure) => void;
   onRefreshProfile?: () => Promise<boolean | void>;
-  initialDestination?: 'home' | 'trips';
+  initialDestination?: 'home' | 'trips' | 'profile';
   initialStartMode?: StartMode;
   tripDraft?: TripStartDraft;
   onTripDraftChange?: (draft: TripStartDraft) => void;
@@ -113,9 +114,10 @@ export function ProfileScreen({
     }
   };
 
-  const handleOpenTrip = async (tripId: string) => {
+  const handleOpenTrip = async (tripId: string, recordHistory = true) => {
     if (activeTrip?.id === tripId) {
       setViewMode('trips'); setShowWorkspace(true);
+      if (recordHistory) rememberScreen('trips', tripId);
       await workspaceRef.current?.refreshIfClean();
       return;
     }
@@ -129,6 +131,7 @@ export function ProfileScreen({
       setEntryContext(null);
       setActiveTrip(trip);
       setViewMode('trips'); setShowWorkspace(true);
+      if (recordHistory) rememberScreen('trips', tripId);
     } catch (err) {
       if (sequence !== openingSequence.current) return;
       setOpenError({tripId, message: err instanceof IdentityApiError ? err.message : 'Could not open trip.'});
@@ -141,6 +144,7 @@ export function ProfileScreen({
     if (workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and start another Trip?')) return;
     setStartMode(mode);
     setViewMode('trips'); setShowWorkspace(false);
+    rememberScreen('trips');
   };
 
   const navigateTo = (destination: 'home' | 'trips' | 'profile') => {
@@ -148,8 +152,28 @@ export function ProfileScreen({
     setOpeningTripId(null);
     setOpenError(null);
     setViewMode(destination);
+    rememberScreen(destination);
     if (destination === 'trips') { setShowWorkspace(false); if (onRefreshProfile) void onRefreshProfile(); }
   };
+
+  useEffect(() => {
+    const restoreScreen = () => {
+      const previous = currentScreen();
+      if (previous?.tripId && previous.destination === 'trips') {
+        void handleOpenTrip(previous.tripId, false);
+        return;
+      }
+      openingSequence.current += 1;
+      setOpeningTripId(null);
+      setOpenError(null);
+      setShowWorkspace(false);
+      const destination = previous?.destination;
+      setViewMode(destination === 'trips' || destination === 'profile' ? destination : 'home');
+      if (destination === 'trips' && onRefreshProfile) void onRefreshProfile();
+    };
+    window.addEventListener('popstate', restoreScreen);
+    return () => window.removeEventListener('popstate', restoreScreen);
+  });
 
   const handlePromptDeleteTrip = (trip: TripProfileSummary) => {
     if (activeTrip?.id === trip.id && workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and delete this Trip?')) return;
@@ -296,6 +320,7 @@ export function ProfileScreen({
         onAuthenticationRequired={onAuthenticationRequired}
         onBack={() => {
           setShowWorkspace(false); setViewMode('trips');
+          rememberScreen('trips');
           if (onRefreshProfile) void onRefreshProfile();
         }}
         onTripDeleted={() => {
@@ -316,6 +341,7 @@ export function ProfileScreen({
       setEntryContext({mode, accommodationType});
       setActiveTrip(createdTrip);
       setShowWorkspace(true);
+      rememberScreen('trips', createdTrip.id);
       if (onRefreshProfile) void onRefreshProfile();
     }} />
       <TripListSection upcoming={upcoming} past={past} onSelectTrip={(id) => void handleOpenTrip(id)} onDeleteTrip={handlePromptDeleteTrip} onCancelTrip={handlePromptCancelTrip} onRenameTrip={handleRenameTrip} />

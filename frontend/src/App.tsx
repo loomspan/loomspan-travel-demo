@@ -7,6 +7,7 @@ import {HomeScreen, type StartMode} from './components/HomeScreen';
 import {TripStartForm, emptyTripStartDraft, type TripStartDraft} from './components/TripStartForm';
 import {ActionIcon} from './components/ActionIcon';
 import {StatusRegion} from './components/StatusRegion';
+import {currentScreen, rememberScreen} from './screenHistory';
 
 type Screen = {kind: 'public'} | {kind: 'profile'; profile: Profile};
 type Notice = {kind: 'error' | 'status'; message: string; fields?: Record<string, string>};
@@ -45,6 +46,7 @@ export default function App() {
       if (requestId !== profileRequestId.current) return false;
       setScreen({kind: 'profile', profile});
       setAuthActive(false);
+      if (currentScreen()?.destination === 'auth') rememberScreen(publicDestination, undefined, true);
       if (afterLogin) setNotice({kind: 'status', message: LOGIN_SUCCESS_MESSAGE});
       return true;
     } catch (error) {
@@ -61,6 +63,17 @@ export default function App() {
       return false;
     }
   };
+  useEffect(() => {
+    if (!currentScreen()) rememberScreen('home', undefined, true);
+    const restoreScreen = () => {
+      if (screen.kind !== 'public') return;
+      const previous = currentScreen();
+      setAuthActive(previous?.destination === 'auth');
+      if (previous?.destination === 'home' || previous?.destination === 'trips') setPublicDestination(previous.destination);
+    };
+    window.addEventListener('popstate', restoreScreen);
+    return () => window.removeEventListener('popstate', restoreScreen);
+  }, [screen.kind]);
   useEffect(() => { void loadProfile(); }, []);
   useEffect(() => { if (notice?.kind === 'error') errorRef.current?.focus(); }, [notice]);
   useEffect(() => {
@@ -89,7 +102,7 @@ export default function App() {
     try {
       await identityApi.logout();
       ++profileRequestId.current; ++sessionEpoch.current;
-      setScreen({kind: 'public'}); setAuthActive(false); setPublicDestination('home'); setTripDraft(emptyTripStartDraft); setNotice({kind: 'status', message: 'You have logged out.'});
+      setScreen({kind: 'public'}); setAuthActive(false); setPublicDestination('home'); rememberScreen('home', undefined, true); setTripDraft(emptyTripStartDraft); setNotice({kind: 'status', message: 'You have logged out.'});
     } catch (error) {
       const failure = failureFor(error, 'logout');
       if (error instanceof IdentityApiError && error.code === 'UNAUTHENTICATED') {
@@ -140,7 +153,7 @@ export default function App() {
           onPasswordChange={changePassword}
           onFailure={showFailure}
           onRefreshProfile={() => loadProfile(false, false, true)}
-          initialDestination={publicDestination}
+          initialDestination={currentScreen()?.destination === 'profile' ? 'profile' : currentScreen()?.destination === 'trips' ? 'trips' : publicDestination}
           initialStartMode={startMode}
           tripDraft={tripDraft}
           onTripDraftChange={setTripDraft}
@@ -149,13 +162,13 @@ export default function App() {
         </div>
       : !authActive && <>
         <nav className="card primary-navigation" aria-label="Primary navigation">
-          <button type="button" className="text-button" aria-current={publicDestination === 'home' ? 'page' : undefined} onClick={() => setPublicDestination('home')}><ActionIcon name="home" />Home</button>
-          <button type="button" className="text-button" aria-current={publicDestination === 'trips' ? 'page' : undefined} onClick={() => setPublicDestination('trips')}><ActionIcon name="trip" />Trips</button>
-          <button type="button" className="text-button" onClick={() => setAuthActive(true)}><ActionIcon name="profile" />Log in</button>
+          <button type="button" className="text-button" aria-current={publicDestination === 'home' ? 'page' : undefined} onClick={() => { rememberScreen('home'); setPublicDestination('home'); }}><ActionIcon name="home" />Home</button>
+          <button type="button" className="text-button" aria-current={publicDestination === 'trips' ? 'page' : undefined} onClick={() => { rememberScreen('trips'); setPublicDestination('trips'); }}><ActionIcon name="trip" />Trips</button>
+          <button type="button" className="text-button" onClick={() => { rememberScreen('auth'); setAuthActive(true); }}><ActionIcon name="profile" />Log in</button>
         </nav>
-        {publicDestination === 'home' ? <HomeScreen onStart={mode => { setStartMode(mode); setPublicDestination('trips'); }} />
-          : <TripStartForm draft={tripDraft} onChange={setTripDraft} mode={startMode} authenticated={false} onAuthenticationRequired={() => setAuthActive(true)} onSuccess={() => {}} />}
+        {publicDestination === 'home' ? <HomeScreen onStart={mode => { setStartMode(mode); rememberScreen('trips'); setPublicDestination('trips'); }} />
+          : <TripStartForm draft={tripDraft} onChange={setTripDraft} mode={startMode} authenticated={false} onAuthenticationRequired={() => { rememberScreen('auth'); setAuthActive(true); }} onSuccess={() => {}} />}
       </>}
-    {authActive && <AuthScreen onRegister={register} onLogin={login} onFailure={showFailure} onCancel={screen.kind === 'public' ? () => setAuthActive(false) : undefined} />}
+    {authActive && <AuthScreen onRegister={register} onLogin={login} onFailure={showFailure} onCancel={screen.kind === 'public' ? () => { window.history.back(); setAuthActive(false); } : undefined} />}
   </main>;
 }
