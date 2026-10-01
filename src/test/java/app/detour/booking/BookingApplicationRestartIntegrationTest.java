@@ -48,14 +48,14 @@ class BookingApplicationRestartIntegrationTest {
             draftId = body.get("drafts").get(0).get("id").asString();
 
             org.springframework.jdbc.core.JdbcTemplate jdbc = first.getBean(org.springframework.jdbc.core.JdbcTemplate.class);
-            jdbc.update("""
-                    INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id)
+            app.detour.trip.TestPlanSelections.insert(jdbc, """
+                    INSERT INTO detour_trip_draft_airfare_selection (planned_itinerary_id, outbound_flight_instance_id, return_flight_instance_id)
                     VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                         (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-out-sfo-d1' AND instance.service_date = DATE '2027-03-10'),
                         (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-in-sfo-d1' AND instance.service_date = DATE '2027-03-14'))
                     """, UUID.fromString(draftId));
-            jdbc.update("""
-                    INSERT INTO detour_trip_draft_stay_selection (draft_id, accommodation_unit_id, unit_count)
+            app.detour.trip.TestPlanSelections.insert(jdbc, """
+                    INSERT INTO detour_trip_draft_stay_selection (planned_itinerary_id, accommodation_unit_id, unit_count)
                     VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                         (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit'), 1)
                     """, UUID.fromString(draftId));

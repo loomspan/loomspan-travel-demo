@@ -15,6 +15,40 @@ public final class TripRequests {
     private TripRequests() {
     }
 
+    public record PlanCreate(long expectedVersion, String name, LocalDate startDate, LocalDate endDate, Integer travelerCount, List<Integer> travelerAges) { }
+    public record PlanSave(long expectedVersion, long expectedPlanVersion, LocalDate startDate, LocalDate endDate, Integer travelerCount, List<Integer> travelerAges, JsonNode selections) { }
+    public record PlanAction(long expectedVersion, long expectedPlanVersion, String name, UUID replacementPrimaryPlanId, Boolean confirmed, Boolean deleteTrip, Integer expectedPlanCount) { }
+    static PlanCreate planCreate(JsonNode b) {
+        requireObject(b, Set.of("expectedVersion", "name", "startDate", "endDate", "travelerCount", "travelerAges"));
+        return new PlanCreate(version(b.get("expectedVersion"), "expectedVersion"), text(b.get("name"), "name"), date(b.get("startDate"), "startDate"), date(b.get("endDate"), "endDate"), integer(b.get("travelerCount"), "travelerCount"), ages(b.get("travelerAges")));
+    }
+    static PlanSave planSave(JsonNode b) {
+        requireObject(b, Set.of("expectedVersion", "expectedPlanVersion", "startDate", "endDate", "travelerCount", "travelerAges", "selections"));
+        JsonNode selections = b.get("selections");
+        if (selections != null) requireObject(selections, Set.of("airfare", "stay", "rental"));
+        return new PlanSave(version(b.get("expectedVersion"), "expectedVersion"), version(b.get("expectedPlanVersion"), "expectedPlanVersion"), date(b.get("startDate"), "startDate"), date(b.get("endDate"), "endDate"), integer(b.get("travelerCount"), "travelerCount"), ages(b.get("travelerAges")), selections);
+    }
+    static PlanAction planAction(JsonNode b, String action) {
+        Set<String> allowed = switch(action) {
+            case "name", "copy" -> Set.of("expectedVersion", "expectedPlanVersion", "name");
+            case "delete" -> Set.of("expectedVersion", "expectedPlanVersion", "replacementPrimaryPlanId", "confirmed", "deleteTrip", "expectedPlanCount");
+            default -> Set.of("expectedVersion", "expectedPlanVersion");
+        };
+        requireObject(b, allowed);
+        return new PlanAction(version(b.get("expectedVersion"), "expectedVersion"), version(b.get("expectedPlanVersion"), "expectedPlanVersion"), text(b.get("name"), "name"),
+            b.hasNonNull("replacementPrimaryPlanId") ? uuid(b.get("replacementPrimaryPlanId"), "replacementPrimaryPlanId") : null,
+            b.hasNonNull("confirmed") ? booleanValue(b.get("confirmed"), "confirmed") : null,
+            b.hasNonNull("deleteTrip") ? booleanValue(b.get("deleteTrip"), "deleteTrip") : null,
+            integer(b.get("expectedPlanCount"), "expectedPlanCount"));
+    }
+    static DraftSelections planSelections(JsonNode b) {
+        AirfareSelection airfare = null; StaySelection stay = null; RentalSelection rental = null;
+        JsonNode a = b.get("airfare"), st = b.get("stay"), r = b.get("rental");
+        if (a != null && !a.isNull()) { requireObject(a, Set.of("outboundFlightInstanceId", "returnFlightInstanceId")); airfare = new AirfareSelection(positiveLong(a.get("outboundFlightInstanceId"), "outboundFlightInstanceId"), positiveLong(a.get("returnFlightInstanceId"), "returnFlightInstanceId"), null, null, 0, 0, 0, 0, 0, 0); }
+        if (st != null && !st.isNull()) { requireObject(st, Set.of("accommodationUnitId", "unitCount")); Integer count = positiveInt(st.get("unitCount"), "unitCount"); if (count == null) throw invalid("unitCount", "Required"); stay = new StaySelection(positiveLong(st.get("accommodationUnitId"), "accommodationUnitId"), count, null, null, List.of()); }
+        if (r != null && !r.isNull()) { requireObject(r, Set.of("rentalUnitId", "pickupAt", "returnAt")); rental = new RentalSelection(positiveLong(r.get("rentalUnitId"), "rentalUnitId"), offsetDateTime(r.get("pickupAt"), "pickupAt"), offsetDateTime(r.get("returnAt"), "returnAt"), null, null, null, 0, 0, 0); }
+        return new DraftSelections(airfare, stay, rental);
+    }
     public record Create(String name, String destinationKey, LocalDate startDate, LocalDate endDate, Integer travelerCount,
             List<Integer> travelerAges, JsonNode budgetCents) {
     }

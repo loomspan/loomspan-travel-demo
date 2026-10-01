@@ -374,6 +374,9 @@ export type PlannedResponse = {
 };
 
 export type AlternativeResponse = {
+  primary?: boolean;
+  travelerCount?: number;
+  travelerAges?: number[] | null;
   id: string;
   name?: string;
   startDate?: string;
@@ -407,7 +410,18 @@ export type RevisionSummaryResponse = {
   adjustments: ComponentAdjustmentResponse[];
 };
 
+export type PlanResponse = {
+  id: string; name: string; startDate: string; endDate: string; travelerCount: number;
+  travelerAges: number[] | null; version: number; selections: DraftSelectionResponse;
+  tally?: ItineraryTallyResponse; primary: boolean; booked: boolean;
+  lockedComponents: string[]; purchase?: BookingResponse | null;
+};
+export type PlanDetails = {startDate: string; endDate: string; travelerCount: number; travelerAges: number[] | null};
+export type PlanAction = {expectedVersion: number; expectedPlanVersion: number; name?: string;
+  replacementPrimaryPlanId?: string; confirmed?: boolean; deleteTrip?: boolean; expectedPlanCount?: number};
 export type TripResponse = {
+  plans?: PlanResponse[];
+  primaryPlanId?: string;
   id: string;
   name?: string;
   workingPlan?: DraftResponse | null;
@@ -498,6 +512,10 @@ export type CancelRequest = {
 };
 
 export type BookingResponse = {
+  purchasedStartDate?: string;
+  purchasedEndDate?: string;
+  purchasedTravelerCount?: number;
+  purchasedTravelerAges?: number[] | null;
   id: string;
   tripId: string;
   plannedItineraryId?: string | null;
@@ -633,6 +651,13 @@ function buildQueryString(params?: Record<string, string | number | boolean | un
 }
 
 export const tripsApi = {
+  createPlan: (tripId: string, payload: PlanDetails & {expectedVersion: number; name: string}): Promise<TripResponse> => request(`/api/trips/${tripId}/plans`, 'POST', payload),
+  savePlan: (tripId: string, planId: string, payload: PlanDetails & {expectedVersion: number; expectedPlanVersion: number}): Promise<TripResponse> => request(`/api/trips/${tripId}/plans/${planId}`, 'PUT', payload),
+  renamePlan: (tripId: string, planId: string, payload: PlanAction): Promise<TripResponse> => request(`/api/trips/${tripId}/plans/${planId}/name`, 'PUT', payload),
+  copyPlan: (tripId: string, planId: string, payload: PlanAction): Promise<TripResponse> => request(`/api/trips/${tripId}/plans/${planId}/copy`, 'POST', payload),
+  makePrimary: (tripId: string, planId: string, payload: PlanAction): Promise<TripResponse> => request(`/api/trips/${tripId}/plans/${planId}/primary`, 'PUT', payload),
+  deletePlan: (tripId: string, planId: string, payload: PlanAction): Promise<TripResponse | void> => request(`/api/trips/${tripId}/plans/${planId}`, 'DELETE', payload),
+
   searchPublicAirfare: (params: {destinationKey: string; startDate: string; endDate: string; travelerCount: number; directOnly?: boolean; sort?: AirfareSort}): Promise<AirfareSearchResponse> =>
     request<AirfareSearchResponse>(`/api/public/airfare${buildQueryString(params)}`, 'GET'),
 

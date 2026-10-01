@@ -109,33 +109,7 @@ public class BookingService {
     }
 
     private BookingResponse toBookingResponse(BookingRecord record, Trip trip) {
-        DraftSelections selections = bookingRepository.loadBookingSelections(record.id());
-        ItineraryTallyResponse tally = tallyEngine.calculateTally(selections, trip.travelerCount(), trip.budgetCents());
-        DraftSelectionResponse selectionResponse = TripService.selectionResponse(selections);
-        UUID plannedPublicId = record.plannedItineraryId() != null
-                ? trip.planned().stream()
-                        .filter(p -> p.id() == record.plannedItineraryId().longValue())
-                        .map(PlannedItinerary::publicId)
-                        .findFirst()
-                        .orElse(null)
-                : null;
-
-        return new BookingResponse(
-                record.publicId(),
-                trip.publicId(),
-                plannedPublicId,
-                record.bookingReference(),
-                record.status(),
-                record.grandTotalCents(),
-                record.idempotencyKey(),
-                record.createdAt(),
-                record.canceledAt(),
-                record.airfareReference(),
-                record.stayReference(),
-                record.rentalReference(),
-                selectionResponse,
-                tally
-        );
+        return transactionExecutor.toBookingResponse(record, trip);
     }
 
     private Trip ownedTrip(long ownerUserId, String tripId) {

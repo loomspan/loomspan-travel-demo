@@ -17,6 +17,8 @@ type RentalSlotProps = {
   onRemove: () => void;
   onCancelSearch: () => void;
   pending: boolean;
+  locked?: boolean;
+  purchaseCanceled?: boolean;
 };
 
 export function RentalSlot({
@@ -30,6 +32,8 @@ export function RentalSlot({
   onRemove,
   onCancelSearch,
   pending,
+  locked = false,
+  purchaseCanceled = false,
 }: RentalSlotProps) {
   if (mode === 'hidden' || (mode === 'selected' && !selectedRental)) return null;
 
@@ -43,7 +47,7 @@ export function RentalSlot({
     <section className={`card component-slot rental-slot ${highlighted ? 'slot-highlighted' : ''}`} aria-labelledby="rental-slot-heading">
       <div className="slot-header">
         <h3 id="rental-slot-heading" tabIndex={-1}>Rental Car</h3>
-        {showSelected && <span className="badge badge-success">Selected</span>}
+        {showSelected && <span className="badge badge-success">{locked ? purchaseCanceled ? 'Canceled booking · locked' : 'Confirmed' : 'Selected'}</span>}
       </div>
 
       {mode === 'searching' && (

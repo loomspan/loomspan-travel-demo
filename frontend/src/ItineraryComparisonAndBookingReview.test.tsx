@@ -252,7 +252,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     await user.click(screen.getAllByRole('button', {name: /select choice 1 for booking review/i})[0]);
     expect(screen.getByRole('heading', {name: /review itinerary & component snapshots/i})).toBeVisible();
     window.history.back();
-    expect(await screen.findByRole('heading', {name: 'Comparing 2 Saved options'})).toBeVisible();
+    expect(await screen.findByRole('heading', {name: 'Comparing 2 plans'})).toBeVisible();
     window.history.back();
     expect(await screen.findByRole('heading', {name: trip.label})).toBeVisible();
     window.history.back();
@@ -260,7 +260,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     window.history.forward();
     await waitFor(() => expect(screen.getByRole('heading', {name: trip.label})).toBeVisible());
     window.history.forward();
-    expect(await screen.findByRole('heading', {name: 'Comparing 2 Saved options'})).toBeVisible();
+    expect(await screen.findByRole('heading', {name: 'Comparing 2 plans'})).toBeVisible();
     window.history.forward();
     expect(await screen.findByRole('heading', {name: /review itinerary & component snapshots/i})).toBeVisible();
   });
@@ -308,11 +308,11 @@ describe('Itinerary Comparison and Booking Selection', () => {
     await user.click(choices[0]);
     await user.click(choices[1]);
     await user.click(screen.getByRole('button', {name: /compare selected options/i}));
-    await waitFor(() => expect(screen.getByRole('heading', {name: 'Comparing 2 Saved options'})).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole('heading', {name: 'Comparing 2 plans'})).toHaveFocus());
     await user.click(screen.getByRole('button', {name: 'Home'}));
     await waitFor(() => expect(screen.getByRole('heading', {name: 'Home'})).toHaveFocus());
     await user.click(screen.getByRole('button', {name: `Return to ${trip.label}`}));
-    await waitFor(() => expect(screen.getByRole('heading', {name: 'Comparing 2 Saved options'})).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole('heading', {name: 'Comparing 2 plans'})).toHaveFocus());
   });
 
   // AC 1: Enforces 2-to-3 planned alternative selection constraint and enables comparison launch
@@ -426,7 +426,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     await user.click(compareBtn);
 
     // Comparison view rendered
-    expect(screen.getByRole('heading', {name: /comparing 2 saved options/i})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /comparing 2 plans/i})).toBeInTheDocument();
 
     // Native table semantics retain row and column headers.
     const grid = screen.getByRole('table', {name: /itinerary comparison table/i});
@@ -435,15 +435,15 @@ describe('Itinerary Comparison and Booking Selection', () => {
     // Column headers for each alternative
     expect(within(grid).getByText(/choice 1/i)).toBeInTheDocument();
     expect(within(grid).getByText(/choice 2/i)).toBeInTheDocument();
-    expect(within(grid).getByText('2027-03-10 to 2027-03-14')).toBeInTheDocument();
-    expect(within(grid).getByText('2027-03-15 to 2027-03-19')).toBeInTheDocument();
+    expect(within(grid).getByText(/2027-03-10 to 2027-03-14/)).toBeInTheDocument();
+    expect(within(grid).getByText(/2027-03-15 to 2027-03-19/)).toBeInTheDocument();
     expect(within(grid).getByText('Airfare total')).toBeInTheDocument();
     expect(within(grid).getByText('Stay total')).toBeInTheDocument();
     expect(within(grid).getByText('Rental Car total')).toBeInTheDocument();
 
     // Authoritative totals & budget badges
-    expect(within(grid).getAllByText('$1,918.50').length).toBeGreaterThan(0);
-    expect(within(grid).getAllByText('$2,140.00').length).toBeGreaterThan(0);
+    expect(within(grid).getAllByText(/\$1,918.50/).length).toBeGreaterThan(0);
+    expect(within(grid).getAllByText(/\$2,140.00/).length).toBeGreaterThan(0);
     expect(within(grid).getAllByText(/within budget/i).length).toBeGreaterThan(0);
     expect(within(grid).getAllByText(/over budget/i).length).toBeGreaterThan(0);
 
@@ -571,10 +571,10 @@ describe('Itinerary Comparison and Booking Selection', () => {
     );
 
     // Missing rental car indicator
-    const missingIndicators = screen.getAllByLabelText(/no rental car selected/i);
+    const missingIndicators = screen.getAllByLabelText(/Not selected/i);
     expect(missingIndicators.length).toBeGreaterThan(0);
     expect(missingIndicators[0]).toHaveClass('missing-component');
-    expect(missingIndicators[0]).toHaveTextContent(/— No rental car selected/i);
+    expect(missingIndicators[0]).toHaveTextContent(/— Not selected/i);
 
     // The present rental car on Alternative 1 displays its actual total price, not missing indicator
     expect(screen.getAllByText('$262.50').length).toBeGreaterThan(0);
@@ -598,7 +598,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     await user.click(checkboxes[0]);
     await user.click(checkboxes[1]);
     await user.click(screen.getByRole('button', {name: /compare selected options/i}));
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', {name: /comparing 2 saved options/i})));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', {name: /comparing 2 plans/i})));
 
     // In comparison view, click "Select for Booking Review" on Alternative 1
     const reviewButtons = screen.getAllByRole('button', {name: /select choice 1 for booking review/i});
@@ -623,7 +623,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     expect(screen.getAllByText('$740.00').length).toBeGreaterThan(0); // Airfare
     expect(screen.getAllByText('$916.00').length).toBeGreaterThan(0); // Stay
     expect(screen.getAllByText('$262.50').length).toBeGreaterThan(0); // Rental
-    expect(screen.getByText('$1,918.50')).toBeInTheDocument(); // Grand total
+    expect(screen.getByText(/\$1,918.50/)).toBeInTheDocument(); // Grand total
 
     // Mandatory fictional disclosure notice
     const disclosureNote = screen.getByRole('note', {name: /fictional inventory disclosure/i});
@@ -640,8 +640,8 @@ describe('Itinerary Comparison and Booking Selection', () => {
     // Return back to comparison view
     const backBtn = screen.getByRole('button', {name: /← back to comparison/i});
     await user.click(backBtn);
-    expect(screen.getByRole('heading', {name: /comparing 2 saved options/i})).toBeInTheDocument();
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', {name: /comparing 2 saved options/i})));
+    expect(screen.getByRole('heading', {name: /comparing 2 plans/i})).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', {name: /comparing 2 plans/i})));
   });
 
   // AC 5: Transitions from standalone planned alternative card to booking review screen and returns to workspace

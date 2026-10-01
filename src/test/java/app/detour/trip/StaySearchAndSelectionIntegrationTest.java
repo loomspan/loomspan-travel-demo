@@ -456,7 +456,7 @@ class StaySearchAndSelectionIntegrationTest {
         assertEquals(17129L, nights.get(0).get("basePriceCents").asLong());
 
         // Verify DB row
-        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft_stay_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)",
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_stay_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)",
                 Integer.class, UUID.fromString(draftId));
         assertEquals(1, count);
     }
@@ -490,8 +490,8 @@ class StaySearchAndSelectionIntegrationTest {
         assertEquals(2, draft.get("version").asLong());
         assertEquals("Summit Family Suites", draft.get("selections").get("stay").get("propertyName").asString());
 
-        // 3. Exactly 1 row in detour_trip_draft_stay_selection
-        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft_stay_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)",
+        // 3. Exactly 1 row in detour_planned_stay_snapshot
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_stay_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)",
                 Integer.class, UUID.fromString(draftId));
         assertEquals(1, count);
     }
@@ -525,7 +525,7 @@ class StaySearchAndSelectionIntegrationTest {
         assertTrue(draft.get("selections").get("stay").isNull());
 
         // 3. DB row deleted
-        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft_stay_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)",
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_stay_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)",
                 Integer.class, UUID.fromString(draftId));
         assertEquals(0, count);
     }

@@ -11,6 +11,7 @@ import {
   type BookingResponse,
 } from '../api/tripsApi';
 import {IdentityApiError} from '../api/identityApi';
+import {IndependentPlansWorkspace} from './IndependentPlansWorkspace';
 import {AlternativeCard} from './AlternativeCard';
 import {ItineraryComparisonView} from './ItineraryComparisonView';
 import {BookingReviewView} from './BookingReviewView';
@@ -35,7 +36,7 @@ import {RentalSlot} from './RentalSlot';
 import {ConfirmRemoveModal} from './ConfirmRemoveModal';
 import {currentScreen, rememberScreen, type WorkspaceView} from '../screenHistory';
 
-type TripWorkspaceProps = {
+export type TripWorkspaceProps = {
   initialTrip: TripResponse;
   existingTripNames?: string[];
   initialActiveBooking?: BookingResponse | null;
@@ -57,6 +58,7 @@ export type TripWorkspaceHandle = {
   refreshIfClean: () => Promise<void>;
   hasUnsavedChanges: () => boolean;
   rememberNavigation: () => void;
+  requestNavigation?: (action: () => void) => void;
 };
 
 const SUPPORTED_DESTINATIONS = [
@@ -77,7 +79,7 @@ function validateDates(startDate: string, endDate: string): string | undefined {
   return undefined;
 }
 
-export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(function TripWorkspace({
+const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(function TripWorkspace({
   initialTrip,
   existingTripNames = [],
   initialActiveBooking,
@@ -1878,3 +1880,6 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     </section>
   );
 });
+
+export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>((props, ref) =>
+  props.initialTrip.plans?.length ? <IndependentPlansWorkspace {...props} ref={ref} /> : <LegacyTripWorkspace {...props} ref={ref} />);

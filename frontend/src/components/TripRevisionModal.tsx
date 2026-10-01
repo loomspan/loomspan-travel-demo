@@ -142,7 +142,7 @@ export function TripRevisionModal({
     const count = parseInt(travelerCount, 10);
     if (isNaN(count) || count < 1 || count > 8) errors.travelerCount = 'Traveler count must be between 1 and 8.';
     if (selectedPlannedIds.length === 0) {
-      errors.sourcePlanned = 'Select at least one Saved option to copy into the revised trip.';
+      errors.sourcePlanned = 'Select at least one plan to copy into the revised trip.';
     }
 
     if (Object.keys(errors).length > 0) {
@@ -288,14 +288,14 @@ export function TripRevisionModal({
 
           <div className="field">
             <fieldset>
-              <legend>Saved options to copy</legend>
+              <legend>Plans to copy</legend>
               {(trip.planned || []).length === 0 ? (
                 <p className="hint read-only-hint">
-                  This trip has no Saved options to copy. At least one Saved option is required to duplicate.
+                  This trip has no plans to copy. At least one plan is required to duplicate.
                 </p>
               ) : (
                 <>
-                  <p className="hint">Selected options keep their names and use the new Trip dates. Their selections will be revalidated for those dates. The new Trip also starts with one separate Working plan:</p>
+                  <p className="hint">Selected plans keep their names and use the new Trip dates. Their selections will be revalidated for those dates. The new Trip also starts with one separate empty primary plan:</p>
                   {(trip.planned || []).map((p) => (
                     <label key={p.id} className="checkbox-label">
                       <input
@@ -303,7 +303,7 @@ export function TripRevisionModal({
                         checked={selectedPlannedIds.includes(p.id)}
                         onChange={() => togglePlannedId(p.id)}
                       />
-                      <span>{p.name || 'Saved option'}{p.startDate && p.endDate ? ` (${p.startDate} to ${p.endDate})` : ''}</span>
+                      <span>{p.name || 'Plan'}{p.startDate && p.endDate ? ` (${p.startDate} to ${p.endDate})` : ''}</span>
                     </label>
                   ))}
                   {fieldErrors.sourcePlanned && (

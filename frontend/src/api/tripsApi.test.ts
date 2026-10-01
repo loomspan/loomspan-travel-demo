@@ -19,6 +19,27 @@ describe('tripsApi client', () => {
     new Response(JSON.stringify(body), {status, headers: {'Content-Type': 'application/json'}});
   const noContent = () => new Response(null, {status: 204});
 
+  it('canonical plan lifecycle carries exact UUIDs, versions, details and CSRF', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(json(200, {id: 'trip-1'})));
+    const details = {startDate: '2027-03-10', endDate: '2027-03-14', travelerCount: 2, travelerAges: [25, 30]};
+    const versions = {expectedVersion: 4, expectedPlanVersion: 2};
+    await tripsApi.createPlan('trip-1', {...details, expectedVersion: 4, name: 'New'});
+    await tripsApi.savePlan('trip-1', 'plan-b', {...details, ...versions});
+    await tripsApi.renamePlan('trip-1', 'plan-b', {...versions, name: 'Renamed'});
+    await tripsApi.copyPlan('trip-1', 'plan-b', {...versions, name: 'Copy'});
+    await tripsApi.makePrimary('trip-1', 'plan-b', versions);
+    await tripsApi.deletePlan('trip-1', 'plan-b', {...versions, confirmed: true, expectedPlanCount: 2, replacementPrimaryPlanId: 'plan-a'});
+    const calls = fetchMock.mock.calls;
+    expect(calls.map(([url, options]) => [url, options.method])).toEqual([
+      ['/api/trips/trip-1/plans', 'POST'], ['/api/trips/trip-1/plans/plan-b', 'PUT'],
+      ['/api/trips/trip-1/plans/plan-b/name', 'PUT'], ['/api/trips/trip-1/plans/plan-b/copy', 'POST'],
+      ['/api/trips/trip-1/plans/plan-b/primary', 'PUT'], ['/api/trips/trip-1/plans/plan-b', 'DELETE'],
+    ]);
+    for (const [, options] of calls) expect(options.headers['X-XSRF-TOKEN']).toBe('secret-token');
+    expect(JSON.parse(calls[1][1].body)).toEqual({...details, ...versions});
+    expect(JSON.parse(calls[5][1].body)).toEqual({...versions, confirmed: true, expectedPlanCount: 2, replacementPrimaryPlanId: 'plan-a'});
+  });
+
   it('createTrip sends strictly structured payload and CSRF header', async () => {
     fetchMock.mockResolvedValueOnce(json(201, {id: 'trip-1'}));
 

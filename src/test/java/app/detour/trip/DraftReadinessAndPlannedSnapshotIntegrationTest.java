@@ -110,7 +110,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
         String tripId = jsonField(created, "id");
         String draftId = getDraftId(created, 0);
         insertSfoAirfareSelection(draftId);
-        jdbc.update("UPDATE flight_instance SET available_seats = 1 WHERE id = (SELECT outbound_flight_instance_id FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?))", UUID.fromString(draftId));
+        jdbc.update("UPDATE flight_instance SET available_seats = 1 WHERE id = (SELECT outbound_flight_instance_id FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?))", UUID.fromString(draftId));
         owner.unsafe(get("/api/trips/{tripId}/drafts/{draftId}/readiness", tripId, draftId), null)
                 .andExpect(status().isOk()).andExpect(jsonPath("$.ready").value(false));
         owner.unsafe(post("/api/trips/{tripId}/options", tripId),
@@ -246,7 +246,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
     }
 
     @Test
-    void rejectsInPlaceMutationOnPlannedSnapshotWithImmutableAlternative() throws Exception {
+    void editsAlternativeDirectlyWithoutReplacingPrimary() throws Exception {
         Client owner = register("immutable-alternative@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"),
                 "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,25],\"budgetCents\":500000}")
@@ -265,12 +265,13 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
         // In-place mutation endpoints on Planned alternative return 409 IMMUTABLE_ALTERNATIVE
         owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}/airfare", tripId, plannedId),
                 "{\"expectedVersion\":1,\"expectedDraftVersion\":0}")
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("IMMUTABLE_ALTERNATIVE"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.planned[0].selections.airfare").doesNotExist())
+                .andExpect(jsonPath("$.workingPlan.selections.airfare").exists());
 
         // Duplication cannot create a second Working plan.
         owner.unsafe(post("/api/trips/{tripId}/alternatives/{alternativeId}/duplicate", tripId, plannedId),
-                "{\"expectedVersion\":1}")
+                "{\"expectedVersion\":2}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("WORKING_PLAN_EXISTS"));
     }
@@ -337,7 +338,7 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
                 SELECT COUNT(*) FROM detour_planned_itinerary
                 WHERE trip_id = (SELECT id FROM detour_trip WHERE public_id = ?)
                 """, Integer.class, UUID.fromString(tripId));
-        assertEquals(1, plannedCount);
+        assertEquals(2, plannedCount);
     }
 
     @Test
@@ -378,8 +379,8 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
     }
 
     private void insertSfoAirfareSelection(String draftId) {
-        jdbc.update("""
-                INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id)
+        app.detour.trip.TestPlanSelections.insert(jdbc, """
+                INSERT INTO detour_trip_draft_airfare_selection (planned_itinerary_id, outbound_flight_instance_id, return_flight_instance_id)
                 VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                     (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-out-sfo-d1' AND instance.service_date = DATE '2027-03-10'),
                     (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-in-sfo-d1' AND instance.service_date = DATE '2027-03-14'))
@@ -387,8 +388,8 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
     }
 
     private void insertSfoAirfareWithLayoverSelection(String draftId) {
-        jdbc.update("""
-                INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id)
+        app.detour.trip.TestPlanSelections.insert(jdbc, """
+                INSERT INTO detour_trip_draft_airfare_selection (planned_itinerary_id, outbound_flight_instance_id, return_flight_instance_id)
                 VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                     (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-out-sfo-c1' AND instance.service_date = DATE '2027-03-10'),
                     (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-in-sfo-c1' AND instance.service_date = DATE '2027-03-14'))
@@ -396,16 +397,16 @@ class DraftReadinessAndPlannedSnapshotIntegrationTest {
     }
 
     private void insertSfoStaySelection(String draftId) {
-        jdbc.update("""
-                INSERT INTO detour_trip_draft_stay_selection (draft_id, accommodation_unit_id, unit_count)
+        app.detour.trip.TestPlanSelections.insert(jdbc, """
+                INSERT INTO detour_trip_draft_stay_selection (planned_itinerary_id, accommodation_unit_id, unit_count)
                 VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                     (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit'), 1)
                 """, UUID.fromString(draftId));
     }
 
     private void insertSfoRentalSelection(String draftId) {
-        jdbc.update("""
-                INSERT INTO detour_trip_draft_rental_selection (draft_id, rental_unit_id, pickup_at, return_at)
+        app.detour.trip.TestPlanSelections.insert(jdbc, """
+                INSERT INTO detour_trip_draft_rental_selection (planned_itinerary_id, rental_unit_id, pickup_at, return_at)
                 VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                     (SELECT id FROM rental_unit WHERE catalog_key = 'rental-unit-sfo-economy-01'),
                     TIMESTAMP WITH TIME ZONE '2027-03-10 10:00:00+00',

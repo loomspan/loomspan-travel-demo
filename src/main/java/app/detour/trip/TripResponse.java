@@ -9,7 +9,7 @@ public record TripResponse(UUID id, String destinationKey, String destinationNam
         LocalDate startDate, LocalDate endDate, int travelerCount, List<Integer> travelerAges, Long budgetCents,
         String label, String status, long version, List<DraftResponse> drafts, List<PlannedResponse> planned,
         List<AlternativeResponse> alternatives, RevisionSummaryResponse revisionSummary, ItineraryTallyResponse tally,
-        BookingResponse booking, String name, DraftResponse workingPlan, List<PlannedResponse> savedOptions) {
+        BookingResponse booking, String name, DraftResponse workingPlan, List<PlannedResponse> savedOptions, List<PlanResponse> plans, UUID primaryPlanId) {
 
     public TripResponse(UUID id, String destinationKey, String destinationName, String originAirportCode,
             LocalDate startDate, LocalDate endDate, int travelerCount, List<Integer> travelerAges, Long budgetCents,
@@ -18,7 +18,7 @@ public record TripResponse(UUID id, String destinationKey, String destinationNam
             BookingResponse booking) {
         this(id, destinationKey, destinationName, originAirportCode, startDate, endDate, travelerCount, travelerAges,
                 budgetCents, label, status, version, drafts, planned, alternatives, revisionSummary, tally, booking,
-                label, drafts.isEmpty() ? null : drafts.get(0), planned);
+                label, drafts.isEmpty() ? null : drafts.get(0), planned, List.of(), null);
     }
 
     public TripResponse(UUID id, String destinationKey, String destinationName, String originAirportCode,

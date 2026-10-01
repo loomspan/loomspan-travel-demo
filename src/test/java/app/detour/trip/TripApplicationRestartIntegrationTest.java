@@ -44,14 +44,14 @@ class TripApplicationRestartIntegrationTest {
             draftId = body.get("drafts").get(0).get("id").asString();
 
             org.springframework.jdbc.core.JdbcTemplate jdbc = first.getBean(org.springframework.jdbc.core.JdbcTemplate.class);
-            jdbc.update("""
-                    INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id)
+            app.detour.trip.TestPlanSelections.insert(jdbc, """
+                    INSERT INTO detour_trip_draft_airfare_selection (planned_itinerary_id, outbound_flight_instance_id, return_flight_instance_id)
                     VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                         (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-out-sfo-d1' AND instance.service_date = DATE '2027-03-10'),
                         (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-in-sfo-d1' AND instance.service_date = DATE '2027-03-14'))
                     """, UUID.fromString(draftId));
-            jdbc.update("""
-                    INSERT INTO detour_trip_draft_stay_selection (draft_id, accommodation_unit_id, unit_count)
+            app.detour.trip.TestPlanSelections.insert(jdbc, """
+                    INSERT INTO detour_trip_draft_stay_selection (planned_itinerary_id, accommodation_unit_id, unit_count)
                     VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                         (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit'), 1)
                     """, UUID.fromString(draftId));
@@ -68,6 +68,13 @@ class TripApplicationRestartIntegrationTest {
             assertEquals(201, duplicated.statusCode());
             var dupBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(duplicated.body());
             duplicatedDraftId = dupBody.get("planned").get(1).get("id").asString();
+
+            HttpResponse<String> edited = request(base, "PUT", "/api/trips/" + tripId + "/plans/" + duplicatedDraftId, sessionCookie + "|" + csrf,
+                    "{\"expectedVersion\":2,\"expectedPlanVersion\":0,\"startDate\":\"2027-03-15\",\"endDate\":\"2027-03-19\",\"travelerCount\":3,\"travelerAges\":[25,30,5]}").send();
+            assertEquals(200, edited.statusCode());
+            HttpResponse<String> preferred = request(base, "PUT", "/api/trips/" + tripId + "/plans/" + duplicatedDraftId + "/primary", sessionCookie + "|" + csrf,
+                    "{\"expectedVersion\":3,\"expectedPlanVersion\":1}").send();
+            assertEquals(200, preferred.statusCode());
 
             // Mutate catalog to verify restart does not reload live catalog
             jdbc.update("UPDATE flight_instance SET base_fare_cents = base_fare_cents + 10000");
@@ -87,14 +94,19 @@ class TripApplicationRestartIntegrationTest {
             assertEquals(200, detail.statusCode());
             var body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(detail.body());
             assertEquals(tripId, body.get("id").asString());
-            assertEquals(2, body.get("version").asInt());
-            assertEquals(2, body.get("planned").size());
-            assertEquals(plannedId, body.get("planned").get(0).get("id").asString());
-            assertEquals(copiedFare, body.get("planned").get(0).get("selections").get("airfare").get("outboundBaseFareCents").asLong());
-            assertEquals("Summit Family Suites", body.get("planned").get(0).get("selections").get("stay").get("propertyName").asString());
-            assertEquals(1, body.get("drafts").size());
-            assertEquals(draftId, body.get("drafts").get(0).get("id").asString());
-            assertEquals(duplicatedDraftId, body.get("planned").get(1).get("id").asString());
+            assertEquals(4, body.get("version").asInt());
+            assertEquals(duplicatedDraftId, body.get("primaryPlanId").asString());
+            assertEquals(3, body.get("plans").size());
+            var saved = java.util.stream.StreamSupport.stream(body.get("plans").spliterator(), false).filter(p -> p.get("id").asString().equals(plannedId)).findFirst().orElseThrow();
+            var primary = java.util.stream.StreamSupport.stream(body.get("plans").spliterator(), false).filter(p -> p.get("id").asString().equals(duplicatedDraftId)).findFirst().orElseThrow();
+            assertEquals(copiedFare, saved.get("selections").get("airfare").get("outboundBaseFareCents").asLong());
+            assertEquals("Summit Family Suites", saved.get("selections").get("stay").get("propertyName").asString());
+            assertEquals("2027-03-15", primary.get("startDate").asString());
+            assertEquals("2027-03-19", primary.get("endDate").asString());
+            assertEquals(3, primary.get("travelerCount").asInt());
+            assertEquals(5, primary.get("travelerAges").get(2).asInt());
+            assertEquals(duplicatedDraftId, body.get("drafts").get(0).get("id").asString());
+
         } finally {
             second.close();
         }
@@ -128,14 +140,14 @@ class TripApplicationRestartIntegrationTest {
             String draftId = body.get("drafts").get(0).get("id").asString();
 
             org.springframework.jdbc.core.JdbcTemplate jdbc = first.getBean(org.springframework.jdbc.core.JdbcTemplate.class);
-            jdbc.update("""
-                    INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id)
+            app.detour.trip.TestPlanSelections.insert(jdbc, """
+                    INSERT INTO detour_trip_draft_airfare_selection (planned_itinerary_id, outbound_flight_instance_id, return_flight_instance_id)
                     VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                         (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-out-sfo-d1' AND instance.service_date = DATE '2027-03-10'),
                         (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-in-sfo-d1' AND instance.service_date = DATE '2027-03-14'))
                     """, UUID.fromString(draftId));
-            jdbc.update("""
-                    INSERT INTO detour_trip_draft_stay_selection (draft_id, accommodation_unit_id, unit_count)
+            app.detour.trip.TestPlanSelections.insert(jdbc, """
+                    INSERT INTO detour_trip_draft_stay_selection (planned_itinerary_id, accommodation_unit_id, unit_count)
                     VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                         (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit'), 1)
                     """, UUID.fromString(draftId));

@@ -118,14 +118,15 @@ export function ProfileScreen({
     }
   };
 
-  const handleOpenTrip = async (tripId: string, recordHistory = true) => {
+  const handleOpenTrip = async (tripId: string, recordHistory = true, guarded = false) => {
+    if (!guarded && workspaceRef.current?.requestNavigation && activeTrip?.id !== tripId) {workspaceRef.current.requestNavigation(() => {void handleOpenTrip(tripId, recordHistory, true);}); return;}
     if (activeTrip?.id === tripId) {
       setViewMode('trips'); setShowWorkspace(true);
       if (recordHistory) workspaceRef.current?.rememberNavigation();
       await workspaceRef.current?.refreshIfClean();
       return;
     }
-    if (workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and open another Trip?')) return;
+    if (!guarded && workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and open another Trip?')) return;
     const sequence = ++openingSequence.current;
     setOpeningTripId(tripId);
     setOpenError(null);
@@ -144,15 +145,17 @@ export function ProfileScreen({
     }
   };
 
-  const startCreateTrip = (mode: 'PLAN_TRIP' | 'AIRFARE' | 'STAY') => {
-    if (workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and start another Trip?')) return;
+  const startCreateTrip = (mode: 'PLAN_TRIP' | 'AIRFARE' | 'STAY', guarded = false) => {
+    if (!guarded && workspaceRef.current?.requestNavigation) {workspaceRef.current.requestNavigation(() => startCreateTrip(mode, true)); return;}
+    if (!guarded && workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and start another Trip?')) return;
     setStartMode(mode);
     setShowStartForm(true);
     setViewMode('trips'); setShowWorkspace(false);
     rememberScreen('trips', undefined, false, {planningMode: mode});
   };
 
-  const navigateTo = (destination: 'home' | 'trips' | 'profile') => {
+  const navigateTo = (destination: 'home' | 'trips' | 'profile', guarded = false) => {
+    if (!guarded && workspaceRef.current?.requestNavigation) {workspaceRef.current.requestNavigation(() => navigateTo(destination, true)); return;}
     openingSequence.current += 1;
     setOpeningTripId(null);
     setOpenError(null);
@@ -164,8 +167,9 @@ export function ProfileScreen({
   useEffect(() => {
     const restoreScreen = () => {
       const previous = currentScreen();
+      const restore = () => {
       if (previous?.tripId && previous.destination === 'trips') {
-        void handleOpenTrip(previous.tripId, false);
+        void handleOpenTrip(previous.tripId, false, true);
         return;
       }
       openingSequence.current += 1;
@@ -177,13 +181,24 @@ export function ProfileScreen({
       const destination = previous?.destination;
       setViewMode(destination === 'trips' || destination === 'profile' ? destination : 'home');
       if (destination === 'trips' && onRefreshProfile) void onRefreshProfile();
+      };
+      if (workspaceRef.current?.requestNavigation && previous?.tripId !== activeTrip?.id) {
+        const guarded = workspaceRef.current.hasUnsavedChanges();
+        const transition = () => {restore(); if (guarded && previous) rememberScreen(previous.destination, previous.tripId, false, previous);};
+        // Let workspace history listeners read the original destination before restoring our current entry.
+        if (guarded) queueMicrotask(() => {workspaceRef.current?.rememberNavigation(); workspaceRef.current?.requestNavigation?.(transition);});
+        else workspaceRef.current.requestNavigation(transition);
+        return;
+      }
+      restore();
     };
     window.addEventListener('popstate', restoreScreen);
     return () => window.removeEventListener('popstate', restoreScreen);
   });
 
-  const handlePromptDeleteTrip = (trip: TripProfileSummary) => {
-    if (activeTrip?.id === trip.id && workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and delete this Trip?')) return;
+  const handlePromptDeleteTrip = (trip: TripProfileSummary, guarded = false) => {
+    if (!guarded && activeTrip?.id === trip.id && workspaceRef.current?.requestNavigation) {workspaceRef.current.requestNavigation(() => handlePromptDeleteTrip(trip, true)); return;}
+    if (!guarded && activeTrip?.id === trip.id && workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and delete this Trip?')) return;
     setDeleteError(undefined);
     setDeleteTarget({
       kind: 'trip',
@@ -307,6 +322,7 @@ export function ProfileScreen({
       <button type="button" className="text-button" aria-current={viewMode === 'trips' && (!showStartForm || showWorkspace) ? 'page' : undefined} onClick={() => navigateTo('trips')}><ActionIcon name="trip" />My Trips</button>
       <button type="button" className="text-button" aria-current={viewMode === 'profile' ? 'page' : undefined} onClick={() => navigateTo('profile')}><ActionIcon name="profile" />Profile</button>
       <button type="button" className="text-button" disabled={logoutPending} onClick={() => {
+        if (workspaceRef.current?.requestNavigation) {workspaceRef.current.requestNavigation(() => {void onLogout();}); return;}
         if (workspaceRef.current?.hasUnsavedChanges() && !window.confirm('Discard unsaved Trip edits and log out?')) return;
         void onLogout();
       }}><ActionIcon name="logout" />{logoutPending ? 'Logging out…' : 'Log out'}</button>

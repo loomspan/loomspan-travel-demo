@@ -7,6 +7,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface TripRepository {
+    void updateTripSettings(long tripId, Destination destination, Long budget);
+    void updatePlanParty(long planId, int count, List<Integer> ages);
+    void setPrimary(long tripId, long planId);
+    void insertPlan(long tripId, UUID publicId, String name, LocalDate start, LocalDate end, int count, List<Integer> ages, DraftSelections selections);
     Optional<Destination> findSupportedDestination(String key);
 
     void createAggregate(long ownerUserId, UUID tripPublicId, Destination destination, LocalDate startDate,

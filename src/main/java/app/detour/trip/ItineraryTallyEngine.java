@@ -76,7 +76,7 @@ public class ItineraryTallyEngine {
                 grandTotal,
                 remainingBudgetCents,
                 budgetOverageCents,
-                isOverBudget
+                isOverBudget, selections == null || selections.airfare() == null || selections.stay() == null || selections.rental() == null
         );
     }
 

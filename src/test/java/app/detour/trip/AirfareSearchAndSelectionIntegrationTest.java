@@ -344,7 +344,7 @@ class AirfareSearchAndSelectionIntegrationTest {
 
         // Verify relational persistence
         assertEquals(1, jdbc.queryForObject(
-                "SELECT COUNT(*) FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)",
+                "SELECT COUNT(*) FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)",
                 Integer.class, UUID.fromString(draftId)));
     }
 
@@ -375,7 +375,7 @@ class AirfareSearchAndSelectionIntegrationTest {
                 .andExpect(jsonPath("$.drafts[0].selections.airfare.outboundFlightInstanceId").value(out1));
 
         assertEquals(1, jdbc.queryForObject(
-                "SELECT COUNT(*) FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)",
+                "SELECT COUNT(*) FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)",
                 Integer.class, UUID.fromString(draftId)));
 
         // 2. Replace with selection 2 (advances trip to 2 and draft to 2)
@@ -390,7 +390,7 @@ class AirfareSearchAndSelectionIntegrationTest {
 
         // Still exactly 1 row, cleanly replaced without duplicates
         assertEquals(1, jdbc.queryForObject(
-                "SELECT COUNT(*) FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)",
+                "SELECT COUNT(*) FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)",
                 Integer.class, UUID.fromString(draftId)));
     }
 
@@ -425,7 +425,7 @@ class AirfareSearchAndSelectionIntegrationTest {
 
         // Database row deleted
         assertEquals(0, jdbc.queryForObject(
-                "SELECT COUNT(*) FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)",
+                "SELECT COUNT(*) FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)",
                 Integer.class, UUID.fromString(draftId)));
     }
 
@@ -461,7 +461,7 @@ class AirfareSearchAndSelectionIntegrationTest {
 
         // Confirm database was untouched
         assertEquals(0, jdbc.queryForObject(
-                "SELECT COUNT(*) FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)",
+                "SELECT COUNT(*) FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)",
                 Integer.class, UUID.fromString(draftId)));
 
         // Perform valid save: trip version -> 1, draft version -> 1
@@ -488,7 +488,7 @@ class AirfareSearchAndSelectionIntegrationTest {
 
         // Selection still present in DB
         assertEquals(1, jdbc.queryForObject(
-                "SELECT COUNT(*) FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)",
+                "SELECT COUNT(*) FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)",
                 Integer.class, UUID.fromString(draftId)));
     }
 

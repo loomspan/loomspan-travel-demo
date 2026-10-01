@@ -57,6 +57,7 @@ export function ItineraryComparisonView({
   const dateParts = new Intl.DateTimeFormat('en-CA', {timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit'}).formatToParts(new Date());
   const today = `${dateParts.find(part => part.type === 'year')?.value}-${dateParts.find(part => part.type === 'month')?.value}-${dateParts.find(part => part.type === 'day')?.value}`;
   const statusBadges = (alt: AlternativeResponse) => <>
+    {(alt.primary || trip.primaryPlanId === alt.id) && <span className="badge">Primary</span>}
     {(alt.booked || (bookedOptionId ?? trip.booking?.plannedItineraryId) === alt.id) && <span className="badge badge-booked">Booked</span>}
     {alt.startDate && alt.startDate <= today && <span className="badge badge-expired">Expired</span>}
   </>;
@@ -73,9 +74,9 @@ export function ItineraryComparisonView({
 
   const renderMissing = (type: 'airfare' | 'stay' | 'rental') => {
     const labels = {
-      airfare: 'No flights selected',
-      stay: 'No accommodation selected',
-      rental: 'No rental car selected',
+      airfare: 'Not selected',
+      stay: 'Not selected',
+      rental: 'Not selected',
     };
     return (
       <div className="missing-component" aria-label={labels[type]}>
@@ -107,7 +108,7 @@ export function ItineraryComparisonView({
         <div>
           <p className="eyebrow">ITINERARY COMPARISON</p>
           <h2 id="comparison-heading" tabIndex={-1}>
-            Comparing {alternatives.length} Saved options
+            Comparing {alternatives.length} plans
           </h2>
           <p className="trip-meta">
             {trip.destinationName} ({trip.originAirportCode} → {trip.destinationKey.replace('destination-', '').toUpperCase()}) • {trip.travelerCount} traveler{trip.travelerCount === 1 ? '' : 's'}
@@ -119,7 +120,7 @@ export function ItineraryComparisonView({
       {/* Screen reader live announcement for active mobile switcher tab */}
       <div className="sr-only" aria-live="polite" role="status">
         {activeAlt
-          ? `Showing option ${activeMobileIndex + 1} of ${alternatives.length}: ${activeAlt.name || 'Saved option'}, ${activeAlt.startDate} to ${activeAlt.endDate}`
+          ? `Showing option ${activeMobileIndex + 1} of ${alternatives.length}: ${activeAlt.name || 'Plan'}, ${activeAlt.startDate} to ${activeAlt.endDate}`
           : ''}
       </div>
 
@@ -145,7 +146,7 @@ export function ItineraryComparisonView({
                 onClick={() => setActiveMobileIndex(idx)}
                 onKeyDown={(e) => handleTabKeyDown(e, idx)}
               >
-                {alt.name || `Saved option ${idx + 1}`} ({alt.startDate} to {alt.endDate})
+                {alt.name || `Plan ${idx + 1}`} ({alt.startDate} to {alt.endDate} · {alt.travelerCount ?? trip.travelerCount} travelers)
               </button>
             );
           })}
@@ -160,12 +161,12 @@ export function ItineraryComparisonView({
           >
             <div className="card mobile-alt-card">
               <div className="mobile-alt-header">
-                <h3>{activeAlt.name || 'Saved option'}</h3>
-                <p>{activeAlt.startDate} to {activeAlt.endDate}</p>
+                <h3>{activeAlt.name || 'Plan'}</h3>
+                <p>{activeAlt.startDate} to {activeAlt.endDate} · {activeAlt.travelerCount ?? trip.travelerCount} travelers</p>
                 <div className="badge-row">{statusBadges(activeAlt)}</div>
                 <div className="mobile-price-banner">
                   <span className="grand-total-amount">
-                    {formatTallyCents(activeAlt.tally?.grandTotalCents)}
+                    {!activeAlt.selections.airfare || !activeAlt.selections.stay || !activeAlt.selections.rental ? 'Partial total: ' : 'Total: '}{formatTallyCents(activeAlt.tally?.grandTotalCents)}
                   </span>
                   {budgetPosition(activeAlt)}
                 </div>
@@ -191,7 +192,7 @@ export function ItineraryComparisonView({
                 <h4>Financial summary (USD)</h4>
                 <div className="mobile-detail-row">
                   <span>Grand Total:</span>
-                  <strong>{formatTallyCents(activeAlt.tally?.grandTotalCents)}</strong>
+                  <strong>{!activeAlt.selections.airfare || !activeAlt.selections.stay || !activeAlt.selections.rental ? 'Partial total: ' : 'Total: '}{formatTallyCents(activeAlt.tally?.grandTotalCents)}</strong>
                 </div>
                 <div className="mobile-detail-row">
                   <span>Airfare Total:</span>
@@ -318,11 +319,11 @@ export function ItineraryComparisonView({
                   className="comparison-alt-header"
                 >
                   <div className="alt-header-box">
-                    <span className="badge badge-planned">{alt.name || 'Saved option'}</span>
-                    <p>{alt.startDate} to {alt.endDate}</p>
+                    <span className="badge badge-planned">{alt.name || 'Plan'}</span>
+                    <p>{alt.startDate} to {alt.endDate} · {alt.travelerCount ?? trip.travelerCount} travelers</p>
                     <div className="badge-row">{statusBadges(alt)}</div>
                     <div className="header-grand-total">
-                      {formatTallyCents(alt.tally?.grandTotalCents)}
+                      {!alt.selections.airfare || !alt.selections.stay || !alt.selections.rental ? 'Partial total: ' : 'Total: '}{formatTallyCents(alt.tally?.grandTotalCents)}
                     </div>
                     <div className="header-budget-badge">
                       {budgetPosition(alt)}
@@ -358,7 +359,7 @@ export function ItineraryComparisonView({
               <th scope="row" className="row-header">Grand Total</th>
               {alternatives.map((alt) => (
                 <td key={alt.id} className="comparison-cell strong-value">
-                  {formatTallyCents(alt.tally?.grandTotalCents)}
+                  {!alt.selections.airfare || !alt.selections.stay || !alt.selections.rental ? 'Partial total: ' : 'Total: '}{formatTallyCents(alt.tally?.grandTotalCents)}
                 </td>
               ))}
             </tr>

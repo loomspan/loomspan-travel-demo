@@ -34,6 +34,32 @@ public class TripController {
         this.bookingService = bookingService;
     }
 
+    @PostMapping("/{tripId}/plans")
+    ResponseEntity<TripResponse> createPlan(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @RequestBody JsonNode body) {
+        return ResponseEntity.status(201).body(trips.createPlan(requirePrincipal(principal).userId(), tripId, TripRequests.planCreate(body)));
+    }
+    @PutMapping("/{tripId}/plans/{planId}")
+    TripResponse savePlan(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @PathVariable String planId, @RequestBody JsonNode body) {
+        return trips.savePlan(requirePrincipal(principal).userId(), tripId, planId, TripRequests.planSave(body));
+    }
+    @PutMapping("/{tripId}/plans/{planId}/name")
+    TripResponse renamePlan(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @PathVariable String planId, @RequestBody JsonNode body) {
+        return trips.planAction(requirePrincipal(principal).userId(), tripId, planId, TripRequests.planAction(body, "name"), "name");
+    }
+    @PostMapping("/{tripId}/plans/{planId}/copy")
+    ResponseEntity<TripResponse> copyPlan(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @PathVariable String planId, @RequestBody JsonNode body) {
+        return ResponseEntity.status(201).body(trips.planAction(requirePrincipal(principal).userId(), tripId, planId, TripRequests.planAction(body, "copy"), "copy"));
+    }
+    @PutMapping("/{tripId}/plans/{planId}/primary")
+    TripResponse primaryPlan(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @PathVariable String planId, @RequestBody JsonNode body) {
+        return trips.planAction(requirePrincipal(principal).userId(), tripId, planId, TripRequests.planAction(body, "primary"), "primary");
+    }
+    @DeleteMapping("/{tripId}/plans/{planId}")
+    ResponseEntity<?> deletePlan(@AuthenticationPrincipal DetourUserPrincipal principal, @PathVariable String tripId, @PathVariable String planId, @RequestBody JsonNode body) {
+        TripResponse result = trips.planAction(requirePrincipal(principal).userId(), tripId, planId, TripRequests.planAction(body, "delete"), "delete");
+        return result == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(result);
+    }
+
     @PostMapping
     ResponseEntity<TripResponse> create(@AuthenticationPrincipal DetourUserPrincipal principal,
             @RequestBody JsonNode request) {
@@ -108,7 +134,7 @@ public class TripController {
         return ResponseEntity.status(201).body(trips.duplicateDraft(requirePrincipal(principal).userId(), tripId, draftId, TripRequests.draftMutation(request)));
     }
 
-    @GetMapping("/{tripId}/drafts/{draftId}/readiness")
+    @GetMapping({"/{tripId}/drafts/{draftId}/readiness", "/{tripId}/plans/{draftId}/readiness"})
     DraftReadinessResponse inspectDraftReadiness(@AuthenticationPrincipal DetourUserPrincipal principal,
             @PathVariable String tripId, @PathVariable String draftId) {
         return trips.inspectDraftReadiness(requirePrincipal(principal).userId(), tripId, draftId);
@@ -132,7 +158,7 @@ public class TripController {
         return trips.deleteAlternative(requirePrincipal(principal).userId(), tripId, alternativeId, TripRequests.alternativeDelete(request));
     }
 
-    @GetMapping("/{tripId}/drafts/{draftId}/airfare")
+    @GetMapping({"/{tripId}/drafts/{draftId}/airfare", "/{tripId}/plans/{draftId}/airfare"})
     AirfareSearchResponse searchDraftAirfare(
             @AuthenticationPrincipal DetourUserPrincipal principal,
             @PathVariable String tripId,
@@ -151,7 +177,7 @@ public class TripController {
         return trips.searchAirfare(requirePrincipal(principal).userId(), tripId, null, directOnly, sort);
     }
 
-    @PutMapping("/{tripId}/drafts/{draftId}/airfare")
+    @PutMapping({"/{tripId}/drafts/{draftId}/airfare", "/{tripId}/plans/{draftId}/airfare"})
     TripResponse selectDraftAirfare(
             @AuthenticationPrincipal DetourUserPrincipal principal,
             @PathVariable String tripId,
@@ -165,7 +191,7 @@ public class TripController {
         );
     }
 
-    @DeleteMapping("/{tripId}/drafts/{draftId}/airfare")
+    @DeleteMapping({"/{tripId}/drafts/{draftId}/airfare", "/{tripId}/plans/{draftId}/airfare"})
     TripResponse removeDraftAirfare(
             @AuthenticationPrincipal DetourUserPrincipal principal,
             @PathVariable String tripId,
@@ -179,7 +205,7 @@ public class TripController {
         );
     }
 
-    @GetMapping("/{tripId}/drafts/{draftId}/stays")
+    @GetMapping({"/{tripId}/drafts/{draftId}/stays", "/{tripId}/plans/{draftId}/stays"})
     StaySearchResponse searchDraftStays(
             @AuthenticationPrincipal DetourUserPrincipal principal,
             @PathVariable String tripId,
@@ -198,7 +224,7 @@ public class TripController {
         return trips.searchStays(requirePrincipal(principal).userId(), tripId, null, type, sort);
     }
 
-    @PutMapping("/{tripId}/drafts/{draftId}/stays")
+    @PutMapping({"/{tripId}/drafts/{draftId}/stays", "/{tripId}/plans/{draftId}/stays"})
     TripResponse selectDraftStay(
             @AuthenticationPrincipal DetourUserPrincipal principal,
             @PathVariable String tripId,
@@ -212,7 +238,7 @@ public class TripController {
         );
     }
 
-    @DeleteMapping("/{tripId}/drafts/{draftId}/stays")
+    @DeleteMapping({"/{tripId}/drafts/{draftId}/stays", "/{tripId}/plans/{draftId}/stays"})
     TripResponse removeDraftStay(
             @AuthenticationPrincipal DetourUserPrincipal principal,
             @PathVariable String tripId,
@@ -226,7 +252,7 @@ public class TripController {
         );
     }
 
-    @GetMapping("/{tripId}/drafts/{draftId}/rentals")
+    @GetMapping({"/{tripId}/drafts/{draftId}/rentals", "/{tripId}/plans/{draftId}/rentals"})
     RentalSearchResponse searchDraftRentals(
             @AuthenticationPrincipal DetourUserPrincipal principal,
             @PathVariable String tripId,
@@ -247,7 +273,7 @@ public class TripController {
         return trips.searchRentals(requirePrincipal(principal).userId(), tripId, null, pickupAt, returnAt, sort);
     }
 
-    @PutMapping("/{tripId}/drafts/{draftId}/rentals")
+    @PutMapping({"/{tripId}/drafts/{draftId}/rentals", "/{tripId}/plans/{draftId}/rentals"})
     TripResponse selectDraftRental(
             @AuthenticationPrincipal DetourUserPrincipal principal,
             @PathVariable String tripId,
@@ -261,7 +287,7 @@ public class TripController {
         );
     }
 
-    @DeleteMapping("/{tripId}/drafts/{draftId}/rentals")
+    @DeleteMapping({"/{tripId}/drafts/{draftId}/rentals", "/{tripId}/plans/{draftId}/rentals"})
     TripResponse removeDraftRental(
             @AuthenticationPrincipal DetourUserPrincipal principal,
             @PathVariable String tripId,

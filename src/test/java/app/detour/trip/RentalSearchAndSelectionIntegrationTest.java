@@ -185,7 +185,7 @@ class RentalSearchAndSelectionIntegrationTest {
                 """).andExpect(status().isCreated()).andReturn();
         String noAgesTripId = jsonField(noAgesTrip, "id");
         String noAgesDraftId = JSON.readTree(noAgesTrip.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
-        jdbc.update("UPDATE detour_trip_traveler SET age = NULL WHERE trip_id = (SELECT id FROM detour_trip WHERE public_id = ?)", UUID.fromString(noAgesTripId));
+        jdbc.update("UPDATE detour_plan_traveler SET age = NULL WHERE plan_id = (SELECT primary_plan_id FROM detour_trip WHERE public_id = ?)", UUID.fromString(noAgesTripId));
 
         owner.unsafe(get("/api/trips/{tripId}/drafts/{draftId}/rentals?pickupAt=2027-03-02T10:00:00-08:00&returnAt=2027-03-06T10:00:00-08:00", noAgesTripId, noAgesDraftId), null)
                 .andExpect(status().isOk())
@@ -471,11 +471,11 @@ class RentalSearchAndSelectionIntegrationTest {
                 .andExpect(jsonPath("$.drafts[0].selections.rental.rentalUnitId").value(suvUnitId))
                 .andExpect(jsonPath("$.drafts[0].selections.rental.vehicleClassName").value("SFO SUV"));
 
-        // Verify exactly 1 row in detour_trip_draft_rental_selection for this draft
-        Long internalDraftId = jdbc.queryForObject("SELECT id FROM detour_trip_draft WHERE public_id = ?", Long.class, UUID.fromString(draftId));
-        Integer rowCount = jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft_rental_selection WHERE draft_id = ?", Integer.class, internalDraftId);
+        // Verify exactly 1 row in detour_planned_rental_snapshot for this draft
+        Long internalDraftId = jdbc.queryForObject("SELECT id FROM detour_planned_itinerary WHERE public_id = ?", Long.class, UUID.fromString(draftId));
+        Integer rowCount = jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_rental_snapshot WHERE planned_itinerary_id = ?", Integer.class, internalDraftId);
         assertEquals(1, rowCount);
-        Long persistedUnitId = jdbc.queryForObject("SELECT rental_unit_id FROM detour_trip_draft_rental_selection WHERE draft_id = ?", Long.class, internalDraftId);
+        Long persistedUnitId = jdbc.queryForObject("SELECT rental_unit_id FROM detour_planned_rental_snapshot WHERE planned_itinerary_id = ?", Long.class, internalDraftId);
         assertEquals(suvUnitId, persistedUnitId);
     }
 
@@ -513,9 +513,9 @@ class RentalSearchAndSelectionIntegrationTest {
                 .andExpect(jsonPath("$.drafts[0].version").value(2))
                 .andExpect(jsonPath("$.drafts[0].selections.rental").doesNotExist());
 
-        // Verify row deleted from detour_trip_draft_rental_selection
-        Long internalDraftId = jdbc.queryForObject("SELECT id FROM detour_trip_draft WHERE public_id = ?", Long.class, UUID.fromString(draftId));
-        Integer rowCount = jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft_rental_selection WHERE draft_id = ?", Integer.class, internalDraftId);
+        // Verify row deleted from detour_planned_rental_snapshot
+        Long internalDraftId = jdbc.queryForObject("SELECT id FROM detour_planned_itinerary WHERE public_id = ?", Long.class, UUID.fromString(draftId));
+        Integer rowCount = jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_rental_snapshot WHERE planned_itinerary_id = ?", Integer.class, internalDraftId);
         assertEquals(0, rowCount);
     }
 

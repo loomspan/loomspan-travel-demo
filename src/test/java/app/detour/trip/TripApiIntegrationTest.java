@@ -80,7 +80,7 @@ class TripApiIntegrationTest {
     }
 
     @Test
-    void loadsAndReplacesOnlyTheChosenUnbookedOption() throws Exception {
+    void retiresCopyAndReplaceWithoutAnyWrites() throws Exception {
         Client owner = register("option-lifecycle@example.test");
         MvcResult created = owner.unsafe(post("/api/trips"), validRequest("\"travelerAges\":[25,30]"))
                 .andExpect(status().isCreated()).andReturn();
@@ -97,28 +97,14 @@ class TripApiIntegrationTest {
                 "{\"expectedVersion\":1,\"expectedDraftVersion\":0,\"startDate\":\"2027-03-15\",\"endDate\":\"2027-03-19\"}")
                 .andExpect(status().isOk());
         owner.unsafe(post("/api/trips/{tripId}/options/{optionId}/load", tripId, optionId),
-                "{\"expectedVersion\":2,\"expectedDraftVersion\":1,\"expectedOptionVersion\":0,\"replaceWorking\":false}")
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("WORKING_REPLACEMENT_REQUIRED"));
-        owner.unsafe(post("/api/trips/{tripId}/options/{optionId}/load", tripId, optionId),
                 "{\"expectedVersion\":2,\"expectedDraftVersion\":1,\"expectedOptionVersion\":0,\"replaceWorking\":true}")
-                .andExpect(status().isOk()).andExpect(jsonPath("$.workingPlan.startDate").value("2027-03-10"))
-                .andExpect(jsonPath("$.savedOptions[0].startDate").value("2027-03-10"))
-                .andExpect(jsonPath("$.workingPlan.id").value(draftId));
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PLAN_WORKFLOW_RETIRED"));
         owner.unsafe(put("/api/trips/{tripId}/options/{optionId}", tripId, optionId),
-                "{\"name\":\"Updated\",\"expectedVersion\":3,\"expectedDraftVersion\":2,\"expectedOptionVersion\":0}")
-                .andExpect(status().isOk()).andExpect(jsonPath("$.savedOptions.length()").value(1))
-                .andExpect(jsonPath("$.savedOptions[0].id").value(optionId))
-                .andExpect(jsonPath("$.savedOptions[0].name").value("Updated"))
-                .andExpect(jsonPath("$.savedOptions[0].version").value(1));
-        long tripRowId = jdbc.queryForObject("SELECT id FROM detour_trip WHERE public_id = ?", Long.class, UUID.fromString(tripId));
-        long optionRowId = jdbc.queryForObject("SELECT id FROM detour_planned_itinerary WHERE public_id = ?", Long.class, UUID.fromString(optionId));
-        UUID bookingId = UUID.randomUUID();
-        jdbc.update("INSERT INTO detour_booking (public_id, trip_id, planned_itinerary_id, booking_reference, status, grand_total_cents, idempotency_key, created_at, canceled_at) VALUES (?, ?, ?, ?, 'CANCELED', 100, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-                bookingId, tripRowId, optionRowId, "HIST-" + bookingId.toString().substring(0, 8), bookingId.toString());
-        owner.unsafe(put("/api/trips/{tripId}/options/{optionId}", tripId, optionId),
-                "{\"name\":\"Must fail\",\"expectedVersion\":4,\"expectedDraftVersion\":2,\"expectedOptionVersion\":1}")
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("IMMUTABLE_BOOKED_OPTION"));
-        assertEquals("Updated", jdbc.queryForObject("SELECT name FROM detour_planned_itinerary WHERE id = ?", String.class, optionRowId));
+                "{\"name\":\"Do not replace\",\"expectedVersion\":2,\"expectedDraftVersion\":1,\"expectedOptionVersion\":0}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PLAN_WORKFLOW_RETIRED"));
+        owner.unsafe(get("/api/trips/{tripId}", tripId), null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(2)).andExpect(jsonPath("$.savedOptions[0].name").value("First"))
+                .andExpect(jsonPath("$.workingPlan.startDate").value("2027-03-15"));
     }
 
     @Test
@@ -175,9 +161,9 @@ class TripApiIntegrationTest {
                 .andExpect(jsonPath("$.upcoming[0].alternatives[1].booked").value(true));
         owner.unsafe(put("/api/trips/{tripId}/options/{optionId}/name", tripId, optionId),
                 "{\"name\":\"Booked change\",\"expectedVersion\":2,\"expectedOptionVersion\":1}")
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("IMMUTABLE_BOOKED_OPTION"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.savedOptions[0].name").value("Booked change"));
         assertEquals(reference, jdbc.queryForObject("SELECT booking_reference FROM detour_booking WHERE planned_itinerary_id = ?", String.class, optionRowId));
-        assertEquals("Later stay", jdbc.queryForObject("SELECT name FROM detour_planned_itinerary WHERE id = ?", String.class, optionRowId));
+        assertEquals("Booked change", jdbc.queryForObject("SELECT name FROM detour_planned_itinerary WHERE id = ?", String.class, optionRowId));
     }
 
     @Test
@@ -199,7 +185,7 @@ class TripApiIntegrationTest {
                 .andExpect(jsonPath("$.workingPlan.startDate").value("2027-03-15"));
         owner.unsafe(put("/api/trips/{tripId}", tripId), changed)
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
-        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft WHERE trip_id = (SELECT id FROM detour_trip WHERE public_id = ?)",
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_itinerary WHERE trip_id = (SELECT id FROM detour_trip WHERE public_id = ?)",
                 Integer.class, UUID.fromString(tripId)));
     }
 
@@ -223,8 +209,8 @@ class TripApiIntegrationTest {
                 .when(trips).replacePlannedSnapshots(org.mockito.ArgumentMatchers.eq(rowId),
                         org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
-        owner.unsafe(put("/api/trips/{tripId}/options/{optionId}", tripId, optionId),
-                "{\"name\":\"Should roll back\",\"expectedVersion\":1,\"expectedDraftVersion\":0,\"expectedOptionVersion\":0}")
+        owner.unsafe(put("/api/trips/{tripId}/plans/{optionId}", tripId, optionId),
+                "{\"startDate\":\"2027-03-11\",\"endDate\":\"2027-03-15\",\"travelerCount\":2,\"travelerAges\":[25,30],\"expectedVersion\":1,\"expectedPlanVersion\":0}")
                 .andExpect(status().is5xxServerError());
         assertEquals(1L, jdbc.queryForObject("SELECT version FROM detour_trip WHERE public_id = ?", Long.class, UUID.fromString(tripId)));
         assertEquals(0L, jdbc.queryForObject("SELECT version FROM detour_planned_itinerary WHERE id = ?", Long.class, rowId));
@@ -251,8 +237,8 @@ class TripApiIntegrationTest {
         long oldPrice = jdbc.queryForObject("SELECT base_price_cents FROM accommodation_nightly_inventory WHERE accommodation_unit_id = ? AND night_date = DATE '2027-03-10'", Long.class, unitId);
         try {
             jdbc.update("UPDATE accommodation_nightly_inventory SET base_price_cents = base_price_cents + 100 WHERE accommodation_unit_id = ? AND night_date = DATE '2027-03-10'", unitId);
-            owner.unsafe(put("/api/trips/{tripId}/options/{optionId}", tripId, optionId),
-                    "{\"name\":\"Stay repriced\",\"expectedVersion\":1,\"expectedDraftVersion\":0,\"expectedOptionVersion\":0}")
+            owner.unsafe(put("/api/trips/{tripId}/plans/{optionId}", tripId, optionId),
+                    "{\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"expectedVersion\":1,\"expectedPlanVersion\":0,\"selections\":{\"stay\":{\"accommodationUnitId\":" + unitId + ",\"unitCount\":1}}}")
                     .andExpect(status().isOk()).andExpect(jsonPath("$.revisionSummary.adjustments.length()").value(1));
             assertEquals(oldPrice + 100, jdbc.queryForObject("SELECT base_price_cents FROM detour_planned_stay_night_snapshot WHERE planned_itinerary_id = ? AND night_date = DATE '2027-03-10'", Long.class, optionRowId));
         } finally {
@@ -298,7 +284,7 @@ class TripApiIntegrationTest {
         owner.unsafe(put("/api/trips/{tripId}/working-dates", tripId),
                 "{\"expectedVersion\":1,\"expectedDraftVersion\":0,\"startDate\":\"2027-03-16\",\"endDate\":\"2027-03-20\"}")
                 .andExpect(status().isConflict());
-        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft WHERE trip_id = (SELECT id FROM detour_trip WHERE public_id = ?)", Integer.class, UUID.fromString(tripId)));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_itinerary WHERE trip_id = (SELECT id FROM detour_trip WHERE public_id = ?)", Integer.class, UUID.fromString(tripId)));
     }
 
     @Test
@@ -315,7 +301,7 @@ class TripApiIntegrationTest {
     }
 
     @Test
-    void generatedTripNameFollowsDateChangesAndAvoidsExistingNames() throws Exception {
+    void tripNameRemainsStableWhenPlanDatesChange() throws Exception {
         Client owner = register("dated-trip-name@example.test");
         String base = "San Francisco - 2027-03-10 to 2027-03-14";
         String target = "San Francisco - 2027-03-15 to 2027-03-19";
@@ -326,7 +312,7 @@ class TripApiIntegrationTest {
         owner.unsafe(put("/api/trips/{tripId}/working-dates", jsonField(created, "id")),
                 "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"startDate\":\"2027-03-15\",\"endDate\":\"2027-03-19\"}")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value(target + " - A"));
+                .andExpect(jsonPath("$.name").value(base));
     }
 
     @Test
@@ -379,8 +365,8 @@ class TripApiIntegrationTest {
         jdbc.update("INSERT INTO detour_booking_stay_night_snapshot (booking_id, night_date, base_price_cents, tax_cents, fee_cents) SELECT ?, night_date, base_price_cents, tax_cents, fee_cents FROM detour_planned_stay_night_snapshot WHERE planned_itinerary_id = ?",
                 bookingRowId, earlyOptionId);
 
-        assertFalse(trips.advanceVersionForOption(tripRowId, ownerId, 3, earlyOptionId, 0));
-        assertTrue(trips.advanceVersionForOption(tripRowId, ownerId, 3, lateOptionId, 0));
+        assertTrue(trips.advanceVersionForOption(tripRowId, ownerId, 3, earlyOptionId, 0));
+        assertTrue(trips.advanceVersionForOption(tripRowId, ownerId, 4, lateOptionId, 0));
         trips.renameOption(lateOptionId, "Revised late stay");
         assertEquals("Early stay", jdbc.queryForObject("SELECT name FROM detour_planned_itinerary WHERE id = ?", String.class, earlyOptionId));
         assertEquals(frozenNightPrice, jdbc.queryForObject("SELECT base_price_cents FROM detour_planned_stay_night_snapshot WHERE planned_itinerary_id = ? ORDER BY night_date LIMIT 1", Long.class, earlyOptionId));
@@ -418,7 +404,7 @@ class TripApiIntegrationTest {
         Client owner = register("trip-owner@example.test");
         int tripsBefore = count("detour_trip");
         int travelersBefore = count("detour_trip_traveler");
-        int draftsBefore = count("detour_trip_draft");
+        int draftsBefore = count("detour_planned_itinerary");
         MvcResult result = owner.unsafe(post("/api/trips"), validRequest("\"travelerAges\":[17,17],\"budgetCents\":0"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").isString())
@@ -445,14 +431,14 @@ class TripApiIntegrationTest {
                 .andExpect(jsonPath("$.drafts.length()").value(1));
         assertEquals(tripsBefore + 1, count("detour_trip"));
         assertEquals(travelersBefore + 2, count("detour_trip_traveler"));
-        assertEquals(draftsBefore + 1, count("detour_trip_draft"));
+        assertEquals(draftsBefore + 1, count("detour_planned_itinerary"));
     }
 
     @Test
     void validatesEnvelopeAndNeverPersistsPartialAggregate() throws Exception {
         Client owner = register("validation@example.test");
         int tripsBefore = count("detour_trip");
-        int draftsBefore = count("detour_trip_draft");
+        int draftsBefore = count("detour_planned_itinerary");
         int travelersBefore = count("detour_trip_traveler");
         String[] invalidBodies = {
                 "{\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2}",
@@ -486,7 +472,7 @@ class TripApiIntegrationTest {
         owner.unsafe(post("/api/trips"), "{not-json").andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
         assertEquals(tripsBefore, count("detour_trip"));
-        assertEquals(draftsBefore, count("detour_trip_draft"));
+        assertEquals(draftsBefore, count("detour_planned_itinerary"));
         assertEquals(travelersBefore, count("detour_trip_traveler"));
     }
 
@@ -534,8 +520,8 @@ class TripApiIntegrationTest {
         Client owner = register("rollback@example.test");
         int tripsBefore = count("detour_trip");
         int travelersBefore = count("detour_trip_traveler");
-        int draftsBefore = count("detour_trip_draft");
-        jdbc.execute("CREATE TRIGGER fail_trip_draft BEFORE INSERT ON detour_trip_draft FOR EACH ROW CALL 'app.detour.trip.TripApiIntegrationTest$FailingDraftTrigger'");
+        int draftsBefore = count("detour_planned_itinerary");
+        jdbc.execute("CREATE TRIGGER fail_trip_draft BEFORE INSERT ON detour_planned_itinerary FOR EACH ROW CALL 'app.detour.trip.TripApiIntegrationTest$FailingDraftTrigger'");
         try {
             owner.unsafe(post("/api/trips"), validRequest("\"travelerAges\":[10,12]"))
                     .andExpect(status().isInternalServerError()).andExpect(jsonPath("$.code").value("INTERNAL_ERROR"));
@@ -544,7 +530,7 @@ class TripApiIntegrationTest {
         }
         assertEquals(tripsBefore, count("detour_trip"));
         assertEquals(travelersBefore, count("detour_trip_traveler"));
-        assertEquals(draftsBefore, count("detour_trip_draft"));
+        assertEquals(draftsBefore, count("detour_planned_itinerary"));
     }
 
     @Test
@@ -552,7 +538,7 @@ class TripApiIntegrationTest {
         Client owner = register("concurrent@example.test");
         int tripsBefore = count("detour_trip");
         int travelersBefore = count("detour_trip_traveler");
-        int draftsBefore = count("detour_trip_draft");
+        int draftsBefore = count("detour_planned_itinerary");
         try (ExecutorService workers = Executors.newFixedThreadPool(4)) {
             java.util.List<Future<Integer>> responses = new java.util.ArrayList<>();
             for (int index = 0; index < 8; index++) {
@@ -563,8 +549,8 @@ class TripApiIntegrationTest {
         }
         assertEquals(tripsBefore, count("detour_trip"));
         assertEquals(travelersBefore, count("detour_trip_traveler"));
-        assertEquals(draftsBefore, count("detour_trip_draft"));
-        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip trip LEFT JOIN detour_trip_draft draft ON draft.trip_id = trip.id WHERE draft.id IS NULL", Integer.class));
+        assertEquals(draftsBefore, count("detour_planned_itinerary"));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip trip LEFT JOIN detour_planned_itinerary draft ON draft.trip_id = trip.id WHERE draft.id IS NULL", Integer.class));
     }
 
     @Test
@@ -575,7 +561,7 @@ class TripApiIntegrationTest {
         String sourceId = tools.jackson.databind.json.JsonMapper.builder().build().readTree(created.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
         owner.unsafe(post("/api/trips/{tripId}/drafts", tripId), "{\"expectedVersion\":0}")
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("WORKING_PLAN_EXISTS"));
-        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft draft JOIN detour_trip trip ON trip.id = draft.trip_id WHERE trip.public_id = ?", Integer.class, UUID.fromString(tripId)));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_itinerary draft JOIN detour_trip trip ON trip.id = draft.trip_id WHERE trip.public_id = ?", Integer.class, UUID.fromString(tripId)));
     }
 
     @Test
@@ -651,11 +637,11 @@ class TripApiIntegrationTest {
         var body = tools.jackson.databind.json.JsonMapper.builder().build().readTree(created.getResponse().getContentAsString());
         String tripId = body.get("id").asString();
         String sourceId = body.get("drafts").get(0).get("id").asString();
-        jdbc.update("UPDATE detour_trip_draft SET version = 1 WHERE public_id = ?", UUID.fromString(sourceId));
+        jdbc.update("UPDATE detour_planned_itinerary SET version = 1 WHERE public_id = ?", UUID.fromString(sourceId));
         owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/duplicate", tripId, sourceId),
                         "{\"expectedVersion\":0,\"expectedDraftVersion\":0}")
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.fields.currentDraftVersion").value("1"));
-        jdbc.update("UPDATE detour_trip_draft SET version = 0 WHERE public_id = ?", UUID.fromString(sourceId));
+        jdbc.update("UPDATE detour_planned_itinerary SET version = 0 WHERE public_id = ?", UUID.fromString(sourceId));
         owner.unsafe(post("/api/trips/{tripId}/drafts", tripId), "{\"expectedVersion\":0}")
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("WORKING_PLAN_EXISTS"));
         mockMvc.perform(get("/api/trips/{tripId}", tripId).session(owner.session).cookie(owner.csrf))
@@ -677,7 +663,7 @@ class TripApiIntegrationTest {
         var promotedBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(promoted.getResponse().getContentAsString());
         String plannedId = promotedBody.get("planned").get(0).get("id").asString();
         long copiedFare = promotedBody.get("planned").get(0).get("selections").get("airfare").get("outboundBaseFareCents").asLong();
-        jdbc.update("UPDATE flight_instance SET base_fare_cents = base_fare_cents + 999 WHERE id = (SELECT outbound_flight_instance_id FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?))", UUID.fromString(draftId));
+        jdbc.update("UPDATE flight_instance SET base_fare_cents = base_fare_cents + 999 WHERE id = (SELECT outbound_flight_instance_id FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?))", UUID.fromString(draftId));
         owner.unsafe(get("/api/trips/{tripId}", tripId), null).andExpect(status().isOk()).andExpect(jsonPath("$.planned[0].id").value(plannedId))
                 .andExpect(jsonPath("$.planned[0].selections.airfare.outboundBaseFareCents").value(copiedFare));
         owner.unsafe(post("/api/trips/{tripId}/alternatives/{alternativeId}/duplicate", tripId, plannedId), "{\"expectedVersion\":1}")
@@ -689,7 +675,7 @@ class TripApiIntegrationTest {
         String secondPlannedId = tools.jackson.databind.json.JsonMapper.builder().build().readTree(secondPromoted.getResponse().getContentAsString()).get("planned").get(1).get("id").asString();
 
         owner.unsafe(post("/api/trips/{tripId}/drafts/{draftId}/duplicate", tripId, plannedId), "{\"expectedVersion\":2,\"expectedDraftVersion\":0}")
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("IMMUTABLE_ALTERNATIVE"));
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("WORKING_PLAN_EXISTS"));
         owner.unsafe(delete("/api/trips/{tripId}/alternatives/{alternativeId}", tripId, plannedId), "{\"expectedVersion\":2}")
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.fields.confirmed").exists());
         owner.unsafe(delete("/api/trips/{tripId}/alternatives/{alternativeId}", tripId, plannedId), "{\"expectedVersion\":2,\"confirmed\":true}")
@@ -800,7 +786,7 @@ class TripApiIntegrationTest {
         jdbc.update("UPDATE rental_vehicle_class SET daily_base_price_cents = daily_base_price_cents + 5000");
 
         // Mutate source draft selection in DB (change unit_count)
-        jdbc.update("UPDATE detour_trip_draft_stay_selection SET unit_count = 5 WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)", UUID.fromString(draftId));
+        jdbc.update("UPDATE detour_planned_stay_snapshot SET unit_count = 5 WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)", UUID.fromString(draftId));
 
         // Reload Trip detail and assert Planned snapshot is identical to original copied facts
         owner.unsafe(get("/api/trips/{tripId}", tripId), null).andExpect(status().isOk())
@@ -874,7 +860,7 @@ class TripApiIntegrationTest {
 
         // 4. Draft Delete route with Planned ID
         owner.unsafe(delete("/api/trips/{tripId}/drafts/{draftId}", tripId, plannedId), "{\"expectedVersion\":1,\"expectedDraftVersion\":0}")
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("IMMUTABLE_ALTERNATIVE"));
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("WORKING_PLAN_REQUIRED"));
     }
 
     @Test
@@ -896,7 +882,7 @@ class TripApiIntegrationTest {
         // Verify version is still 0 and no planned rows exist
         owner.unsafe(get("/api/trips/{tripId}", tripId), null).andExpect(status().isOk())
                 .andExpect(jsonPath("$.version").value(0)).andExpect(jsonPath("$.planned.length()").value(0));
-        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_itinerary WHERE trip_id = (SELECT id FROM detour_trip WHERE public_id = ?)", Integer.class, UUID.fromString(tripId)));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_itinerary WHERE trip_id = (SELECT id FROM detour_trip WHERE public_id = ?)", Integer.class, UUID.fromString(tripId)));
 
         // Retry promotion succeeds
         owner.unsafe(post("/api/trips/{tripId}/options", tripId), "{\"name\":\"Saved option\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
@@ -968,8 +954,8 @@ class TripApiIntegrationTest {
         insertSfoStaySelection(draftId);
         insertSfoRentalSelection(draftId);
 
-        int initialSeats = jdbc.queryForObject("SELECT available_seats FROM flight_instance WHERE id = (SELECT outbound_flight_instance_id FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?))", Integer.class, UUID.fromString(draftId));
-        int initialStayInv = jdbc.queryForObject("SELECT available_inventory FROM accommodation_nightly_inventory WHERE accommodation_unit_id = (SELECT accommodation_unit_id FROM detour_trip_draft_stay_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)) AND night_date = DATE '2027-03-10'", Integer.class, UUID.fromString(draftId));
+        int initialSeats = jdbc.queryForObject("SELECT available_seats FROM flight_instance WHERE id = (SELECT outbound_flight_instance_id FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?))", Integer.class, UUID.fromString(draftId));
+        int initialStayInv = jdbc.queryForObject("SELECT available_inventory FROM accommodation_nightly_inventory WHERE accommodation_unit_id = (SELECT accommodation_unit_id FROM detour_planned_stay_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)) AND night_date = DATE '2027-03-10'", Integer.class, UUID.fromString(draftId));
         int initialOccupancyCount = count("rental_unit_occupancy");
 
         // 1. Promotion
@@ -977,24 +963,24 @@ class TripApiIntegrationTest {
                 .andExpect(status().isCreated()).andReturn();
         String plannedId = tools.jackson.databind.json.JsonMapper.builder().build().readTree(promoted.getResponse().getContentAsString()).get("planned").get(0).get("id").asString();
 
-        assertEquals(initialSeats, jdbc.queryForObject("SELECT available_seats FROM flight_instance WHERE id = (SELECT outbound_flight_instance_id FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?))", Integer.class, UUID.fromString(draftId)));
-        assertEquals(initialStayInv, jdbc.queryForObject("SELECT available_inventory FROM accommodation_nightly_inventory WHERE accommodation_unit_id = (SELECT accommodation_unit_id FROM detour_trip_draft_stay_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)) AND night_date = DATE '2027-03-10'", Integer.class, UUID.fromString(draftId)));
+        assertEquals(initialSeats, jdbc.queryForObject("SELECT available_seats FROM flight_instance WHERE id = (SELECT outbound_flight_instance_id FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?))", Integer.class, UUID.fromString(draftId)));
+        assertEquals(initialStayInv, jdbc.queryForObject("SELECT available_inventory FROM accommodation_nightly_inventory WHERE accommodation_unit_id = (SELECT accommodation_unit_id FROM detour_planned_stay_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)) AND night_date = DATE '2027-03-10'", Integer.class, UUID.fromString(draftId)));
         assertEquals(initialOccupancyCount, count("rental_unit_occupancy"));
 
         // 2. Duplicate Planned is rejected because the Working plan is unique.
         owner.unsafe(post("/api/trips/{tripId}/alternatives/{alternativeId}/duplicate", tripId, plannedId), "{\"expectedVersion\":1}")
                 .andExpect(status().isConflict());
 
-        assertEquals(initialSeats, jdbc.queryForObject("SELECT available_seats FROM flight_instance WHERE id = (SELECT outbound_flight_instance_id FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?))", Integer.class, UUID.fromString(draftId)));
-        assertEquals(initialStayInv, jdbc.queryForObject("SELECT available_inventory FROM accommodation_nightly_inventory WHERE accommodation_unit_id = (SELECT accommodation_unit_id FROM detour_trip_draft_stay_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)) AND night_date = DATE '2027-03-10'", Integer.class, UUID.fromString(draftId)));
+        assertEquals(initialSeats, jdbc.queryForObject("SELECT available_seats FROM flight_instance WHERE id = (SELECT outbound_flight_instance_id FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?))", Integer.class, UUID.fromString(draftId)));
+        assertEquals(initialStayInv, jdbc.queryForObject("SELECT available_inventory FROM accommodation_nightly_inventory WHERE accommodation_unit_id = (SELECT accommodation_unit_id FROM detour_planned_stay_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)) AND night_date = DATE '2027-03-10'", Integer.class, UUID.fromString(draftId)));
         assertEquals(initialOccupancyCount, count("rental_unit_occupancy"));
 
         // 3. Delete Planned
         owner.unsafe(delete("/api/trips/{tripId}/alternatives/{alternativeId}", tripId, plannedId), "{\"expectedVersion\":1,\"confirmed\":true}")
                 .andExpect(status().isOk());
 
-        assertEquals(initialSeats, jdbc.queryForObject("SELECT available_seats FROM flight_instance WHERE id = (SELECT outbound_flight_instance_id FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?))", Integer.class, UUID.fromString(draftId)));
-        assertEquals(initialStayInv, jdbc.queryForObject("SELECT available_inventory FROM accommodation_nightly_inventory WHERE accommodation_unit_id = (SELECT accommodation_unit_id FROM detour_trip_draft_stay_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)) AND night_date = DATE '2027-03-10'", Integer.class, UUID.fromString(draftId)));
+        assertEquals(initialSeats, jdbc.queryForObject("SELECT available_seats FROM flight_instance WHERE id = (SELECT outbound_flight_instance_id FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?))", Integer.class, UUID.fromString(draftId)));
+        assertEquals(initialStayInv, jdbc.queryForObject("SELECT available_inventory FROM accommodation_nightly_inventory WHERE accommodation_unit_id = (SELECT accommodation_unit_id FROM detour_planned_stay_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)) AND night_date = DATE '2027-03-10'", Integer.class, UUID.fromString(draftId)));
         assertEquals(initialOccupancyCount, count("rental_unit_occupancy"));
     }
 
@@ -1115,7 +1101,7 @@ class TripApiIntegrationTest {
         insertSfoAirfareSelection(draftId);
 
         // Reduce available seats on outbound flight to 2
-        jdbc.update("UPDATE flight_instance SET available_seats = 2 WHERE id = (SELECT outbound_flight_instance_id FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?))", UUID.fromString(draftId));
+        jdbc.update("UPDATE flight_instance SET available_seats = 2 WHERE id = (SELECT outbound_flight_instance_id FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?))", UUID.fromString(draftId));
 
         // Update traveler count to 3
         owner.unsafe(put("/api/trips/{tripId}", tripId),
@@ -1155,9 +1141,9 @@ class TripApiIntegrationTest {
                 .andExpect(jsonPath("$.drafts[0].selections.rental").doesNotExist());
 
         // Verify DB selection tables have no rows for this draft
-        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)", Integer.class, UUID.fromString(draftId)));
-        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft_stay_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)", Integer.class, UUID.fromString(draftId)));
-        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft_rental_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)", Integer.class, UUID.fromString(draftId)));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)", Integer.class, UUID.fromString(draftId)));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_stay_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)", Integer.class, UUID.fromString(draftId)));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_rental_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)", Integer.class, UUID.fromString(draftId)));
     }
 
     @Test
@@ -1179,7 +1165,7 @@ class TripApiIntegrationTest {
                 .andExpect(status().isCreated());
 
         // Revise the same Working plan and save it again.
-        jdbc.update("DELETE FROM detour_trip_draft_airfare_selection WHERE draft_id = (SELECT id FROM detour_trip_draft WHERE public_id = ?)", UUID.fromString(draft1Id));
+        jdbc.update("DELETE FROM detour_planned_airfare_snapshot WHERE planned_itinerary_id = (SELECT id FROM detour_planned_itinerary WHERE public_id = ?)", UUID.fromString(draft1Id));
         insertSfoRentalSelection(draft1Id);
 
         MvcResult plan2Result = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
@@ -1300,8 +1286,8 @@ class TripApiIntegrationTest {
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.fields.sourcePlannedItineraryIds").value("Duplicate source alternatives are not allowed."));
 
-        // 3. Draft ID passed instead of Planned ID -> 404 RESOURCE_NOT_FOUND
-        String newDraftId = draftA1Id;
+        // 3. Unknown canonical plan ID -> 404 RESOURCE_NOT_FOUND
+        String newDraftId = UUID.randomUUID().toString();
         userA.unsafe(post("/api/trips/{tripId}/duplicate", tripA1Id),
                 "{\"expectedVersion\":1,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"sourcePlannedItineraryIds\":[\"" + newDraftId + "\"]}")
                 .andExpect(status().isNotFound())
@@ -1363,7 +1349,7 @@ class TripApiIntegrationTest {
     }
 
     private void insertSfoHarborStaySelection(String draftId) {
-        jdbc.update("""
+        app.detour.trip.TestPlanSelections.insert(jdbc, """
                 INSERT INTO detour_trip_draft_stay_selection (draft_id, accommodation_unit_id, unit_count)
                 VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                     (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-harbor'), 1)
@@ -1371,7 +1357,7 @@ class TripApiIntegrationTest {
     }
 
     private void insertSfoAirfareSelection(String draftId) {
-        jdbc.update("""
+        app.detour.trip.TestPlanSelections.insert(jdbc, """
                 INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id)
                 VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                     (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-out-sfo-d1' AND instance.service_date = DATE '2027-03-10'),
@@ -1380,7 +1366,7 @@ class TripApiIntegrationTest {
     }
 
     private void insertSfoStaySelection(String draftId) {
-        jdbc.update("""
+        app.detour.trip.TestPlanSelections.insert(jdbc, """
                 INSERT INTO detour_trip_draft_stay_selection (draft_id, accommodation_unit_id, unit_count)
                 VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                     (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit'), 1)
@@ -1388,7 +1374,7 @@ class TripApiIntegrationTest {
     }
 
     private void insertSfoRentalSelection(String draftId) {
-        jdbc.update("""
+        app.detour.trip.TestPlanSelections.insert(jdbc, """
                 INSERT INTO detour_trip_draft_rental_selection (draft_id, rental_unit_id, pickup_at, return_at)
                 VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                     (SELECT id FROM rental_unit WHERE catalog_key = 'rental-unit-sfo-economy-01'),
@@ -1446,8 +1432,8 @@ class TripApiIntegrationTest {
         }
         String optionId = tools.jackson.databind.json.JsonMapper.builder().build()
                 .readTree(saved.getResponse().getContentAsString()).get("savedOptions").get(0).get("id").asString();
-        owner.unsafe(post("/api/trips/{tripId}/options/{optionId}/load", tripId, optionId),
-                "{\"expectedVersion\":2,\"expectedDraftVersion\":1,\"expectedOptionVersion\":0,\"replaceWorking\":true}")
+        owner.unsafe(put("/api/trips/{tripId}/plans/{optionId}/primary", tripId, optionId),
+                "{\"expectedVersion\":2,\"expectedPlanVersion\":0}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.startDate").value("2027-03-15"));
         for (String endpoint : java.util.List.of("/api/trips", "/api/profile")) {
             mockMvc.perform(get(endpoint).session(owner.session).cookie(owner.csrf))
@@ -1455,7 +1441,7 @@ class TripApiIntegrationTest {
                     .andExpect(jsonPath("$.past.length()").value(0))
                     .andExpect(jsonPath("$.upcoming[0].startDate").value("2027-03-15"))
                     .andExpect(jsonPath("$.upcoming[0].inProgress").value(false))
-                    .andExpect(jsonPath("$.upcoming[0].expiredAlternativeCount").value(0));
+                    .andExpect(jsonPath("$.upcoming[0].expiredAlternativeCount").value(1));
         }
     }
 
@@ -1602,13 +1588,13 @@ class TripApiIntegrationTest {
         var tripJson = tools.jackson.databind.json.JsonMapper.builder().build().readTree(tripRes.getResponse().getContentAsString());
         String draft1Id = tripJson.get("drafts").get(0).get("id").asString();
 
-        jdbc.update("""
+        app.detour.trip.TestPlanSelections.insert(jdbc, """
                 INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id)
                 VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                     (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-out-sfo-d1' AND instance.service_date = DATE '2027-03-10'),
                     (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-in-sfo-d1' AND instance.service_date = DATE '2027-03-15'))
                 """, UUID.fromString(draft1Id));
-        jdbc.update("""
+        app.detour.trip.TestPlanSelections.insert(jdbc, """
                 INSERT INTO detour_trip_draft_stay_selection (draft_id, accommodation_unit_id, unit_count)
                 VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                     (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit'), 1)
@@ -1663,13 +1649,13 @@ class TripApiIntegrationTest {
         var tripJson = tools.jackson.databind.json.JsonMapper.builder().build().readTree(tripRes.getResponse().getContentAsString());
         String draft1Id = tripJson.get("drafts").get(0).get("id").asString();
 
-        jdbc.update("""
+        app.detour.trip.TestPlanSelections.insert(jdbc, """
                 INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id)
                 VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                     (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-out-sfo-d1' AND instance.service_date = DATE '2027-03-10'),
                     (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-in-sfo-d1' AND instance.service_date = DATE '2027-03-15'))
                 """, UUID.fromString(draft1Id));
-        jdbc.update("""
+        app.detour.trip.TestPlanSelections.insert(jdbc, """
                 INSERT INTO detour_trip_draft_stay_selection (draft_id, accommodation_unit_id, unit_count)
                 VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                     (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit'), 1)
@@ -1694,7 +1680,7 @@ class TripApiIntegrationTest {
 
         assertEquals(0, (int) jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip WHERE public_id = ?", Integer.class, UUID.fromString(tripId)));
         assertEquals(0, (int) jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_traveler WHERE trip_id NOT IN (SELECT id FROM detour_trip)", Integer.class));
-        assertEquals(0, (int) jdbc.queryForObject("SELECT COUNT(*) FROM detour_trip_draft WHERE trip_id NOT IN (SELECT id FROM detour_trip)", Integer.class));
+        assertEquals(0, (int) jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_itinerary WHERE trip_id NOT IN (SELECT id FROM detour_trip)", Integer.class));
         assertEquals(0, (int) jdbc.queryForObject("SELECT COUNT(*) FROM detour_planned_itinerary WHERE trip_id NOT IN (SELECT id FROM detour_trip)", Integer.class));
 
         assertEquals(flightsBefore, count("flight_instance"));

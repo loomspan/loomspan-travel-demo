@@ -18,11 +18,71 @@ import org.junit.jupiter.api.Test;
 class TripModelForwardMigrationIntegrationTest {
 
     @Test
+    void preservesWorkingUuidAndChoosesOldestOptionWhenWorkingIsAbsent() throws Exception {
+        String url = url("v21-options");
+        Flyway.configure().dataSource(url, "sa", "").locations("classpath:db/migration").target(MigrationVersion.fromVersion("20")).load().migrate();
+        UUID working = UUID.randomUUID(), option = UUID.randomUUID(); long withWorking, withoutWorking, empty;
+        try (Connection c = DriverManager.getConnection(url, "sa", "")) {
+            long owner = insert(c, "INSERT INTO detour_user (canonical_email, password_hash, created_at) VALUES ('v21@example.test', 'hash', CURRENT_TIMESTAMP)");
+            long destination = scalar(c, "SELECT MIN(id) FROM catalog_destination");
+            String tripSql = "INSERT INTO detour_trip (public_id, owner_user_id, catalog_destination_id, start_date, end_date, traveler_count, display_label, name) VALUES (?, ?, ?, DATE '2027-03-10', DATE '2027-03-14', 2, 'Legacy', 'Legacy')";
+            withWorking = insert(c, tripSql, UUID.randomUUID(), owner, destination);
+            withoutWorking = insert(c, tripSql, UUID.randomUUID(), owner, destination);
+            empty = insert(c, tripSql, UUID.randomUUID(), owner, destination);
+            for (long trip : java.util.List.of(withWorking, withoutWorking, empty)) {
+                insert(c, "INSERT INTO detour_trip_traveler (trip_id, traveler_ordinal, age) VALUES (?, 1, NULL)", trip);
+                insert(c, "INSERT INTO detour_trip_traveler (trip_id, traveler_ordinal, age) VALUES (?, 2, 42)", trip);
+            }
+            insert(c, "INSERT INTO detour_trip_draft (public_id, trip_id, start_date, end_date) VALUES (?, ?, DATE '2027-03-10', DATE '2027-03-14')", working, withWorking);
+            String planSql = "INSERT INTO detour_planned_itinerary (public_id, trip_id, name, start_date, end_date) VALUES (?, ?, ?, DATE '2027-03-10', DATE '2027-03-14')";
+            long booked = insert(c, planSql, UUID.randomUUID(), withWorking, "Booked alternative");
+            long oldest = insert(c, planSql, option, withoutWorking, "Oldest alternative");
+            long newerBooked = insert(c, planSql, UUID.randomUUID(), withoutWorking, "Newer booked");
+            for (long plan : java.util.List.of(booked, newerBooked)) {
+                long trip = plan == booked ? withWorking : withoutWorking;
+                insert(c, "INSERT INTO detour_booking (public_id, trip_id, planned_itinerary_id, booking_reference, status, grand_total_cents, idempotency_key, created_at) VALUES (?, ?, ?, ?, 'ACTIVE', 100, ?, CURRENT_TIMESTAMP)", UUID.randomUUID(), trip, plan, "BOOK-" + plan, "key-" + plan);
+            }
+        }
+        latest(url).migrate();
+        try (Connection c = DriverManager.getConnection(url, "sa", "")) {
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_trip t JOIN detour_planned_itinerary p ON p.id = t.primary_plan_id WHERE t.id = " + withWorking + " AND p.public_id = '" + working + "'"));
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_trip t JOIN detour_planned_itinerary p ON p.id = t.primary_plan_id WHERE t.id = " + withoutWorking + " AND p.public_id = '" + option + "'"));
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_itinerary WHERE trip_id = " + empty));
+            assertEquals(0, count(c, "SELECT COUNT(*) FROM detour_trip WHERE primary_plan_id IS NULL"));
+            assertEquals(5, count(c, "SELECT COUNT(*) FROM detour_plan_traveler WHERE age IS NULL"));
+            assertEquals(2, count(c, "SELECT COUNT(*) FROM detour_booking WHERE purchased_traveler_count = 2 AND purchased_start_date = DATE '2027-03-10' AND purchased_end_date = DATE '2027-03-14'"));
+            assertEquals(2, count(c, "SELECT COUNT(*) FROM detour_booking_traveler WHERE age IS NULL"));
+        }
+    }
+
+    @Test
+    void refusesWorkingConversionWithMissingNightAndRetainsSourceOnRestart() throws Exception {
+        String url = url("v21-failure");
+        Flyway.configure().dataSource(url, "sa", "").locations("classpath:db/migration").target(MigrationVersion.fromVersion("20")).load().migrate();
+        long draft;
+        try (Connection c = DriverManager.getConnection(url, "sa", "")) {
+            long owner = insert(c, "INSERT INTO detour_user (canonical_email, password_hash, created_at) VALUES ('v21-failure@example.test', 'hash', CURRENT_TIMESTAMP)");
+            long destination = scalar(c, "SELECT MIN(id) FROM catalog_destination");
+            long trip = insert(c, "INSERT INTO detour_trip (public_id, owner_user_id, catalog_destination_id, start_date, end_date, traveler_count, display_label, name) VALUES (?, ?, ?, DATE '2027-03-10', DATE '2027-03-14', 1, 'Failure', 'Failure')", UUID.randomUUID(), owner, destination);
+            draft = insert(c, "INSERT INTO detour_trip_draft (public_id, trip_id, start_date, end_date) VALUES (?, ?, DATE '2027-03-10', DATE '2027-03-14')", UUID.randomUUID(), trip);
+            long unit = scalar(c, "SELECT MIN(id) FROM accommodation_unit");
+            insert(c, "INSERT INTO detour_trip_draft_stay_selection VALUES (?, ?, 1)", draft, unit);
+            try (PreparedStatement statement = c.prepareStatement("DELETE FROM accommodation_nightly_inventory WHERE accommodation_unit_id = ? AND night_date = DATE '2027-03-11'")) {statement.setLong(1, unit); statement.executeUpdate();}
+        }
+        assertThrows(org.flywaydb.core.api.FlywayException.class, () -> latest(url).migrate());
+        assertThrows(org.flywaydb.core.api.FlywayException.class, () -> latest(url).migrate());
+        try (Connection c = DriverManager.getConnection(url, "sa", "")) {
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_trip_draft WHERE id = " + draft));
+            assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_trip_draft_stay_selection WHERE draft_id = " + draft));
+        }
+    }
+
+    @Test
     void freshDatabaseHasNamedDatedModel() throws Exception {
         String url = url("fresh");
         Flyway flyway = latest(url);
         flyway.migrate();
-        assertEquals("20", flyway.info().current().getVersion().getVersion());
+        assertEquals("21", flyway.info().current().getVersion().getVersion());
         try (Connection c = DriverManager.getConnection(url, "sa", "")) {
             assertEquals(0, count(c, "SELECT COUNT(*) FROM detour_trip_draft"));
             assertTrue(hasColumn(c, "DETOUR_TRIP", "NAME"));
@@ -88,9 +148,9 @@ class TripModelForwardMigrationIntegrationTest {
             assertEquals(3, count(c, "SELECT COUNT(*) FROM detour_trip_draft"));
             assertEquals(0, count(c, "SELECT COUNT(*) FROM (SELECT trip_id FROM detour_trip_draft GROUP BY trip_id HAVING COUNT(*) <> 1)"));
             assertEquals(workingCandidate, scalar(c, "SELECT id FROM detour_trip_draft WHERE trip_id = (SELECT trip_id FROM detour_trip_draft WHERE id = " + workingCandidate + ")"));
-            assertEquals(5, count(c, "SELECT COUNT(*) FROM detour_planned_itinerary"));
+            assertEquals(8, count(c, "SELECT COUNT(*) FROM detour_planned_itinerary"));
             assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_rental_snapshot r JOIN detour_planned_itinerary p ON p.id = r.planned_itinerary_id WHERE p.name = 'Recovered option " + copiedCandidate + "'"));
-            assertEquals(4, count(c, "SELECT COUNT(*) FROM detour_planned_stay_night_snapshot"));
+            assertEquals(8, count(c, "SELECT COUNT(*) FROM detour_planned_stay_night_snapshot"));
             assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_stay_snapshot s JOIN detour_planned_itinerary p ON p.id = s.planned_itinerary_id WHERE p.name = 'Recovered option " + copiedStayCandidate + "'"));
             assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_airfare_snapshot a JOIN detour_planned_itinerary p ON p.id = a.planned_itinerary_id WHERE p.name = 'Recovered option " + copiedAirfareCandidate + "' AND a.outbound_base_fare_cents > 0 AND a.return_base_fare_cents > 0"));
             assertEquals(1, count(c, "SELECT COUNT(*) FROM detour_planned_airfare_snapshot a JOIN detour_planned_itinerary p ON p.id = a.planned_itinerary_id WHERE p.name = 'Recovered option " + copiedAirfareCandidate + "' AND a.outbound_carrier_name IS NOT NULL AND a.return_carrier_name IS NOT NULL AND a.outbound_flight_number IS NOT NULL AND a.return_flight_number IS NOT NULL AND a.outbound_departure_time IS NOT NULL AND a.return_arrival_time IS NOT NULL AND a.outbound_departure_timezone IS NOT NULL AND a.return_arrival_timezone IS NOT NULL AND a.outbound_duration_minutes > 0 AND a.return_duration_minutes > 0 AND a.total_duration_minutes = a.outbound_duration_minutes + a.return_duration_minutes"));

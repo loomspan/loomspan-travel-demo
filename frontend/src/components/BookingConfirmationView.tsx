@@ -15,6 +15,9 @@ export function BookingConfirmationView({
   onViewInWorkspace,
   onViewAllTrips,
 }: BookingConfirmationViewProps) {
+  trip = {...trip, startDate: booking.purchasedStartDate ?? trip.startDate, endDate: booking.purchasedEndDate ?? trip.endDate,
+    travelerCount: booking.purchasedTravelerCount || trip.travelerCount,
+    travelerAges: booking.purchasedTravelerAges === undefined ? trip.travelerAges : booking.purchasedTravelerAges};
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const handleCopy = async (code: string) => {
@@ -33,20 +36,21 @@ export function BookingConfirmationView({
 
   const tally = booking.tally;
   const selections = booking.selections;
+  const canceled = booking.status === 'CANCELED';
 
   return (
     <section className="booking-confirmation-view" aria-labelledby="confirmation-heading">
       {/* Accessible screen-reader live announcement */}
       <div className="sr-only" role="status" aria-live="polite">
-        {`Booking confirmed! Reference: ${booking.bookingReference}`}
+        {`${canceled ? 'Booking canceled.' : 'Booking confirmed!'} Reference: ${booking.bookingReference}`}
       </div>
 
       <div className="confirmation-banner card">
         <div className="confirmation-banner-header">
-          <span className="success-icon" aria-hidden="true">✓</span>
+          <span className="success-icon" aria-hidden="true">{canceled ? '−' : '✓'}</span>
           <div>
-            <p className="eyebrow">RESERVATION COMPLETE</p>
-            <h2 id="confirmation-heading" className="confirmation-title" tabIndex={-1}>Booking Confirmed!</h2>
+            <p className="eyebrow">{canceled ? 'BOOKING HISTORY' : 'RESERVATION COMPLETE'}</p>
+            <h2 id="confirmation-heading" className="confirmation-title" tabIndex={-1}>{canceled ? 'Booking Canceled' : 'Booking Confirmed!'}</h2>
             <p className="confirmation-booking-ref">
               Booking Reference: <strong className="ref-code">{booking.bookingReference}</strong>
             </p>

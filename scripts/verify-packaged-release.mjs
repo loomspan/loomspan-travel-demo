@@ -112,42 +112,57 @@ try {
   await request(base, `/api/trips/${tripId}/drafts/${draftId}/plan`, {method: 'POST', session, csrf, body: {
     expectedVersion: selected.version, expectedDraftVersion: selected.workingPlan.version,
   }, expected: 409});
-  const firstOption = (await request(base, `/api/trips/${tripId}/options`, {method: 'POST', session, csrf, body: {
-    name: 'Early departure', expectedVersion: selected.version, expectedDraftVersion: selected.workingPlan.version,
+  const firstOption = (await request(base, `/api/trips/${tripId}/plans/${draftId}/copy`, {method: 'POST', session, csrf, body: {
+    name: 'Early departure', expectedVersion: selected.version, expectedPlanVersion: selected.plans[0].version,
   }, expected: 201})).data;
-  assert.equal(firstOption.savedOptions.length, 1);
-  assert.equal(firstOption.savedOptions[0].startDate, '2027-03-10');
-  const changedDates = (await request(base, `/api/trips/${tripId}/working-dates`, {method: 'PUT', session, csrf, body: {
-    expectedVersion: firstOption.version, expectedDraftVersion: firstOption.workingPlan.version,
-    startDate: '2027-03-15', endDate: '2027-03-19',
+  const laterId = firstOption.plans[1].id;
+  const changedDates = (await request(base, `/api/trips/${tripId}/plans/${laterId}`, {method: 'PUT', session, csrf, body: {
+    expectedVersion: firstOption.version, expectedPlanVersion: firstOption.plans[1].version,
+    startDate: '2027-03-15', endDate: '2027-03-19', travelerCount: 2, travelerAges: [30, 35],
   }})).data;
-  const laterFlights = (await request(base, `/api/trips/${tripId}/drafts/${draftId}/airfare`, {session})).data.options;
+  assert.equal(changedDates.primaryPlanId, draftId);
+  assert.equal(changedDates.plans[0].startDate, '2027-03-10');
+  assert.equal(changedDates.plans[0].travelerCount, 1);
+  const laterFlights = (await request(base, `/api/trips/${tripId}/plans/${laterId}/airfare`, {session})).data.options;
   assert.ok(laterFlights.length > 0, 'Expected seeded airfare on later dates');
-  const laterSelected = (await request(base, `/api/trips/${tripId}/drafts/${draftId}/airfare`, {method: 'PUT', session, csrf, body: {
-    expectedVersion: changedDates.version, expectedDraftVersion: changedDates.workingPlan.version,
+  const laterSelected = (await request(base, `/api/trips/${tripId}/plans/${laterId}/airfare`, {method: 'PUT', session, csrf, body: {
+    expectedVersion: changedDates.version, expectedDraftVersion: changedDates.plans[1].version,
     outboundFlightInstanceId: laterFlights[0].outbound.flightInstanceId,
     returnFlightInstanceId: laterFlights[0].returnFlight.flightInstanceId,
   }})).data;
-  const planned = (await request(base, `/api/trips/${tripId}/options`, {method: 'POST', session, csrf, body: {
-    name: 'Later departure', expectedVersion: laterSelected.version, expectedDraftVersion: laterSelected.workingPlan.version,
-  }, expected: 201})).data;
-  assert.equal(planned.savedOptions.length, 2);
-  assert.equal(planned.savedOptions[0].startDate, '2027-03-10');
-  assert.equal(planned.savedOptions[1].startDate, '2027-03-15');
-  assert.notEqual(planned.savedOptions[0].id, planned.savedOptions[1].id);
-  await request(base, `/api/trips/${tripId}/options`, {method: 'POST', session, body: {
-    name: 'CSRF blocked', expectedVersion: planned.version, expectedDraftVersion: planned.workingPlan.version,
+  const planned = (await request(base, `/api/trips/${tripId}/plans/${laterId}/name`, {method: 'PUT', session, csrf, body: {
+    name: 'Later departure', expectedVersion: laterSelected.version, expectedPlanVersion: laterSelected.plans[1].version,
+  }})).data;
+  await request(base, `/api/trips/${tripId}/plans/${laterId}/primary`, {method: 'PUT', session, body: {
+    expectedVersion: planned.version, expectedPlanVersion: planned.plans[1].version,
   }, expected: 403});
   const booking = (await request(base, `/api/trips/${tripId}/bookings`, {method: 'POST', session, csrf, body: {
-    plannedItineraryId: planned.savedOptions[1].id, expectedVersion: planned.version, idempotencyKey: 'release-smoke-booking',
+    plannedItineraryId: laterId, expectedVersion: planned.version, idempotencyKey: 'release-smoke-booking',
   }, expected: 201})).data;
-  assert.ok(booking.bookingReference);
+  assert.equal(booking.purchasedTravelerCount, 2);
   const replay = (await request(base, `/api/trips/${tripId}/bookings`, {method: 'POST', session, csrf, body: {
-    plannedItineraryId: planned.savedOptions[1].id, expectedVersion: planned.version, idempotencyKey: 'release-smoke-booking',
+    plannedItineraryId: laterId, expectedVersion: planned.version, idempotencyKey: 'release-smoke-booking',
   }, expected: 200})).data;
   assert.equal(replay.bookingReference, booking.bookingReference);
   const afterBooking = (await request(base, `/api/trips/${tripId}`, {session})).data;
-  await request(base, `/api/trips/${tripId}/bookings/${booking.id}/cancel`, {method: 'POST', session, csrf, body: {expectedVersion: afterBooking.version}});
+  const promoted = (await request(base, `/api/trips/${tripId}/plans/${laterId}/primary`, {method: 'PUT', session, csrf, body: {
+    expectedVersion: afterBooking.version, expectedPlanVersion: afterBooking.plans[1].version,
+  }})).data;
+  assert.equal(promoted.primaryPlanId, laterId);
+  const edited = (await request(base, `/api/trips/${tripId}/plans/${laterId}`, {method: 'PUT', session, csrf, body: {
+    expectedVersion: promoted.version, expectedPlanVersion: promoted.plans[0].version,
+    startDate: '2027-03-16', endDate: '2027-03-20', travelerCount: 3, travelerAges: [30, 35, 8],
+  }})).data;
+  assert.deepEqual(edited.booking, booking);
+  await request(base, `/api/trips/${tripId}/plans/${laterId}/airfare`, {method: 'DELETE', session, csrf, body: {
+    expectedVersion: edited.version, expectedDraftVersion: edited.plans[0].version,
+  }, expected: 409});
+  const copied = (await request(base, `/api/trips/${tripId}/plans/${laterId}/copy`, {method: 'POST', session, csrf, body: {
+    name: 'Unconfirmed copy', expectedVersion: edited.version, expectedPlanVersion: edited.plans[0].version,
+  }, expected: 201})).data;
+  assert.equal(copied.plans[2].booked, false);
+  assert.deepEqual(copied.plans[2].lockedComponents, []);
+  await request(base, `/api/trips/${tripId}/bookings/${booking.id}/cancel`, {method: 'POST', session, csrf, body: {expectedVersion: copied.version}});
   const beforeRestart = (await request(base, `/api/trips/${tripId}/bookings`, {session})).data;
   assert.equal(beforeRestart[0].status, 'CANCELED');
   await stop();
@@ -159,10 +174,17 @@ try {
   const login = await request(base, '/api/auth/login', {method: 'POST', csrf: newCsrf, body: {email, password}, expected: 204});
   const newSession = cookie(login.response, 'JSESSIONID');
   const persisted = (await request(base, `/api/trips/${tripId}`, {session: newSession})).data;
-  assert.equal(persisted.savedOptions.length, 2);
-  assert.equal(persisted.savedOptions[0].id, planned.savedOptions[0].id);
-  assert.equal(persisted.savedOptions[1].id, planned.savedOptions[1].id);
-  assert.equal(persisted.savedOptions[1].startDate, '2027-03-15');
+  assert.equal(persisted.plans.length, 3);
+  assert.equal(persisted.primaryPlanId, laterId);
+  assert.equal(persisted.plans[0].name, 'Later departure');
+  assert.equal(persisted.plans[0].startDate, '2027-03-16');
+  assert.equal(persisted.plans[0].travelerCount, 3);
+  assert.equal(persisted.booking.purchasedStartDate, '2027-03-15');
+  assert.equal(persisted.booking.purchasedTravelerCount, 2);
+  await request(base, `/api/trips/${tripId}/plans/${laterId}`, {method: 'DELETE', session: newSession, csrf: newCsrf, body: {
+    expectedVersion: persisted.version, expectedPlanVersion: persisted.plans[0].version,
+    confirmed: true, expectedPlanCount: 3, replacementPrimaryPlanId: draftId,
+  }, expected: 409});
   const history = (await request(base, `/api/trips/${tripId}/bookings`, {session: newSession})).data;
   assert.equal(history.length, 1);
   assert.equal(history[0].bookingReference, booking.bookingReference);
@@ -175,7 +197,7 @@ try {
     email: 'other-release-check@example.test', password,
   }, expected: 201});
   await request(base, `/api/trips/${tripId}`, {session: cookie(other.response, 'JSESSIONID'), expected: 404});
-  console.log('PASS packaged JAR: public write protection, registration, one Working plan, two named option dates, CSRF, idempotent booking, cancellation, restart, persisted snapshots/history, owner isolation; no model credentials.');
+  console.log('PASS packaged JAR: public write protection, registration, canonical primary, independent dates/party, copy without purchases, booked promotion, confirmed locks, CSRF, idempotent booking, cancellation, restart, persisted snapshots/history, owner isolation; no model credentials.');
 } catch (error) {
   await writeFile(log, output);
   console.error(error);

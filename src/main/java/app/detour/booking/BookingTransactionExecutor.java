@@ -53,10 +53,12 @@ public class BookingTransactionExecutor {
     @Transactional
     public BookingResponse executeBookingTransaction(long ownerUserId, Trip trip, TripRequests.BookingCreate request) {
         // A Saved option owns its travel dates, independent of the Working plan.
-        PlannedItinerary planned = trip.planned().stream()
+        app.detour.trip.TripPlan selectedPlan = trip.plans().stream()
                 .filter(p -> p.publicId().equals(request.plannedItineraryId()))
                 .findFirst()
                 .orElseThrow(this::notFound);
+        PlannedItinerary planned = selectedPlan.asPlanned();
+        trip = trip.withPlanContext(selectedPlan);
         Instant departureMidnight = planned.startDate().atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant();
         if (!clock.instant().isBefore(departureMidnight)) {
             throw new ApiException(400, "TRIP_EXPIRED", "Cannot book an expired trip.");
@@ -89,6 +91,22 @@ public class BookingTransactionExecutor {
         if (selections.rental() != null
                 && trip.travelerAges().stream().noneMatch(age -> age != null && age >= 25)) {
             throw new ApiException(400, "DRIVER_REQUIRED", "At least one traveler must be 25 or older to book a rental car.");
+        }
+
+        // Copies keep stored planning facts, but an unconfirmed purchase must match current plan dates.
+        DraftSelections eligible = tripRepository.resolveSelectionsForOption(trip, selections, planned.startDate(), planned.endDate());
+        boolean invalidDates = (selections.airfare() != null && eligible.airfare() == null)
+                || (selections.stay() != null && (eligible.stay() == null
+                    || !selections.stay().nights().stream().map(StayNight::date).toList()
+                        .equals(eligible.stay().nights().stream().map(StayNight::date).toList())))
+                || (selections.rental() != null && eligible.rental() == null);
+        if (invalidDates) throw new ApiException(400, "PLAN_SELECTIONS_INVALID", "Re-select unconfirmed components for the plan's travel dates before booking.");
+
+        // Serialize purchase against plan deletion/promotion before inserting any dependent rows.
+        if (!tripRepository.advanceVersion(trip.id(), ownerUserId, request.expectedVersion())) {
+            var replay = bookingRepository.findByTripIdAndIdempotencyKey(trip.id(), request.idempotencyKey());
+            if (replay.isPresent()) throw new org.springframework.dao.DuplicateKeyException("Concurrent idempotent purchase already completed");
+            throw new ApiException(409, "VERSION_CONFLICT", "The trip changed. Refresh before booking.");
         }
 
         // 6. Deterministic locking & availability check
@@ -178,35 +196,14 @@ public class BookingTransactionExecutor {
                 airfareRef,
                 stayRef,
                 rentalRef,
-                rentalOccupancyId
+                rentalOccupancyId, planned.startDate(), planned.endDate(), trip.travelerCount(), trip.travelerAges(), trip.budgetCents()
         );
         long bookingId = bookingRepository.insertBooking(record);
         bookingRepository.copySnapshotsFromPlanned(bookingId, planned.id());
 
-        // 9. Advance trip version
-        boolean advanced = tripRepository.advanceVersion(trip.id(), ownerUserId, request.expectedVersion());
-        if (!advanced) {
-            throw new ApiException(409, "VERSION_CONFLICT", "The trip was modified by another operation. Please refresh and try again.");
-        }
-
-        DraftSelectionResponse selectionResponse = TripService.selectionResponse(selections);
-        return new BookingResponse(
-                record.publicId(),
-                trip.publicId(),
-                planned.publicId(),
-                bookingRef,
-                "ACTIVE",
-                tally.grandTotalCents(),
-                request.idempotencyKey(),
-                now,
-                null,
-                airfareRef,
-                stayRef,
-                rentalRef,
-                selectionResponse,
-                tally
-        );
+        return tripService.toBookingResponse(bookingRepository.findByTripIdAndIdempotencyKey(trip.id(), request.idempotencyKey()).orElseThrow(), trip);
     }
+    public BookingResponse toBookingResponse(BookingRecord record, Trip trip) { return tripService.toBookingResponse(record, trip); }
 
     @Transactional
     public TripResponse executeCancelBookingTransaction(long ownerUserId, Trip trip, UUID bookingPublicId, TripRequests.Cancel request) {
@@ -317,8 +314,8 @@ public class BookingTransactionExecutor {
             AirfareSelection airfare = selections.airfare();
             List<Long> flightInstanceIds = List.of(airfare.outboundFlightInstanceId(), airfare.returnFlightInstanceId());
             bookingRepository.lockFlightInstances(flightInstanceIds);
-            bookingRepository.incrementFlightSeats(airfare.outboundFlightInstanceId(), trip.travelerCount());
-            bookingRepository.incrementFlightSeats(airfare.returnFlightInstanceId(), trip.travelerCount());
+            bookingRepository.incrementFlightSeats(airfare.outboundFlightInstanceId(), record.purchasedTravelerCount());
+            bookingRepository.incrementFlightSeats(airfare.returnFlightInstanceId(), record.purchasedTravelerCount());
         }
 
         // Stay: increment available_inventory = available_inventory + unit_count for every reserved night in accommodation_nightly_inventory
@@ -328,9 +325,9 @@ public class BookingTransactionExecutor {
                     .filter(p -> record.plannedItineraryId() != null && p.id() == record.plannedItineraryId())
                     .findFirst().orElse(null);
             LocalDate minDate = stay.nights().stream().map(StayNight::date).min(LocalDate::compareTo)
-                    .orElse(bookedOption != null ? bookedOption.startDate() : trip.startDate());
+                    .orElse(record.purchasedStartDate());
             LocalDate maxDate = stay.nights().stream().map(StayNight::date).max(LocalDate::compareTo).map(d -> d.plusDays(1))
-                    .orElse(bookedOption != null ? bookedOption.endDate() : trip.endDate());
+                    .orElse(record.purchasedEndDate());
             bookingRepository.lockStayNightlyInventory(stay.accommodationUnitId(), minDate, maxDate);
             for (StayNight night : stay.nights()) {
                 bookingRepository.incrementStayInventory(stay.accommodationUnitId(), night.date(), stay.unitCount());
@@ -343,11 +340,7 @@ public class BookingTransactionExecutor {
         }
     }
 
-    private LocalDate bookedStartDate(BookingRecord record, Trip trip) {
-        return trip.planned().stream()
-                .filter(p -> record.plannedItineraryId() != null && p.id() == record.plannedItineraryId())
-                .map(PlannedItinerary::startDate).findFirst().orElse(trip.startDate());
-    }
+    private LocalDate bookedStartDate(BookingRecord record, Trip trip) { return record.purchasedStartDate(); }
 
     private ApiException notFound() {
         return new ApiException(404, "RESOURCE_NOT_FOUND", "Resource not found.");

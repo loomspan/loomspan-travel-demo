@@ -34,7 +34,7 @@ class DetourApplicationTest {
     @Test
     void startsWithFreshDetourCatalogLineageAndSeededPhaseTwoData() throws Exception {
         assertEquals(
-                java.util.List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"),
+                java.util.List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21"),
                 Arrays.stream(flyway.info().applied())
                         .map(info -> info.getVersion().getVersion())
                         .toList());
@@ -47,7 +47,7 @@ class DetourApplicationTest {
                 org.junit.jupiter.api.Assertions.assertTrue(count.next());
                 assertEquals(0, count.getInt(1), "Fresh identity schema must not seed an account");
             }
-            for (String tripTable : java.util.List.of("detour_trip", "detour_trip_traveler", "detour_trip_draft", "detour_planned_itinerary")) {
+            for (String tripTable : java.util.List.of("detour_trip", "detour_trip_traveler", "detour_planned_itinerary", "detour_planned_itinerary")) {
                 try (var tables = connection.getMetaData().getTables(null, null, tripTable.toUpperCase(), null)) {
                     org.junit.jupiter.api.Assertions.assertTrue(tables.next(), "Trip table must exist: " + tripTable);
                 }

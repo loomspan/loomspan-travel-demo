@@ -44,20 +44,20 @@ Users can see all plans for a trip together, identify their preferred primary pl
 
 ## Acceptance criteria
 
-- [ ] New and existing trips open with exactly one clearly labeled primary plan. Existing working contents, option names/details, and booking history remain available after the transition, including trips whose Working plan was incomplete or absent.
-- [ ] The top plan navigation exposes the primary and named alternatives in a consistent workspace, with every plan reachable on narrow screens and through keyboard and assistive technology.
-- [ ] Switching tabs changes only the viewed plan and never performs the old Working plan copy/replace operation or changes plan names.
-- [ ] Editing, saving, and renaming a plan retain its identity and affect only that plan; changing dates, travelers, or unconfirmed selections preserves other plans and all confirmed item details.
-- [ ] Create and Copy add independent alternatives without changing the source or primary; a copy does not inherit confirmed purchases or booking associations.
-- [ ] Actions cannot silently discard unsaved edits. Save failures and conflicting concurrent changes remain visible and do not overwrite persisted data or another user's trip.
-- [ ] Make primary works for an alternative, including a booked plan, persists across reopening, retains both plans and their booking associations, and leaves exactly one primary without changing reservations.
-- [ ] Confirmed items are clearly marked and cannot be edited or removed. Unconfirmed parts remain editable, and confirmed details remain accurately displayed when planning details change.
-- [ ] Deleting a plan with confirmed items is blocked with an explanation. Existing cancellation, booking-history, cancelled-trip, and historical booking restrictions remain enforced.
-- [ ] Deleting a primary with alternatives requires selecting its replacement; cancelling preserves the original state, and success leaves one primary. Failure or concurrency conflicts cannot leave an invalid primary designation.
-- [ ] Deleting the sole eligible plan offers Keep trip or Delete trip; Keep trip changes nothing, and Delete trip removes the trip only when existing trip-deletion rules permit it. Confirmed items or protected booking history cannot be bypassed through this flow.
-- [ ] Compare plans is visible beside plan navigation and supports two or three distinct plans, including primary plus one alternative, with the agreed initial selection and selection controls.
-- [ ] Comparison identifies names, primary/booked status, dates, selections, and prices; incomplete plans show missing selections and clearly labeled partial totals.
-- [ ] Existing trip navigation and booking-detail access continue to work, and saved per-plan changes and primary designation survive refresh.
+- [x] New and existing trips open with exactly one clearly labeled primary plan. Existing working contents, option names/details, and booking history remain available after the transition, including trips whose Working plan was incomplete or absent.
+- [x] The top plan navigation exposes the primary and named alternatives in a consistent workspace, with every plan reachable on narrow screens and through keyboard and assistive technology.
+- [x] Switching tabs changes only the viewed plan and never performs the old Working plan copy/replace operation or changes plan names.
+- [x] Editing, saving, and renaming a plan retain its identity and affect only that plan; changing dates, travelers, or unconfirmed selections preserves other plans and all confirmed item details.
+- [x] Create and Copy add independent alternatives without changing the source or primary; a copy does not inherit confirmed purchases or booking associations.
+- [x] Actions cannot silently discard unsaved edits. Save failures and conflicting concurrent changes remain visible and do not overwrite persisted data or another user's trip.
+- [x] Make primary works for an alternative, including a booked plan, persists across reopening, retains both plans and their booking associations, and leaves exactly one primary without changing reservations.
+- [x] Confirmed items are clearly marked and cannot be edited or removed. Unconfirmed parts remain editable, and confirmed details remain accurately displayed when planning details change.
+- [x] Deleting a plan with confirmed items is blocked with an explanation. Existing cancellation, booking-history, cancelled-trip, and historical booking restrictions remain enforced.
+- [x] Deleting a primary with alternatives requires selecting its replacement; cancelling preserves the original state, and success leaves one primary. Failure or concurrency conflicts cannot leave an invalid primary designation.
+- [x] Deleting the sole eligible plan offers Keep trip or Delete trip; Keep trip changes nothing, and Delete trip removes the trip only when existing trip-deletion rules permit it. Confirmed items or protected booking history cannot be bypassed through this flow.
+- [x] Compare plans is visible beside plan navigation and supports two or three distinct plans, including primary plus one alternative, with the agreed initial selection and selection controls.
+- [x] Comparison identifies names, primary/booked status, dates, selections, and prices; incomplete plans show missing selections and clearly labeled partial totals.
+- [x] Existing trip navigation and booking-detail access continue to work, and saved per-plan changes and primary designation survive refresh.
 
 ## Context
 
@@ -73,3 +73,7 @@ Scrollable tabs with an All plans selector are a suggested way to handle overflo
 - **Confidence:** high
 - **Rationale:** Independent plan editing and persisted primary designation change plan lifecycle and data contracts. Compatibility, migration, concurrency, comparison, and confirmed booking protections require research, design, verification planning, implementation, and independent review.
 - **Reassessment triggers:** Discovery of additional booking or legacy-data cases must be addressed within the full profile. Splitting implementation into smaller changes does not remove the lifecycle, persistence, or booking-protection requirements of the overall outcome.
+
+
+## Execution notes
+Step 4 implementation and automated evidence for all acceptance criteria are recorded in [the governing implementation plan](../plans/2026-10-01-manage-independent-trip-plans.md#executable-acceptance-evidence-step-4), including autonomous decisions, actual commands/results and optional unperformed observations. Full-profile independent Step 5 review remains pending; these completed implementation checks do not substitute for that review.

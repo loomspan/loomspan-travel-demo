@@ -87,6 +87,13 @@ function createMockBooking(includeAllComponents = true): BookingResponse {
 }
 
 describe('BookingConfirmationView', () => {
+  it('preserves unknown purchased ages after planning ages have been edited', () => {
+    const trip = createMockTrip();
+    const booking = {...createMockBooking(), purchasedTravelerCount: 2, purchasedTravelerAges: null};
+    render(<BookingConfirmationView trip={trip} booking={booking} onViewInWorkspace={() => {}} onViewAllTrips={() => {}} />);
+    expect(screen.queryByText(/ages: 30, 28/)).not.toBeInTheDocument();
+  });
+
   let writeTextSpy: any;
 
   beforeEach(() => {

@@ -1,10 +1,12 @@
 export type ScreenDestination = 'home' | 'trips' | 'profile' | 'auth';
 export type WorkspaceView = 'workspace' | 'compare' | 'booking-review' | 'booking-confirmation';
 export type ScreenDetails = {
+  selectedPlanId?: string;
   planningMode?: 'PLAN_TRIP' | 'AIRFARE' | 'STAY';
   workspaceView?: WorkspaceView;
   comparedOptionIds?: string[];
   reviewOptionId?: string;
+  confirmationBookingId?: string;
   reviewReturnView?: 'workspace' | 'compare';
 };
 

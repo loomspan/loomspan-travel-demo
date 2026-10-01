@@ -134,8 +134,8 @@ public class JdbcBookingRepository implements BookingRepository {
                     INSERT INTO detour_booking (
                         public_id, trip_id, planned_itinerary_id, booking_reference, status,
                         grand_total_cents, idempotency_key, created_at, canceled_at,
-                        airfare_reference, stay_reference, rental_reference, rental_occupancy_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        airfare_reference, stay_reference, rental_reference, rental_occupancy_id, purchased_start_date, purchased_end_date, purchased_traveler_count, purchased_budget_cents
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, Statement.RETURN_GENERATED_KEYS);
             ps.setObject(1, booking.publicId());
             ps.setLong(2, booking.tripId());
@@ -158,11 +158,17 @@ public class JdbcBookingRepository implements BookingRepository {
             } else {
                 ps.setNull(13, java.sql.Types.BIGINT);
             }
+            ps.setObject(14, booking.purchasedStartDate());
+            ps.setObject(15, booking.purchasedEndDate());
+            ps.setInt(16, booking.purchasedTravelerCount());
+            ps.setObject(17, booking.purchasedBudgetCents());
             return ps;
         }, keyHolder);
         Number key = (Number) (keyHolder.getKeys() != null ? keyHolder.getKeys().get("ID") : keyHolder.getKey());
         if (key == null) throw new IllegalStateException("Failed to insert booking");
-        return key.longValue();
+        long id = key.longValue();
+        if (booking.purchasedTravelerAges() != null) for (int i = 0; i < booking.purchasedTravelerAges().size(); i++) jdbc.update("INSERT INTO detour_booking_traveler VALUES (?, ?, ?)", id, i + 1, booking.purchasedTravelerAges().get(i));
+        return id;
     }
 
     @Override
@@ -246,7 +252,7 @@ public class JdbcBookingRepository implements BookingRepository {
         return jdbc.query("""
                 SELECT id, public_id, trip_id, planned_itinerary_id, booking_reference, status,
                        grand_total_cents, idempotency_key, created_at, canceled_at,
-                       airfare_reference, stay_reference, rental_reference, rental_occupancy_id
+                       airfare_reference, stay_reference, rental_reference, rental_occupancy_id, purchased_start_date, purchased_end_date, purchased_traveler_count, purchased_budget_cents
                 FROM detour_booking
                 WHERE trip_id = ? AND status = 'ACTIVE'
                 """, (rs, rowNum) -> mapBookingRecord(rs), tripId).stream().findFirst();
@@ -257,7 +263,7 @@ public class JdbcBookingRepository implements BookingRepository {
         return jdbc.query("""
                 SELECT id, public_id, trip_id, planned_itinerary_id, booking_reference, status,
                        grand_total_cents, idempotency_key, created_at, canceled_at,
-                       airfare_reference, stay_reference, rental_reference, rental_occupancy_id
+                       airfare_reference, stay_reference, rental_reference, rental_occupancy_id, purchased_start_date, purchased_end_date, purchased_traveler_count, purchased_budget_cents
                 FROM detour_booking
                 WHERE trip_id = ? AND status = 'ACTIVE' FOR UPDATE
                 """, (rs, rowNum) -> mapBookingRecord(rs), tripId).stream().findFirst();
@@ -268,7 +274,7 @@ public class JdbcBookingRepository implements BookingRepository {
         return jdbc.query("""
                 SELECT id, public_id, trip_id, planned_itinerary_id, booking_reference, status,
                        grand_total_cents, idempotency_key, created_at, canceled_at,
-                       airfare_reference, stay_reference, rental_reference, rental_occupancy_id
+                       airfare_reference, stay_reference, rental_reference, rental_occupancy_id, purchased_start_date, purchased_end_date, purchased_traveler_count, purchased_budget_cents
                 FROM detour_booking
                 WHERE trip_id = ? AND public_id = ? FOR UPDATE
                 """, (rs, rowNum) -> mapBookingRecord(rs), tripId, bookingPublicId).stream().findFirst();
@@ -279,10 +285,10 @@ public class JdbcBookingRepository implements BookingRepository {
         return jdbc.query("""
                 SELECT id, public_id, trip_id, planned_itinerary_id, booking_reference, status,
                        grand_total_cents, idempotency_key, created_at, canceled_at,
-                       airfare_reference, stay_reference, rental_reference, rental_occupancy_id
+                       airfare_reference, stay_reference, rental_reference, rental_occupancy_id, purchased_start_date, purchased_end_date, purchased_traveler_count, purchased_budget_cents
                 FROM detour_booking
                 WHERE trip_id = ?
-                ORDER BY CASE WHEN status = 'ACTIVE' THEN 0 ELSE 1 END, created_at DESC
+                ORDER BY CASE WHEN status = 'ACTIVE' THEN 0 ELSE 1 END, created_at DESC, id DESC
                 LIMIT 1
                 """, (rs, rowNum) -> mapBookingRecord(rs), tripId).stream().findFirst();
     }
@@ -292,10 +298,10 @@ public class JdbcBookingRepository implements BookingRepository {
         return jdbc.query("""
                 SELECT id, public_id, trip_id, planned_itinerary_id, booking_reference, status,
                        grand_total_cents, idempotency_key, created_at, canceled_at,
-                       airfare_reference, stay_reference, rental_reference, rental_occupancy_id
+                       airfare_reference, stay_reference, rental_reference, rental_occupancy_id, purchased_start_date, purchased_end_date, purchased_traveler_count, purchased_budget_cents
                 FROM detour_booking
                 WHERE trip_id = ?
-                ORDER BY created_at DESC
+                ORDER BY created_at DESC, id DESC
                 """, (rs, rowNum) -> mapBookingRecord(rs), tripId);
     }
 
@@ -304,7 +310,7 @@ public class JdbcBookingRepository implements BookingRepository {
         return jdbc.query("""
                 SELECT id, public_id, trip_id, planned_itinerary_id, booking_reference, status,
                        grand_total_cents, idempotency_key, created_at, canceled_at,
-                       airfare_reference, stay_reference, rental_reference, rental_occupancy_id
+                       airfare_reference, stay_reference, rental_reference, rental_occupancy_id, purchased_start_date, purchased_end_date, purchased_traveler_count, purchased_budget_cents
                 FROM detour_booking
                 WHERE trip_id = ? AND idempotency_key = ?
                 """, (rs, rowNum) -> mapBookingRecord(rs), tripId, idempotencyKey).stream().findFirst();
@@ -403,7 +409,11 @@ public class JdbcBookingRepository implements BookingRepository {
         return count != null && count > 0;
     }
 
-    private static BookingRecord mapBookingRecord(ResultSet rs) throws SQLException {
+    private List<Integer> loadPurchasedAges(long id) {
+        List<Integer> ages = jdbc.query("SELECT age FROM detour_booking_traveler WHERE booking_id = ? ORDER BY traveler_ordinal", (r, n) -> (Integer) r.getObject(1), id);
+        return ages.stream().allMatch(java.util.Objects::nonNull) ? List.copyOf(ages) : null;
+    }
+    private BookingRecord mapBookingRecord(ResultSet rs) throws SQLException {
         Long rentalOccupancyId = rs.getObject("rental_occupancy_id") != null ? rs.getLong("rental_occupancy_id") : null;
         Long plannedItineraryId = rs.getObject("planned_itinerary_id") != null ? rs.getLong("planned_itinerary_id") : null;
         return new BookingRecord(
@@ -420,7 +430,7 @@ public class JdbcBookingRepository implements BookingRepository {
                 rs.getString("airfare_reference"),
                 rs.getString("stay_reference"),
                 rs.getString("rental_reference"),
-                rentalOccupancyId
+                rentalOccupancyId, rs.getObject("purchased_start_date", LocalDate.class), rs.getObject("purchased_end_date", LocalDate.class), rs.getInt("purchased_traveler_count"), loadPurchasedAges(rs.getLong("id")), (Long) rs.getObject("purchased_budget_cents")
         );
     }
 }

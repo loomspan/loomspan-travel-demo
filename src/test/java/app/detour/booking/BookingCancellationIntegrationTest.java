@@ -255,7 +255,7 @@ class BookingCancellationIntegrationTest {
         TripFixture fixture = createTripWithBooking(owner);
         jdbc.update("UPDATE detour_trip SET start_date = DATE '2027-03-20', end_date = DATE '2027-03-24' WHERE public_id = ?",
                 UUID.fromString(fixture.tripId));
-        jdbc.update("UPDATE detour_trip_draft SET start_date = DATE '2027-03-20', end_date = DATE '2027-03-24' WHERE trip_id = (SELECT id FROM detour_trip WHERE public_id = ?)",
+        jdbc.update("UPDATE detour_planned_itinerary SET start_date = DATE '2027-03-20', end_date = DATE '2027-03-24' WHERE trip_id = (SELECT id FROM detour_trip WHERE public_id = ?)",
                 UUID.fromString(fixture.tripId));
         testClock.setInstant(LocalDate.of(2027, 3, 15).atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant());
 
@@ -579,8 +579,8 @@ class BookingCancellationIntegrationTest {
     }
 
     private void insertSfoAirfareSelection(String draftId) {
-        jdbc.update("""
-                INSERT INTO detour_trip_draft_airfare_selection (draft_id, outbound_flight_instance_id, return_flight_instance_id)
+        app.detour.trip.TestPlanSelections.insert(jdbc, """
+                INSERT INTO detour_trip_draft_airfare_selection (planned_itinerary_id, outbound_flight_instance_id, return_flight_instance_id)
                 VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                     (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-out-sfo-d1' AND instance.service_date = DATE '2027-03-10'),
                     (SELECT instance.id FROM flight_instance instance JOIN flight_schedule schedule ON schedule.id = instance.flight_schedule_id WHERE schedule.catalog_key = 'airfare-in-sfo-d1' AND instance.service_date = DATE '2027-03-14'))
@@ -588,16 +588,16 @@ class BookingCancellationIntegrationTest {
     }
 
     private void insertSfoStaySelection(String draftId) {
-        jdbc.update("""
-                INSERT INTO detour_trip_draft_stay_selection (draft_id, accommodation_unit_id, unit_count)
+        app.detour.trip.TestPlanSelections.insert(jdbc, """
+                INSERT INTO detour_trip_draft_stay_selection (planned_itinerary_id, accommodation_unit_id, unit_count)
                 VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                     (SELECT id FROM accommodation_unit WHERE catalog_key = 'stay-unit-sfo-hotel-summit'), 1)
                 """, UUID.fromString(draftId));
     }
 
     private void insertSfoRentalSelection(String draftId) {
-        jdbc.update("""
-                INSERT INTO detour_trip_draft_rental_selection (draft_id, rental_unit_id, pickup_at, return_at)
+        app.detour.trip.TestPlanSelections.insert(jdbc, """
+                INSERT INTO detour_trip_draft_rental_selection (planned_itinerary_id, rental_unit_id, pickup_at, return_at)
                 VALUES ((SELECT id FROM detour_trip_draft WHERE public_id = ?),
                     (SELECT id FROM rental_unit WHERE catalog_key = 'rental-unit-sfo-economy-01'),
                     TIMESTAMP WITH TIME ZONE '2027-03-10 10:00:00+00',
