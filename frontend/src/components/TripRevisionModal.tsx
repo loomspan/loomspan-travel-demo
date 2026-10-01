@@ -1,10 +1,12 @@
 import {FormEvent, useEffect, useRef, useState} from 'react';
 import {tripsApi, type TripResponse, type PlannedResponse} from '../api/tripsApi';
 import {IdentityApiError} from '../api/identityApi';
+import {suggestedTripName, tripBaseName} from '../tripName';
 
 type TripRevisionModalProps = {
   isOpen: boolean;
   trip: TripResponse;
+  existingNames?: string[];
   mode?: 'revise' | 'duplicate';
   title?: string;
   submitLabel?: string;
@@ -34,6 +36,7 @@ function validateDates(startDate: string, endDate: string): string | undefined {
 export function TripRevisionModal({
   isOpen,
   trip,
+  existingNames = [],
   mode,
   title,
   submitLabel,
@@ -54,6 +57,8 @@ export function TripRevisionModal({
   const [destinationKey, setDestinationKey] = useState(trip.destinationKey);
   const [startDate, setStartDate] = useState(trip.startDate);
   const [endDate, setEndDate] = useState(trip.endDate);
+  const [customName, setCustomName] = useState<string | null>(null);
+  const name = customName ?? suggestedTripName(tripBaseName(destinationKey, startDate, endDate), existingNames);
   const [travelerCount, setTravelerCount] = useState(String(trip.travelerCount));
   const [selectedPlannedIds, setSelectedPlannedIds] = useState<string[]>(() =>
     (trip.planned || []).map((p) => p.id)
@@ -71,6 +76,7 @@ export function TripRevisionModal({
       setDestinationKey(trip.destinationKey);
       setStartDate(trip.startDate);
       setEndDate(trip.endDate);
+      setCustomName(null);
       setTravelerCount(String(trip.travelerCount));
       setSelectedPlannedIds(trip.planned.map((p: PlannedResponse) => p.id));
       const first = modalRef.current?.querySelector<HTMLElement>('select, input, button');
@@ -131,6 +137,8 @@ export function TripRevisionModal({
     const errors: Record<string, string> = {};
     const dateError = validateDates(startDate, endDate);
     if (dateError) errors.dates = dateError;
+    if (!name.trim()) errors.name = 'Enter a Trip name.';
+    else if (name.trim().length > 300) errors.name = 'Trip name must be 300 characters or fewer.';
     const count = parseInt(travelerCount, 10);
     if (isNaN(count) || count < 1 || count > 8) errors.travelerCount = 'Traveler count must be between 1 and 8.';
     if (selectedPlannedIds.length === 0) {
@@ -149,6 +157,7 @@ export function TripRevisionModal({
     try {
       const newTrip = await tripsApi.duplicateTrip(trip.id, {
         expectedVersion: trip.version,
+        name: name.trim(),
         destinationKey,
         startDate,
         endDate,
@@ -163,6 +172,9 @@ export function TripRevisionModal({
       if (err instanceof IdentityApiError) {
         if (err.kind === 'network') {
           setGlobalError('We could not reach DeTour. Check your connection and try again.');
+        } else if (err.code === 'DUPLICATE_TRIP_NAME') {
+          setFieldErrors({name: 'A Trip with this name already exists. Choose another name.'});
+          setGlobalError('Choose a different Trip name.');
         } else if (err.code === 'VALIDATION_FAILED' || Object.keys(err.fields).length > 0) {
           setFieldErrors(err.fields);
           setGlobalError('Please correct the highlighted fields.');
@@ -204,6 +216,11 @@ export function TripRevisionModal({
         )}
 
         <form onSubmit={handleSubmit} noValidate>
+          <div className="field">
+            <label htmlFor="revise-trip-name">Trip name</label>
+            <input id="revise-trip-name" value={name} aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? 'revise-trip-name-error' : undefined} onChange={event => setCustomName(event.target.value)} />
+            {fieldErrors.name && <p id="revise-trip-name-error" className="field-error">{fieldErrors.name}</p>}
+          </div>
           <div className="field">
             <label htmlFor="revise-destination">Destination</label>
             <select

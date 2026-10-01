@@ -318,6 +318,7 @@ export function ProfileScreen({
         ref={workspaceRef}
         key={activeTrip.id}
         initialTrip={activeTrip}
+        existingTripNames={[...upcoming, ...past].map(item => item.name ?? item.label)}
         initialEntryMode={entryContext?.mode ?? 'PLAN_TRIP'}
         initialAccommodationType={entryContext?.accommodationType}
         hasBookingHistory={activeTripBookingHistory}
@@ -345,7 +346,7 @@ export function ProfileScreen({
     {viewMode === 'home' && <HomeScreen onStart={startCreateTrip} onReturn={activeTrip ? {label: activeTrip.label, open: () => void handleOpenTrip(activeTrip.id)} : undefined} />}
     {viewMode === 'trips' && !showWorkspace && (showStartForm ? <div className="trip-start-view">
       <button type="button" className="text-button trip-list-back" onClick={() => setShowStartForm(false)}>← Back to your trips</button>
-      <TripStartForm draft={tripDraft} onChange={onTripDraftChange} mode={startMode} authenticated onAuthenticationRequired={onAuthenticationRequired} onSuccess={(createdTrip, mode, accommodationType) => {
+      <TripStartForm draft={tripDraft} onChange={onTripDraftChange} mode={startMode} authenticated existingNames={[...upcoming, ...past].map(item => item.name ?? item.label)} onAuthenticationRequired={onAuthenticationRequired} onSuccess={(createdTrip, mode, accommodationType) => {
       openingSequence.current += 1;
       setEntryContext({mode, accommodationType});
       setActiveTrip(createdTrip);

@@ -36,6 +36,7 @@ import {ConfirmRemoveModal} from './ConfirmRemoveModal';
 
 type TripWorkspaceProps = {
   initialTrip: TripResponse;
+  existingTripNames?: string[];
   initialActiveBooking?: BookingResponse | null;
   initialEntryMode?: 'PLAN_TRIP' | 'AIRFARE' | 'STAY';
   initialAccommodationType?: AccommodationType;
@@ -76,6 +77,7 @@ function validateDates(startDate: string, endDate: string): string | undefined {
 
 export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(function TripWorkspace({
   initialTrip,
+  existingTripNames = [],
   initialActiveBooking,
   initialEntryMode = 'PLAN_TRIP',
   initialAccommodationType,
@@ -200,6 +202,21 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
 
   const [selectedForCompareIds, setSelectedForCompareIds] = useState<string[]>([]);
   const [compareNotification, setCompareNotification] = useState<string | undefined>();
+  useEffect(() => {
+    if (autosaveStatus !== 'saved') return;
+    const timer = window.setTimeout(() => {
+      setAutosaveStatus(current => current === 'saved' ? 'idle' : current);
+      setAutosaveMessage(current => current === autosaveMessage ? undefined : current);
+    }, 6000);
+    return () => window.clearTimeout(timer);
+  }, [autosaveStatus, autosaveMessage]);
+  useEffect(() => {
+    if (!compareNotification) return;
+    const timer = window.setTimeout(() => {
+      setCompareNotification(current => current === compareNotification ? undefined : current);
+    }, 6000);
+    return () => window.clearTimeout(timer);
+  }, [compareNotification]);
   const isTripCanceled = trip.status === 'CANCELED';
 
   const [hasEverBooked, setHasEverBooked] = useState<boolean>(
@@ -1742,6 +1759,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         <TripRevisionModal
           isOpen={isRevisionModalOpen}
           trip={trip}
+          existingNames={existingTripNames}
           mode={isTripCanceled ? 'duplicate' : 'revise'}
           onClose={() => setIsRevisionModalOpen(false)}
           onSuccess={(newTrip) => {

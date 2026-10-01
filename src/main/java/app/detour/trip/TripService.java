@@ -90,6 +90,8 @@ public class TripService {
         List<Integer> ages = validateAges(request.travelerAges(), travelerCount);
         if (ages.stream().anyMatch(java.util.Objects::isNull)) throw validation("travelerAges", "Provide exactly one age for each traveler.");
         Long budgetCents = validateBudget(request.budgetCents());
+        trips.lockOwnerForNaming(ownerUserId);
+        requireUniqueName(ownerUserId, name);
         UUID tripId = UUID.randomUUID();
         UUID draftId = UUID.randomUUID();
         trips.createAggregate(ownerUserId, tripId, destination, startDate, endDate, travelerCount, ages, budgetCents, name, draftId);
@@ -101,6 +103,8 @@ public class TripService {
         Trip trip = ownedTrip(ownerUserId, tripId);
         requireActiveTrip(trip);
         String name = validateName(request.name());
+        trips.lockOwnerForNaming(ownerUserId);
+        if (!trip.label().equalsIgnoreCase(name)) requireUniqueName(ownerUserId, name);
         if (!trips.advanceVersion(trip.id(), ownerUserId, request.expectedVersion())) throw parentConflict(ownerUserId, trip.publicId());
         trips.rename(trip.id(), name);
         return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow());
@@ -118,6 +122,7 @@ public class TripService {
             throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
         }
         if (draft.startDate().equals(startDate) && draft.endDate().equals(endDate)) return response(trip);
+        String updatedName = updatedGeneratedName(ownerUserId, trip, trip.destination(), startDate, endDate);
         if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), draft.id(), request.expectedDraftVersion())) {
             throw mutationConflict(ownerUserId, trip.publicId(), draft.publicId(), request.expectedDraftVersion());
         }
@@ -146,6 +151,7 @@ public class TripService {
             else if (result.adjustment() != null) adjustments.add(result.adjustment());
         }
         trips.updateWorkingDates(trip.id(), draft.id(), startDate, endDate);
+        if (!updatedName.equals(trip.label())) trips.rename(trip.id(), updatedName);
         return response(trips.findByPublicIdAndOwnerUserId(trip.publicId(), ownerUserId).orElseThrow(),
                 new RevisionSummaryResponse(removals, adjustments));
     }
@@ -270,10 +276,12 @@ public class TripService {
         if (!destinationChanged && !datesChanged && !travelersChanged && java.util.Objects.equals(trip.budgetCents(), budgetCents)) {
             return response(trip);
         }
+        String updatedName = (destinationChanged || datesChanged)
+                ? updatedGeneratedName(ownerUserId, trip, destination, startDate, endDate) : trip.label();
         if (!trips.advanceVersionForDraft(trip.id(), ownerUserId, request.expectedVersion(), working.id(), expectedDraftVersion)) {
             throw mutationConflict(ownerUserId, trip.publicId(), working.publicId(), expectedDraftVersion);
         }
-        trips.replaceSharedDetails(trip.id(), destination, startDate, endDate, travelerCount, ages, budgetCents, trip.label());
+        trips.replaceSharedDetails(trip.id(), destination, startDate, endDate, travelerCount, ages, budgetCents, updatedName);
 
         List<ComponentRemovalResponse> removals = new ArrayList<>();
         List<ComponentAdjustmentResponse> adjustments = new ArrayList<>();
@@ -683,8 +691,12 @@ public class TripService {
                     new DraftSelections(retainedAirfare, retainedStay, retainedRental)));
         }
 
+        trips.lockOwnerForNaming(ownerUserId);
+        String label = request.name() == null
+                ? suggestName(ownerUserId, destination.name(), startDate, endDate)
+                : validateName(request.name());
+        requireUniqueName(ownerUserId, label);
         UUID newTripPublicId = UUID.randomUUID();
-        String label = sourceTrip.label();
         trips.createAggregate(ownerUserId, newTripPublicId, destination, startDate, endDate, travelerCount,
                 ages, budgetCents, label, UUID.randomUUID());
         Trip newTrip = trips.findByPublicIdAndOwnerUserId(newTripPublicId, ownerUserId).orElseThrow();
@@ -760,6 +772,40 @@ public class TripService {
         String name = supplied.trim();
         if (name.length() > 300) throw validation("name", "Trip name must be 300 characters or fewer.");
         return name;
+    }
+
+    private void requireUniqueName(long ownerUserId, String name) {
+        if (trips.findNamesByOwnerUserId(ownerUserId).stream().anyMatch(existing -> existing.equalsIgnoreCase(name))) {
+            throw new ApiException(409, "DUPLICATE_TRIP_NAME", "A Trip with this name already exists. Choose another name.",
+                    Map.of("name", "A Trip with this name already exists."));
+        }
+    }
+
+    private String suggestName(long ownerUserId, String city, LocalDate startDate, LocalDate endDate) {
+        String base = city + " - " + startDate + " to " + endDate;
+        List<String> names = trips.findNamesByOwnerUserId(ownerUserId);
+        if (names.stream().noneMatch(name -> name.equalsIgnoreCase(base))) return base;
+        for (int index = 1; ; index++) {
+            int value = index;
+            StringBuilder suffix = new StringBuilder();
+            while (value > 0) {
+                value--;
+                suffix.insert(0, (char) ('A' + value % 26));
+                value /= 26;
+            }
+            String candidate = base + " - " + suffix;
+            if (names.stream().noneMatch(name -> name.equalsIgnoreCase(candidate))) return candidate;
+        }
+    }
+
+    private String updatedGeneratedName(long ownerUserId, Trip trip, Destination destination,
+            LocalDate startDate, LocalDate endDate) {
+        String oldBase = trip.destination().name() + " - " + trip.startDate() + " to " + trip.endDate();
+        if (!trip.label().equals(oldBase) && !trip.label().matches(java.util.regex.Pattern.quote(oldBase) + " - [A-Z]+")) {
+            return trip.label();
+        }
+        trips.lockOwnerForNaming(ownerUserId);
+        return suggestName(ownerUserId, destination.name(), startDate, endDate);
     }
 
     private static Long validateBudget(JsonNode budget) {

@@ -458,6 +458,7 @@ export type OptionLoadRequest = {expectedVersion: number; expectedDraftVersion: 
 
 export type TripRevisionRequest = {
   expectedVersion: number;
+  name?: string;
   destinationKey: string;
   startDate: string;
   endDate: string;
@@ -559,6 +560,7 @@ function cleanRevisionPayload(p: TripRevisionRequest): Record<string, unknown> {
   };
   if (p.travelerAges !== undefined) body.travelerAges = p.travelerAges;
   if (p.budgetCents !== undefined) body.budgetCents = p.budgetCents;
+  if (p.name !== undefined) body.name = p.name;
   return body;
 }
 

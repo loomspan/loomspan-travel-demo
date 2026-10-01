@@ -96,7 +96,8 @@ export default function App() {
     guestSaveInFlight.current = true;
     const save = async () => {
       try {
-        let trip = guestSavedTrip.current ?? await createTripFromDraft(tripDraft);
+        let trip = guestSavedTrip.current ?? await createTripFromDraft(tripDraft,
+          [...screen.profile.upcoming, ...screen.profile.past].map(item => item.name ?? item.label));
         guestSavedTrip.current = trip;
         let draft = trip.workingPlan ?? trip.drafts[0];
         if (guestSelections.airfare && !draft.selections.airfare) {
@@ -135,9 +136,9 @@ export default function App() {
   useEffect(() => { void loadProfile(); }, []);
   useEffect(() => { if (notice?.kind === 'error') errorRef.current?.focus(); }, [notice]);
   useEffect(() => {
-    if (notice?.kind !== 'status' || notice.message !== LOGIN_SUCCESS_MESSAGE) return;
+    if (notice?.kind !== 'status') return;
     const timer = window.setTimeout(() => {
-      setNotice(current => current?.kind === 'status' && current.message === LOGIN_SUCCESS_MESSAGE ? undefined : current);
+      setNotice(current => current === notice ? undefined : current);
     }, 6000);
     return () => window.clearTimeout(timer);
   }, [notice]);

@@ -30,7 +30,8 @@ public final class TripRequests {
             Integer travelerCount, List<Integer> travelerAges, JsonNode budgetCents) { }
 
     public record TripRevision(long expectedVersion, String destinationKey, LocalDate startDate, LocalDate endDate,
-            Integer travelerCount, List<Integer> travelerAges, JsonNode budgetCents, List<UUID> sourcePlannedItineraryIds) { }
+            Integer travelerCount, List<Integer> travelerAges, JsonNode budgetCents, List<UUID> sourcePlannedItineraryIds,
+            String name) { }
 
     public record DraftCreate(long expectedVersion) { }
 
@@ -106,10 +107,11 @@ public final class TripRequests {
     }
 
     static TripRevision revision(JsonNode body) {
-        requireObject(body, Set.of("expectedVersion", "destinationKey", "startDate", "endDate", "travelerCount", "travelerAges", "budgetCents", "sourcePlannedItineraryIds"));
+        requireObject(body, Set.of("expectedVersion", "destinationKey", "startDate", "endDate", "travelerCount", "travelerAges", "budgetCents", "sourcePlannedItineraryIds", "name"));
         return new TripRevision(version(body.get("expectedVersion"), "expectedVersion"), text(body.get("destinationKey"), "destinationKey"),
                 date(body.get("startDate"), "startDate"), date(body.get("endDate"), "endDate"), integer(body.get("travelerCount"), "travelerCount"),
-                ages(body.get("travelerAges")), body.get("budgetCents"), sourcePlannedIds(body.get("sourcePlannedItineraryIds")));
+                ages(body.get("travelerAges")), body.get("budgetCents"), sourcePlannedIds(body.get("sourcePlannedItineraryIds")),
+                body.has("name") ? text(body.get("name"), "name") : null);
     }
 
     static DraftCreate draftCreate(JsonNode body) {

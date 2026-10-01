@@ -137,7 +137,7 @@ describe('public trip start and authentication handoff', () => {
     await user.click(screen.getByRole('button', {name: 'No, discard'}));
     expect(screen.getByRole('heading', {name: 'Home'})).toBeInTheDocument();
     await user.click(screen.getByRole('button', {name: 'Plan a Trip'}));
-    expect(screen.getByLabelText('Trip name')).toHaveValue('San Francisco trip');
+    expect(screen.getByLabelText('Trip name')).toHaveValue('');
     expect(screen.queryByText('Selected stay')).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips')).toHaveLength(0);
   });
@@ -186,7 +186,7 @@ describe('public trip start and authentication handoff', () => {
     const user = userEvent.setup(); render(<App />);
     await screen.findByRole('button', {name: 'Profile'});
     await user.click(screen.getByRole('button', {name: 'Plan a Trip'}));
-    expect(screen.getByLabelText('Trip name')).toHaveValue('San Francisco trip');
+    expect(screen.getByLabelText('Trip name')).toHaveValue('');
     await user.clear(screen.getByLabelText('Trip name'));
     await user.type(screen.getByLabelText('Trip name'), 'My spring trip');
     await user.type(screen.getByLabelText('Budget (optional, dollars)'), '1000001');
@@ -198,6 +198,26 @@ describe('public trip start and authentication handoff', () => {
       expect(document.getElementById(input.getAttribute('aria-describedby')!)).toHaveClass('field-error');
     }
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips')).toHaveLength(0);
+  });
+
+  it('adds an editable letter when the city and dates already have a Trip', async () => {
+    const existingName = 'San Francisco - 2027-03-10 to 2027-03-14';
+    fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [{
+      id: 'existing-trip', name: existingName, label: existingName,
+      destinationKey: 'destination-sfo', destinationName: 'San Francisco',
+      startDate: '2027-03-10', endDate: '2027-03-14', version: 0,
+      temporalStatus: 'UPCOMING', draftCount: 1, plannedCount: 0,
+      expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: [],
+    }], past: []}));
+    const user = userEvent.setup(); render(<App />);
+    await screen.findByRole('button', {name: 'Profile'});
+    await user.click(screen.getByRole('button', {name: 'Plan a Trip'}));
+    await user.type(screen.getByLabelText('Departure date'), '2027-03-10');
+    await user.type(screen.getByLabelText('Return date'), '2027-03-14');
+    expect(screen.getByLabelText('Trip name')).toHaveValue(`${existingName} - A`);
+    await user.clear(screen.getByLabelText('Trip name'));
+    await user.type(screen.getByLabelText('Trip name'), `${existingName} - B`);
+    expect(screen.getByLabelText('Trip name')).toHaveValue(`${existingName} - B`);
   });
 
   it('returns direct login to Home and never reads Trips before authentication', async () => {

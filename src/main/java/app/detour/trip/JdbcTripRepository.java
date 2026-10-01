@@ -68,6 +68,14 @@ class JdbcTripRepository implements TripRepository {
                 ORDER BY trip.start_date ASC, trip.id ASC""", (r, n) -> loadTrip(r.getLong("id"), r, ownerUserId), ownerUserId);
     }
 
+    @Override public void lockOwnerForNaming(long ownerUserId) {
+        jdbc.queryForObject("SELECT id FROM detour_user WHERE id = ? FOR UPDATE", Long.class, ownerUserId);
+    }
+
+    @Override public List<String> findNamesByOwnerUserId(long ownerUserId) {
+        return jdbc.queryForList("SELECT name FROM detour_trip WHERE owner_user_id = ?", String.class, ownerUserId);
+    }
+
     private Trip loadTrip(long tripId, java.sql.ResultSet row, long ownerUserId) throws java.sql.SQLException {
         List<Integer> ages = jdbc.query("SELECT age FROM detour_trip_traveler WHERE trip_id = ? ORDER BY traveler_ordinal", (r, n) -> (Integer) r.getObject("age"), tripId);
         List<Integer> knownAges = ages.stream().allMatch(java.util.Objects::nonNull) ? List.copyOf(ages) : null;

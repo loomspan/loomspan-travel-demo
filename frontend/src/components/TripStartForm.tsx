@@ -3,27 +3,28 @@ import {tripsApi, type AccommodationType, type TripResponse} from '../api/tripsA
 import {IdentityApiError} from '../api/identityApi';
 import type {StartMode} from './HomeScreen';
 import {TravelerAgeInput} from './TravelerAgeInput';
+import {suggestedTripName, tripBaseName} from '../tripName';
 
 export type TripStartDraft = {
-  name: string; destinationKey: string; startDate: string; endDate: string;
+  name: string; nameEdited?: boolean; destinationKey: string; startDate: string; endDate: string;
   travelerCount: string; ages: string[]; budget: string; accommodationType: AccommodationType;
 };
 
 export const emptyTripStartDraft: TripStartDraft = {
-  name: 'San Francisco trip', destinationKey: 'destination-sfo', startDate: '', endDate: '',
+  name: '', destinationKey: 'destination-sfo', startDate: '', endDate: '',
   travelerCount: '1', ages: [''], budget: '', accommodationType: 'HOTEL',
 };
 
-export function createTripFromDraft(draft: TripStartDraft): Promise<TripResponse> {
+export function createTripFromDraft(draft: TripStartDraft, existingNames: string[] = []): Promise<TripResponse> {
   const travelerCount = Number(draft.travelerCount);
+  const name = draft.nameEdited || draft.name.trim() ? draft.name.trim()
+    : suggestedTripName(tripBaseName(draft.destinationKey, draft.startDate, draft.endDate), existingNames);
   return tripsApi.createTrip({
-    name: draft.name.trim(), destinationKey: draft.destinationKey, startDate: draft.startDate, endDate: draft.endDate,
+    name, destinationKey: draft.destinationKey, startDate: draft.startDate, endDate: draft.endDate,
     travelerCount, travelerAges: draft.ages.slice(0, travelerCount).map(Number),
     ...(draft.budget ? {budgetCents: Math.round(Number(draft.budget) * 100)} : {}),
   });
 }
-
-const suggestedName = (destinationKey: string) => ({'destination-sfo': 'San Francisco trip', 'destination-muc': 'Munich trip', 'destination-mex': 'Mexico City trip'}[destinationKey] ?? 'My trip');
 
 type Props = {
   draft: TripStartDraft;
@@ -33,22 +34,24 @@ type Props = {
   onAuthenticationRequired: () => void;
   onSuccess: (trip: TripResponse, mode: StartMode, accommodationType?: AccommodationType) => void;
   onExplore?: () => void;
+  existingNames?: string[];
 };
 
-export function TripStartForm({draft, onChange, mode, authenticated, onAuthenticationRequired, onSuccess, onExplore}: Props) {
+export function TripStartForm({draft, onChange, mode, authenticated, onAuthenticationRequired, onSuccess, onExplore, existingNames = []}: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string>();
   const [pending, setPending] = useState(false);
   const pendingRef = useRef(false);
   const change = (patch: Partial<TripStartDraft>) => onChange({...draft, ...patch});
   const count = Number(draft.travelerCount);
+  const name = draft.nameEdited || draft.name.trim() ? draft.name : suggestedTripName(tripBaseName(draft.destinationKey, draft.startDate, draft.endDate), existingNames);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (pendingRef.current) return;
     const nextErrors: Record<string, string> = {};
-    if (!draft.name.trim()) nextErrors.name = 'Enter a trip name.';
-    else if (draft.name.trim().length > 300) nextErrors.name = 'Trip name must be 300 characters or fewer.';
+    if (!name.trim()) nextErrors.name = 'Enter a trip name.';
+    else if (name.trim().length > 300) nextErrors.name = 'Trip name must be 300 characters or fewer.';
     if (!draft.destinationKey) nextErrors.destinationKey = 'Select a destination.';
     if (!draft.startDate || !draft.endDate) nextErrors.dates = 'Please enter both departure and return dates.';
     else if (draft.startDate < '2027-03-01' || draft.endDate > '2027-03-31' || draft.startDate > '2027-03-31' || draft.endDate < '2027-03-01') nextErrors.dates = 'Travel must take place in March 2027.';
@@ -68,12 +71,15 @@ export function TripStartForm({draft, onChange, mode, authenticated, onAuthentic
     if (!authenticated) { setMessage(undefined); onAuthenticationRequired(); return; }
     pendingRef.current = true; setPending(true); setMessage(undefined);
     try {
-      const trip = await createTripFromDraft(draft);
+      const trip = await createTripFromDraft(draft, existingNames);
       onSuccess(trip, mode, mode === 'STAY' ? draft.accommodationType : undefined);
     } catch (error) {
       if (error instanceof IdentityApiError && error.code === 'UNAUTHENTICATED') {
         setMessage('Your session has ended. Your Trip was not saved. Log in, then select Start planning again.');
         onAuthenticationRequired();
+      } else if (error instanceof IdentityApiError && error.code === 'DUPLICATE_TRIP_NAME') {
+        setErrors({name: 'A Trip with this name already exists. Choose another name.'});
+        setMessage('Your Trip was not saved. Choose a different name.');
       } else if (error instanceof IdentityApiError && (error.code === 'VALIDATION_FAILED' || Object.keys(error.fields).length)) {
         setErrors({
           ...error.fields,
@@ -94,8 +100,8 @@ export function TripStartForm({draft, onChange, mode, authenticated, onAuthentic
     <p>Explore your trip details now. An account is required when you save your selections.</p>
     {message && <p className="field-error" role="alert">{message}</p>}
     <form onSubmit={submit} noValidate>
-      <div className="field"><label htmlFor="trip-name">Trip name</label><input id="trip-name" value={draft.name} aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? 'trip-name-error' : undefined} onChange={e => change({name: e.target.value})} />{errors.name && <p id="trip-name-error" className="field-error">{errors.name}</p>}</div>
-      <div className="field"><label htmlFor="trip-destination">Destination</label><select id="trip-destination" value={draft.destinationKey} aria-invalid={Boolean(errors.destinationKey)} aria-describedby={errors.destinationKey ? 'trip-destination-error' : undefined} onChange={e => change({destinationKey: e.target.value, ...(draft.name === suggestedName(draft.destinationKey) ? {name: suggestedName(e.target.value)} : {})})}><option value="destination-sfo">San Francisco</option><option value="destination-muc">Munich</option><option value="destination-mex">Mexico City</option></select>{errors.destinationKey && <p id="trip-destination-error" className="field-error">{errors.destinationKey}</p>}</div>
+      <div className="field"><label htmlFor="trip-name">Trip name</label><input id="trip-name" value={name} aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? 'trip-name-error' : undefined} onChange={e => change({name: e.target.value, nameEdited: true})} />{errors.name && <p id="trip-name-error" className="field-error">{errors.name}</p>}</div>
+      <div className="field"><label htmlFor="trip-destination">Destination</label><select id="trip-destination" value={draft.destinationKey} aria-invalid={Boolean(errors.destinationKey)} aria-describedby={errors.destinationKey ? 'trip-destination-error' : undefined} onChange={e => change({destinationKey: e.target.value})}><option value="destination-sfo">San Francisco</option><option value="destination-muc">Munich</option><option value="destination-mex">Mexico City</option></select>{errors.destinationKey && <p id="trip-destination-error" className="field-error">{errors.destinationKey}</p>}</div>
       {mode === 'STAY' && <div className="field"><label htmlFor="trip-accommodation-type">Accommodation type</label><select id="trip-accommodation-type" value={draft.accommodationType} onChange={e => change({accommodationType: e.target.value as AccommodationType})}><option value="HOTEL">Hotel</option><option value="BED_AND_BREAKFAST">Bed &amp; Breakfast</option><option value="VACATION_RENTAL">Vacation Rental</option></select></div>}
       <div className="field-group"><div className="field"><label htmlFor="trip-start-date">Departure date</label><input id="trip-start-date" type="date" min="2027-03-01" max="2027-03-31" value={draft.startDate} aria-invalid={Boolean(errors.dates)} aria-describedby={errors.dates ? 'trip-dates-error' : undefined} onChange={e => change({startDate: e.target.value})} /></div><div className="field"><label htmlFor="trip-end-date">Return date</label><input id="trip-end-date" type="date" min="2027-03-01" max="2027-03-31" value={draft.endDate} aria-invalid={Boolean(errors.dates)} aria-describedby={errors.dates ? 'trip-dates-error' : undefined} onChange={e => change({endDate: e.target.value})} /></div></div>
       <p className="hint">Travel must take place between March 1 and March 31, 2027 (1–14 nights).</p>{errors.dates && <p id="trip-dates-error" className="field-error">{errors.dates}</p>}

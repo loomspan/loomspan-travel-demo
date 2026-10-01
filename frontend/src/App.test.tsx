@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {render, screen, waitFor, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import {identityApi, type Profile} from './api/identityApi';
@@ -129,6 +129,24 @@ describe('App identity experience', () => {
     expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith('/api/profile', expect.objectContaining({credentials: 'same-origin'}));
+  });
+
+  it('removes an action confirmation after six seconds', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [], past: []}))
+      .mockResolvedValueOnce(noContent());
+    render(<App />);
+    await screen.findByRole('button', {name: 'Log out'});
+    vi.useFakeTimers();
+    try {
+      await act(async () => { fireEvent.click(screen.getByRole('button', {name: 'Log out'})); });
+      expect(screen.getByRole('status')).toHaveTextContent('You have logged out.');
+      act(() => { vi.advanceTimersByTime(5999); });
+      expect(screen.getByRole('status')).toHaveTextContent('You have logged out.');
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('moves focus to Home and Profile headings when primary navigation changes views', async () => {
@@ -1255,6 +1273,7 @@ describe('App identity experience', () => {
         sourcePlannedItineraryIds: ['plan-1'],
         travelerAges: [25, 30],
         budgetCents: 150000,
+        name: 'Munich - 2027-03-15 to 2027-03-20',
       }),
     }));
 

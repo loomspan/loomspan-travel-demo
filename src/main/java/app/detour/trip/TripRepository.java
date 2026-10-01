@@ -17,6 +17,10 @@ public interface TripRepository {
 
     List<Trip> findAllByOwnerUserId(long ownerUserId);
 
+    void lockOwnerForNaming(long ownerUserId);
+
+    List<String> findNamesByOwnerUserId(long ownerUserId);
+
     void deleteTrip(long tripId, long ownerUserId);
 
     boolean cancelTrip(long tripId, long ownerUserId, long expectedVersion);

@@ -620,9 +620,10 @@ class StaySearchAndSelectionIntegrationTest {
 
     private static String tripJson(String destinationKey, String startDate, String endDate, int travelerCount, Long budgetCents) {
         String budgetStr = budgetCents == null ? "null" : budgetCents.toString();
+        String name = destinationKey + " - " + startDate + " to " + endDate + " - party " + travelerCount;
         return """
                 {
-                    "name": "Test trip",
+                    "name": "%s",
                     "destinationKey": "%s",
                     "startDate": "%s",
                     "endDate": "%s",
@@ -630,7 +631,7 @@ class StaySearchAndSelectionIntegrationTest {
                     "travelerAges": %s,
                     "budgetCents": %s
                 }
-                """.formatted(destinationKey, startDate, endDate, travelerCount,
+                """.formatted(name, destinationKey, startDate, endDate, travelerCount,
                 java.util.Collections.nCopies(travelerCount, 30).toString(), budgetStr);
     }
 

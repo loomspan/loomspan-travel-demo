@@ -595,9 +595,10 @@ class AirfareSearchAndSelectionIntegrationTest {
     }
 
     private static String tripJson(String destinationKey, String startDate, String endDate, int travelerCount) {
+        String name = destinationKey + " - " + startDate + " to " + endDate + " - party " + travelerCount;
         return """
                 {
-                    "name": "Test trip",
+                    "name": "%s",
                     "destinationKey": "%s",
                     "startDate": "%s",
                     "endDate": "%s",
@@ -605,7 +606,7 @@ class AirfareSearchAndSelectionIntegrationTest {
                     "travelerAges": %s,
                     "budgetCents": 500000
                 }
-                """.formatted(destinationKey, startDate, endDate, travelerCount,
+                """.formatted(name, destinationKey, startDate, endDate, travelerCount,
                 java.util.Collections.nCopies(travelerCount, 30).toString());
     }
 

@@ -274,6 +274,13 @@ class TripApiIntegrationTest {
         String workingId = tools.jackson.databind.json.JsonMapper.builder().build()
                 .readTree(created.getResponse().getContentAsString()).get("workingPlan").get("id").asString();
         owner.unsafe(post("/api/trips"), validRequest("\"name\":\"Family spring\""))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DUPLICATE_TRIP_NAME"));
+        MvcResult another = owner.unsafe(post("/api/trips"), validRequest("\"name\":\"Other trip\""))
+                .andExpect(status().isCreated()).andReturn();
+        owner.unsafe(put("/api/trips/{tripId}/name", jsonField(another, "id")),
+                "{\"expectedVersion\":0,\"name\":\"family SPRING\"}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DUPLICATE_TRIP_NAME"));
+        other.unsafe(post("/api/trips"), validRequest("\"name\":\"Family spring\""))
                 .andExpect(status().isCreated());
         owner.unsafe(put("/api/trips/{tripId}/name", tripId), "{\"expectedVersion\":0,\"name\":\"  Summer ideas  \"}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("Summer ideas"))
@@ -305,6 +312,21 @@ class TripApiIntegrationTest {
         owner.unsafe(post("/api/trips"), "{\"name\":\"Ages needed\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2}")
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.fields.travelerAges").exists());
         assertEquals(before, count("detour_trip"));
+    }
+
+    @Test
+    void generatedTripNameFollowsDateChangesAndAvoidsExistingNames() throws Exception {
+        Client owner = register("dated-trip-name@example.test");
+        String base = "San Francisco - 2027-03-10 to 2027-03-14";
+        String target = "San Francisco - 2027-03-15 to 2027-03-19";
+        owner.unsafe(post("/api/trips"), validRequest("\"name\":\"" + target + "\""))
+                .andExpect(status().isCreated());
+        MvcResult created = owner.unsafe(post("/api/trips"), validRequest("\"name\":\"" + base + "\""))
+                .andExpect(status().isCreated()).andReturn();
+        owner.unsafe(put("/api/trips/{tripId}/working-dates", jsonField(created, "id")),
+                "{\"expectedVersion\":0,\"expectedDraftVersion\":0,\"startDate\":\"2027-03-15\",\"endDate\":\"2027-03-19\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value(target + " - A"));
     }
 
     @Test
@@ -475,12 +497,12 @@ class TripApiIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.travelerAges[0]").value(25))
                 .andExpect(jsonPath("$.budgetCents").doesNotExist());
-        owner.unsafe(post("/api/trips"), validRequest("\"travelerAges\":[0,120],\"budgetCents\":100000000"))
+        owner.unsafe(post("/api/trips"), validRequest("\"name\":\"Spring trip B\",\"travelerAges\":[0,120],\"budgetCents\":100000000"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.travelerAges[0]").value(0))
                 .andExpect(jsonPath("$.travelerAges[1]").value(120))
                 .andExpect(jsonPath("$.budgetCents").value(100000000));
-        owner.unsafe(post("/api/trips"), validRequest("\"travelerAges\":[0,17],\"budgetCents\":0"))
+        owner.unsafe(post("/api/trips"), validRequest("\"name\":\"Spring trip C\",\"travelerAges\":[0,17],\"budgetCents\":0"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.budgetCents").value(0));
     }
@@ -697,7 +719,7 @@ class TripApiIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.version").value(0))
                 .andExpect(jsonPath("$.savedOptions.length()").value(0));
 
-        MvcResult minorTrip = owner.unsafe(post("/api/trips"), validRequest("\"travelerAges\":[17,12]")).andExpect(status().isCreated()).andReturn();
+        MvcResult minorTrip = owner.unsafe(post("/api/trips"), validRequest("\"name\":\"Minors trip\",\"travelerAges\":[17,12]")).andExpect(status().isCreated()).andReturn();
         var minorBody = tools.jackson.databind.json.JsonMapper.builder().build().readTree(minorTrip.getResponse().getContentAsString());
         owner.unsafe(get("/api/trips/{tripId}/drafts/{draftId}/readiness", minorBody.get("id").asString(),
                 minorBody.get("drafts").get(0).get("id").asString()), null)
@@ -725,7 +747,7 @@ class TripApiIntegrationTest {
                 .andExpect(jsonPath("$.planned[0].selections.rental").doesNotExist());
 
         // Test Rental selection only
-        MvcResult createdRental = owner.unsafe(post("/api/trips"), validRequest("\"travelerAges\":[30,25],\"budgetCents\":500000")).andExpect(status().isCreated()).andReturn();
+        MvcResult createdRental = owner.unsafe(post("/api/trips"), validRequest("\"name\":\"Rental trip\",\"travelerAges\":[30,25],\"budgetCents\":500000")).andExpect(status().isCreated()).andReturn();
         String tripId2 = jsonField(createdRental, "id");
         String draftId2 = tools.jackson.databind.json.JsonMapper.builder().build().readTree(createdRental.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
         insertSfoRentalSelection(draftId2);
@@ -739,7 +761,7 @@ class TripApiIntegrationTest {
                 .andExpect(jsonPath("$.planned[0].selections.stay").doesNotExist());
 
         // Test All three selections together
-        MvcResult createdAll = owner.unsafe(post("/api/trips"), validRequest("\"travelerAges\":[30,25],\"budgetCents\":500000")).andExpect(status().isCreated()).andReturn();
+        MvcResult createdAll = owner.unsafe(post("/api/trips"), validRequest("\"name\":\"All selections trip\",\"travelerAges\":[30,25],\"budgetCents\":500000")).andExpect(status().isCreated()).andReturn();
         String tripId3 = jsonField(createdAll, "id");
         String draftId3 = tools.jackson.databind.json.JsonMapper.builder().build().readTree(createdAll.getResponse().getContentAsString()).get("drafts").get(0).get("id").asString();
         insertSfoAirfareSelection(draftId3);
@@ -1174,6 +1196,7 @@ class TripApiIntegrationTest {
                 "{\"expectedVersion\":2,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":80000,\"sourcePlannedItineraryIds\":[\"" + planned1Id + "\",\"" + planned2Id + "\"]}")
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.version").value(0))
+                .andExpect(jsonPath("$.name").value("San Francisco - 2027-03-10 to 2027-03-14"))
                 .andExpect(jsonPath("$.budgetCents").value(80000))
                 .andExpect(jsonPath("$.drafts.length()").value(1))
                 .andExpect(jsonPath("$.planned.length()").value(2))
@@ -1181,6 +1204,11 @@ class TripApiIntegrationTest {
                 .andExpect(jsonPath("$.savedOptions[1].name").value("Stay and car"))
                 .andExpect(jsonPath("$.alternatives.length()").value(3))
                 .andReturn();
+
+        owner.unsafe(post("/api/trips/{tripId}/duplicate", tripId),
+                "{\"expectedVersion\":2,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":80000,\"sourcePlannedItineraryIds\":[\"" + planned1Id + "\",\"" + planned2Id + "\"]}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("San Francisco - 2027-03-10 to 2027-03-14 - A"));
 
         String newTripId = jsonField(duplicated, "id");
         org.junit.jupiter.api.Assertions.assertNotEquals(tripId, newTripId);
@@ -1245,7 +1273,7 @@ class TripApiIntegrationTest {
 
         // User A creates Trip 2 with Planned itinerary
         MvcResult tripA2 = userA.unsafe(post("/api/trips"),
-                validRequest("\"travelerAges\":[25,30],\"budgetCents\":50000"))
+                validRequest("\"name\":\"Second spring trip\",\"travelerAges\":[25,30],\"budgetCents\":50000"))
                 .andExpect(status().isCreated()).andReturn();
         String tripA2Id = jsonField(tripA2, "id");
         String draftA2Id = tools.jackson.databind.json.JsonMapper.builder().build()
@@ -1411,11 +1439,11 @@ class TripApiIntegrationTest {
         String trip1Id = jsonField(trip1Res, "id");
 
         // Trip 2: March 10–16, 2027 (Upcoming, same start date as Trip 1)
-        MvcResult trip2Res = owner.unsafe(post("/api/trips"), "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-16\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
+        MvcResult trip2Res = owner.unsafe(post("/api/trips"), "{\"name\":\"Test trip B\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-16\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
         String trip2Id = jsonField(trip2Res, "id");
 
         // Trip 3: March 2–5, 2027 (Past, end date March 5 has passed)
-        MvcResult trip3Res = owner.unsafe(post("/api/trips"), "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-02\",\"endDate\":\"2027-03-05\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
+        MvcResult trip3Res = owner.unsafe(post("/api/trips"), "{\"name\":\"Test trip C\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-02\",\"endDate\":\"2027-03-05\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
         String trip3Id = jsonField(trip3Res, "id");
 
         // Query profile
@@ -1494,7 +1522,7 @@ class TripApiIntegrationTest {
                 .andExpect(jsonPath("$.code").value("ALTERNATIVE_EXPIRED"));
 
         // DST boundary test: departure date 2027-03-15 around March 14 DST change
-        MvcResult dstTripRes = owner.unsafe(post("/api/trips"), "{\"name\":\"Test trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-15\",\"endDate\":\"2027-03-20\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
+        MvcResult dstTripRes = owner.unsafe(post("/api/trips"), "{\"name\":\"DST trip\",\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-15\",\"endDate\":\"2027-03-20\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":50000}").andExpect(status().isCreated()).andReturn();
         String dstTripId = jsonField(dstTripRes, "id");
         testClock.setInstant(ZonedDateTime.of(2027, 3, 14, 23, 59, 59, 999_000_000, ClockConfiguration.PDX_ZONE).toInstant());
         mockMvc.perform(get("/api/trips").session(owner.session).cookie(owner.csrf))
