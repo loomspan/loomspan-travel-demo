@@ -183,16 +183,20 @@ public class TripService {
     }
 
     public TripsProfileResponse tripsProfile(long ownerUserId) {
+        Instant now = clock.instant();
+        LocalDate today = LocalDate.ofInstant(now, ClockConfiguration.PDX_ZONE);
         List<Trip> allTrips = trips.findAllByOwnerUserId(ownerUserId);
         List<TripProfileSummary> upcoming = new ArrayList<>();
         List<TripProfileSummary> past = new ArrayList<>();
 
         for (Trip trip : allTrips) {
-            boolean pastTrip = isPast(trip.drafts().get(0).endDate())
-                    && trip.planned().stream().allMatch(option -> isPast(option.endDate()));
+            boolean pastTrip = today.isAfter(trip.endDate());
+            boolean inProgress = "ACTIVE".equals(trip.status())
+                    && !today.isBefore(trip.startDate()) && !pastTrip;
             String temporalStatus = pastTrip ? "PAST" : "UPCOMING";
 
-            boolean expired = isExpired(trip.drafts().get(0).startDate());
+            boolean expired = !now.isBefore(trip.drafts().get(0).startDate()
+                    .atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant());
             int draftCount = trip.drafts().size();
             int plannedCount = trip.planned().size();
             int expiredCount = expired ? draftCount : 0;
@@ -207,7 +211,8 @@ public class TripService {
                         expired, "Working plan", draft.startDate(), draft.endDate()));
             }
             for (PlannedItinerary planned : trip.planned()) {
-                boolean optionExpired = isExpired(planned.startDate());
+                boolean optionExpired = !now.isBefore(planned.startDate()
+                        .atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant());
                 if (optionExpired) expiredCount++;
                 alternatives.add(new AlternativeProfileSummary(
                         planned.publicId(),
@@ -234,7 +239,7 @@ public class TripService {
                     trips.activeBookingCount(trip.id()),
                     trips.hasBookingHistory(trip.id()),
                     trips.findPrimaryBookingReference(trip.id()).orElse(null),
-                    List.copyOf(alternatives));
+                    List.copyOf(alternatives), trip.label(), inProgress);
 
             if (pastTrip) {
                 past.add(summary);

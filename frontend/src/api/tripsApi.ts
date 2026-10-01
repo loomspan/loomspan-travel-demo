@@ -13,6 +13,7 @@ export type AlternativeProfileSummary = {
 };
 
 export type TripProfileSummary = {
+  inProgress: boolean;
   id: string;
   name?: string;
   destinationKey: string;

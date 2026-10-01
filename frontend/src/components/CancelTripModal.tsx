@@ -1,4 +1,5 @@
 import {useEffect, useRef} from 'react';
+import {focusTripDialogFallback} from './tripDialogFocus';
 
 type CancelTripModalProps = {
   isOpen: boolean;
@@ -31,10 +32,7 @@ export function CancelTripModal({
       if (document.body.contains(previousActiveElement.current)) {
         previousActiveElement.current.focus();
       } else {
-        const fallback = document.querySelector<HTMLElement>(
-          '#workspace-heading, #upcoming-trips-heading, h1, h2'
-        );
-        fallback?.focus();
+        focusTripDialogFallback();
       }
       previousActiveElement.current = null;
     }
@@ -42,7 +40,7 @@ export function CancelTripModal({
       const previous = previousActiveElement.current;
       if (!previous) return;
       if (document.body.contains(previous)) previous.focus();
-      else document.querySelector<HTMLElement>('#workspace-heading, #profile-heading, #home-heading, h1, h2')?.focus();
+      else focusTripDialogFallback();
       previousActiveElement.current = null;
     };
   }, [isOpen]);

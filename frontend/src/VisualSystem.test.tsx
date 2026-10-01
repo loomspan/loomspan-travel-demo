@@ -46,6 +46,17 @@ describe('DeTour visual language', () => {
     expect(css).toMatch(/@media \(forced-colors: active\)/);
   });
 
+  it('constrains list menus and preserves narrow wrapping with native focus and forced colors', () => {
+    const css = readFileSync('src/style.css', 'utf8');
+    expect(css).toMatch(/\.trip-action-menu\s*\{[^}]*max-width: 100%[^}]*min-width: 0[^}]*box-sizing: border-box/);
+    expect(css).toMatch(/\.trip-action-menu button\s*\{[^}]*white-space: normal[^}]*overflow-wrap: anywhere/);
+    expect(css).toMatch(/\.trip-card-summary\s*\{[^}]*flex-wrap: wrap/);
+    expect(css).toMatch(/\.component-slots-grid, \.alternatives-grid, \.trips-grid\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\)/);
+    expect(css).toMatch(/\.trip-card-actions\s*\{[^}]*flex-direction: column/);
+    expect(css).toMatch(/:focus-visible\s*\{[^}]*outline:/);
+    expect(css).toMatch(/@media \(forced-colors: active\)/);
+  });
+
   it('treats action icons as decorative while text carries the action name', () => {
     render(<button type="button"><ActionIcon name="airfare" />Airfare</button>);
     expect(screen.getByRole('button', {name: 'Airfare'})).toBeInTheDocument();

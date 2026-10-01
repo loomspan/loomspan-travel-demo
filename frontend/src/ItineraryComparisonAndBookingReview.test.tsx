@@ -234,7 +234,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
       email="ada@example.test" initialDestination="trips"
       upcoming={[{id: trip.id, label: trip.label, destinationKey: trip.destinationKey,
         destinationName: trip.destinationName, startDate: trip.startDate, endDate: trip.endDate,
-        version: trip.version, temporalStatus: 'UPCOMING', draftCount: 0, plannedCount: trip.planned.length,
+        version: trip.version, inProgress: false, temporalStatus: 'UPCOMING', draftCount: 0, plannedCount: trip.planned.length,
         expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: []}]}
       onLogout={async () => {}} logoutPending={false} onPasswordChange={async () => {}} onFailure={() => {}}
     />);
@@ -295,7 +295,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
       email="ada@example.test"
       upcoming={[{id: trip.id, label: trip.label, destinationKey: trip.destinationKey,
         destinationName: trip.destinationName, startDate: trip.startDate, endDate: trip.endDate,
-        version: trip.version, temporalStatus: 'UPCOMING', draftCount: 0, plannedCount: 2,
+        version: trip.version, inProgress: false, temporalStatus: 'UPCOMING', draftCount: 0, plannedCount: 2,
         expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: []}]}
       onLogout={async () => {}}
       logoutPending={false}

@@ -679,6 +679,7 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
   // Test 12: Profile screen renders CANCELED badge and handles trip cancellation directly
   it('ProfileScreen renders CANCELED badge and handles trip cancellation directly from trip list', async () => {
     const canceledTripSummary: TripProfileSummary = {
+      inProgress: false,
       id: 'trip-canceled-1',
       destinationKey: 'destination-sfo',
       destinationName: 'San Francisco',
@@ -697,6 +698,7 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
     };
 
     const bookedTripSummary: TripProfileSummary = {
+      inProgress: false,
       id: 'trip-booked-1',
       destinationKey: 'destination-muc',
       destinationName: 'Munich',
@@ -737,13 +739,17 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
 
     // Canceled trip displays Canceled badge and does not display Cancel trip or Delete trip
     expect(screen.getByText('Canceled Trip', {selector: '.badge-canceled'})).toBeInTheDocument();
-    expect(screen.queryByRole('button', {name: 'Cancel trip Canceled SFO Trip'})).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', {name: 'Delete trip Canceled SFO Trip'})).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Actions for Canceled SFO Trip'}));
+    expect(screen.getByRole('menuitem', {name: 'Trip Canceled SFO Trip is canceled'})).toBeDisabled();
+    expect(screen.queryByRole('menuitem', {name: 'Cancel trip Canceled SFO Trip'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', {name: 'Delete trip Canceled SFO Trip'})).not.toBeInTheDocument();
 
     // Booked trip displays "Cancel trip" button
-    const cancelTripBtn = screen.getByRole('button', {name: 'Cancel trip Booked Munich Trip'});
+    await user.click(screen.getByRole('button', {name: 'Actions for Booked Munich Trip'}));
+    const menuTrigger = screen.getByRole('button', {name: 'Actions for Booked Munich Trip'});
+    const cancelTripBtn = screen.getByRole('menuitem', {name: 'Cancel trip Booked Munich Trip'});
     expect(cancelTripBtn).toBeInTheDocument();
-    expect(screen.queryByRole('button', {name: 'Delete trip Booked Munich Trip'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', {name: 'Delete trip Booked Munich Trip'})).not.toBeInTheDocument();
 
     // Click Cancel trip from profile
     await user.click(cancelTripBtn);
@@ -751,14 +757,20 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
     const dialog = screen.getByRole('dialog', {name: /cancel trip/i});
     expect(dialog).toBeInTheDocument();
     expect(within(dialog).getByText(/Booked Munich Trip/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', {name: 'Keep Trip Active'})).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(menuTrigger).toHaveFocus();
+    await user.click(menuTrigger);
+    await user.click(screen.getByRole('menuitem', {name: 'Cancel trip Booked Munich Trip'}));
 
     // Confirm cancellation
-    const confirmBtn = within(dialog).getByRole('button', {name: 'Cancel Trip'});
+    const confirmBtn = within(screen.getByRole('dialog', {name: /cancel trip/i})).getByRole('button', {name: 'Cancel Trip'});
     await user.click(confirmBtn);
 
     await waitFor(() => {
       expect(cancelTripSpy).toHaveBeenCalledWith('trip-booked-1', {expectedVersion: 1});
       expect(refreshProfileMock).toHaveBeenCalled();
+      expect(menuTrigger).toHaveFocus();
     });
   });
 
@@ -896,8 +908,9 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
   });
 
   // Test 16: TripListSection displays "Trip canceled" even if hasBookingHistory is false
-  it('TripListSection displays Trip canceled even if hasBookingHistory is false on a canceled trip', () => {
+  it('TripListSection displays Trip canceled even if hasBookingHistory is false on a canceled trip', async () => {
     const canceledSummary: TripProfileSummary = {
+      inProgress: false,
       id: 'trip-c1',
       destinationKey: 'destination-sfo',
       destinationName: 'San Francisco',
@@ -924,7 +937,8 @@ describe('Fee-Free Cancellation and Post-Cancellation Triage', () => {
       />
     );
 
-    expect(screen.getByRole('button', {name: 'Trip Canceled SFO is canceled'})).toBeDisabled();
-    expect(screen.queryByRole('button', {name: 'Delete trip Canceled SFO'})).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('button', {name: 'Actions for Canceled SFO'}));
+    expect(screen.getByRole('menuitem', {name: 'Trip Canceled SFO is canceled'})).toBeDisabled();
+    expect(screen.queryByRole('menuitem', {name: 'Delete trip Canceled SFO'})).not.toBeInTheDocument();
   });
 });

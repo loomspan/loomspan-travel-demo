@@ -221,8 +221,8 @@ export function ProfileScreen({
       await tripsApi.cancelTrip(cancelTripTarget.id, {
         expectedVersion: cancelTripTarget.version,
       });
-      setCancelTripTarget(null);
       if (onRefreshProfile) await onRefreshProfile();
+      setCancelTripTarget(null);
     } catch (err) {
       if (err instanceof IdentityApiError) {
         if (err.code === 'VERSION_CONFLICT') {
@@ -275,9 +275,9 @@ export function ProfileScreen({
         expectedPlannedCount: plannedCount,
         confirmed: true,
       });
-      setDeleteTarget(null);
-      if (activeTrip?.id === deleteTarget.tripId) setActiveTrip(null);
       if (onRefreshProfile) await onRefreshProfile();
+      if (activeTrip?.id === deleteTarget.tripId) setActiveTrip(null);
+      setDeleteTarget(null);
     } catch (err) {
       if (err instanceof IdentityApiError) {
         if (err.code === 'STALE_CONFIRMATION') {

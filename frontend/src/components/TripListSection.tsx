@@ -1,5 +1,5 @@
-import {useState, type FormEvent} from 'react';
-import type {TripProfileSummary, AlternativeProfileSummary} from '../api/tripsApi';
+import {useEffect, useRef, useState, type FormEvent, type KeyboardEvent} from 'react';
+import type {TripProfileSummary} from '../api/tripsApi';
 import {IdentityApiError} from '../api/identityApi';
 
 type TripListSectionProps = {
@@ -17,41 +17,99 @@ type TripListSectionProps = {
   headingLevel?: 2 | 3;
 };
 
-function AlternativeSummaryItem({alt}: {alt: AlternativeProfileSummary}) {
-  const isExpired = alt.expired || alt.status.toUpperCase() === 'EXPIRED';
+const nameCollator = new Intl.Collator('en', {sensitivity: 'base'});
+const lexical = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
+const byName = (a: TripProfileSummary, b: TripProfileSummary) =>
+  nameCollator.compare(a.name ?? a.label, b.name ?? b.label) || lexical(a.id, b.id);
+const dateFormatter = new Intl.DateTimeFormat('en-US', {month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC'});
+const formatDate = (date: string) => dateFormatter.format(new Date(`${date}T00:00:00Z`));
 
-  return (
-    <li className="alternative-summary-item">
-      <div className="alternative-summary-meta">
-        <span className="badge badge-planned">Saved option</span>
-        {isExpired && <span className="badge badge-expired">Expired</span>}
-        {alt.booked && <span className="badge badge-booked">Booked</span>}
-        <strong>{alt.name ?? 'Saved option'}</strong>
-        {alt.startDate && alt.endDate && <span>{alt.startDate} to {alt.endDate}</span>}
-      </div>
-    </li>
-  );
-}
-
-function TripCard({
-  trip,
-  onSelect,
-  onDelete,
-  onCancel,
-  onRename,
-}: {
+function TripCard({trip, onSelect, onDelete, onCancel, onRename, headingLevel}: {
   trip: TripProfileSummary;
   onSelect: (tripId: string) => void;
   onDelete: (trip: TripProfileSummary) => void;
   onCancel?: (trip: TripProfileSummary) => void;
   onRename?: (trip: TripProfileSummary, name: string) => Promise<void>;
+  headingLevel: 2 | 3;
 }) {
   const isPast = trip.temporalStatus === 'PAST';
   const isCanceled = trip.status === 'CANCELED';
+  const title = trip.name ?? trip.label;
+  const CardHeading = headingLevel === 2 ? 'h3' : 'h4';
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(trip.name ?? trip.label);
+  const [name, setName] = useState(title);
   const [renamePending, setRenamePending] = useState(false);
   const [renameError, setRenameError] = useState<string>();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const initialMenuFocus = useRef<'first' | 'last'>('first');
+  const wasEditing = useRef(false);
+  const tabLeaving = useRef(false);
+  const tabDismissTimer = useRef<number | undefined>(undefined);
+  const menuId = `trip-menu-${trip.id}`;
+  const triggerId = `trip-actions-${trip.id}`;
+  const closeMenu = (restore = false) => {
+    setMenuOpen(false);
+    if (restore) triggerRef.current?.focus();
+  };
+  const enabledItems = () => Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? []);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const items = enabledItems();
+    (initialMenuFocus.current === 'last' ? items.at(-1) : items[0])?.focus();
+    if (!items.length) menuRef.current?.focus();
+    const dismissOutside = (event: Event) => {
+      const target = event.target as Node;
+      if (tabLeaving.current || (!menuRef.current?.contains(target) && !triggerRef.current?.contains(target))) setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', dismissOutside);
+    document.addEventListener('focusin', dismissOutside);
+    return () => {
+      document.removeEventListener('pointerdown', dismissOutside);
+      document.removeEventListener('focusin', dismissOutside);
+      window.clearTimeout(tabDismissTimer.current);
+    };
+  }, [menuOpen]);
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+    else if (wasEditing.current) triggerRef.current?.focus();
+    wasEditing.current = editing;
+  }, [editing]);
+  const openMenu = (last = false) => {
+    tabLeaving.current = false;
+    initialMenuFocus.current = last ? 'last' : 'first';
+    setMenuOpen(true);
+  };
+  const menuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Tab') {
+      tabLeaving.current = true;
+      // Defer removal until native focus advancement, including departure to
+      // browser chrome where no document focusin event follows.
+      tabDismissTimer.current = window.setTimeout(() => setMenuOpen(false), 0);
+      return;
+    }
+    if (event.key === 'Escape') { event.preventDefault(); closeMenu(true); return; }
+    // Native Tab moves beyond the menu's programmatically focused items. The
+    // focusin listener closes it after that move, without trapping focus.
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const items = enabledItems();
+    const index = items.indexOf(document.activeElement as HTMLButtonElement);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+      : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+    items[next]?.focus();
+  };
+  const finishRename = () => {
+    setEditing(false); setRenameError(undefined); setName(title);
+    triggerRef.current?.focus();
+  };
+  const activate = (action: () => void) => {
+    // The dialogs capture the active element: restore the persistent trigger
+    // before their callback replaces the menu with a modal.
+    closeMenu(true); action();
+  };
   const submitRename = async (event: FormEvent) => {
     event.preventDefault();
     if (renamePending) return;
@@ -59,7 +117,7 @@ function TripCard({
     if (!trimmed) { setRenameError('Enter a trip name.'); return; }
     if (trimmed.length > 300) { setRenameError('Trip name must be 300 characters or fewer.'); return; }
     setRenamePending(true); setRenameError(undefined);
-    try { if (!onRename) return; await onRename(trip, trimmed); setEditing(false); }
+    try { if (!onRename) return; await onRename(trip, trimmed); finishRename(); }
     catch (error) {
       setRenameError(error instanceof IdentityApiError && error.code === 'VERSION_CONFLICT'
         ? 'This trip changed on the server. Refresh Trips and try again.'
@@ -69,106 +127,52 @@ function TripCard({
 
   return (
     <article className="card trip-card" aria-labelledby={`trip-heading-${trip.id}`}>
-      <div className="trip-card-header">
-        <div>
-          <span className={`badge ${isCanceled ? 'badge-canceled' : isPast ? 'badge-past' : 'badge-upcoming'}`}>
-            {isCanceled ? 'Canceled Trip' : isPast ? 'Past' : 'Upcoming'}
-          </span>
-          {trip.bookedCount > 0 && (
-            <span className="badge badge-booked">Booking</span>
-          )}
-          <h3 id={`trip-heading-${trip.id}`} className="trip-card-title">
-            {trip.name ?? trip.label}
-          </h3>
-          <p className="trip-card-subtitle">{trip.destinationName}</p>
-          <p className="trip-card-subtitle">Working plan: {trip.startDate} to {trip.endDate}</p>
-          {editing && <form className="trip-rename-form" onSubmit={submitRename}>
-            <label htmlFor={`rename-${trip.id}`}>Trip name</label>
-            <input id={`rename-${trip.id}`} value={name} aria-invalid={Boolean(renameError)} aria-describedby={renameError ? `rename-error-${trip.id}` : undefined} onChange={event => setName(event.target.value)} />
-            {renameError && <p id={`rename-error-${trip.id}`} className="field-error" role="alert">{renameError}</p>}
-            <button type="submit" disabled={renamePending}>{renamePending ? 'Saving…' : 'Save name'}</button>
-            <button type="button" disabled={renamePending} onClick={() => {setEditing(false); setRenameError(undefined); setName(trip.name ?? trip.label);}}>Cancel rename</button>
-          </form>}
-          {trip.bookedCount > 0 && trip.primaryBookingReference && (
-            <p className="trip-card-booking-ref">
-              Booking Reference: <strong>{trip.primaryBookingReference}</strong>
-            </p>
-          )}
-        </div>
-        <div className="trip-card-counts">
-          <span className="count-pill">{trip.plannedCount} Saved option{trip.plannedCount === 1 ? '' : 's'}</span>
-          {trip.expiredAlternativeCount > 0 && (
-            <span className="count-pill badge-expired">{trip.expiredAlternativeCount} Expired</span>
-          )}
-          {trip.bookedCount > 0 && (
-            <span className="count-pill badge-booked">{trip.bookedCount} Booking{trip.bookedCount === 1 ? '' : 's'}</span>
-          )}
-        </div>
+      <CardHeading id={`trip-heading-${trip.id}`} className="trip-card-title">{title}</CardHeading>
+      <p className="trip-card-subtitle">{trip.destinationName}</p>
+      <p className="trip-card-subtitle">{formatDate(trip.startDate)} – {formatDate(trip.endDate)}</p>
+      <div className="trip-card-summary">
+        <span className={`badge ${isCanceled ? 'badge-canceled' : isPast ? 'badge-past' : 'badge-upcoming'}`}>
+          {isCanceled ? 'Canceled Trip' : isPast ? 'Past' : trip.inProgress ? 'In progress' : 'Upcoming'}
+        </span>
+        <span className="count-pill">{trip.plannedCount} Saved option{trip.plannedCount === 1 ? '' : 's'}</span>
+        {trip.expiredAlternativeCount > 0 && <span className="count-pill badge-expired">{trip.expiredAlternativeCount} Expired</span>}
+        {trip.bookedCount > 0 && <span className="count-pill badge-booked">{trip.bookedCount} Booking{trip.bookedCount === 1 ? '' : 's'}</span>}
       </div>
-
-      {trip.alternatives && trip.alternatives.some(alt => alt.lifecycle.toUpperCase() === 'PLANNED') && (
-        <div className="trip-card-alternatives">
-          <h4 className="alternatives-heading">Saved options</h4>
-          <ul className="alternatives-summary-list" aria-label={`Saved options for ${trip.name ?? trip.label}`}>
-            {trip.alternatives.filter(alt => alt.lifecycle.toUpperCase() === 'PLANNED').map((alt) => (
-              <AlternativeSummaryItem key={alt.id} alt={alt} />
-            ))}
-          </ul>
-        </div>
-      )}
-
+      {trip.bookedCount > 0 && trip.primaryBookingReference && <p className="trip-card-booking-ref">
+        Booking Reference: <strong>{trip.primaryBookingReference}</strong>
+      </p>}
       <div className="trip-card-actions">
-        {!editing && onRename && <button type="button" className="text-button" onClick={() => {setName(trip.name ?? trip.label); setEditing(true);}}>Rename trip</button>}
-        {isCanceled ? (
-          <button
-            type="button"
-            className="text-button"
-            disabled
-            title="This trip has been canceled"
-            aria-label={`Trip ${trip.label} is canceled`}
-          >
-            Trip canceled
-          </button>
-        ) : trip.hasBookingHistory ? (
-          isPast || trip.expiredAlternativeCount > 0 ? (
-            <button
-              type="button"
-              className="text-button delete-button"
-              disabled
-              title="Past or expired trips cannot be canceled"
-              aria-label={`Cancel trip ${trip.label}`}
-            >
-              Cancel trip
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="text-button delete-button"
-              onClick={() => onCancel && onCancel(trip)}
-              aria-label={`Cancel trip ${trip.label}`}
-            >
-              Cancel trip
-            </button>
-          )
-        ) : (
-          <button
-            type="button"
-            className="text-button delete-button"
-            onClick={() => onDelete(trip)}
-            aria-label={`Delete trip ${trip.label}`}
-          >
-            Delete trip
-          </button>
-        )}
-        <button
-          type="button"
-          className="primary"
-          onClick={() => onSelect(trip.id)}
-          aria-label={`Open trip ${trip.label}`}
-        >
-          Open trip
-        </button>
+        <button type="button" className="primary" onClick={() => onSelect(trip.id)} aria-label={`Open trip ${trip.label}`}>Open trip</button>
+        <button ref={triggerRef} id={triggerId} type="button" className="secondary"
+          aria-label={`Actions for ${title}`} aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={menuId}
+          disabled={renamePending}
+          onClick={() => menuOpen ? closeMenu(true) : openMenu()}
+          onKeyDown={event => {
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault(); openMenu(event.key === 'ArrowUp');
+            }
+          }}>Actions</button>
       </div>
+      {menuOpen && <div ref={menuRef} id={menuId} role="menu" tabIndex={-1} aria-labelledby={triggerId} className="trip-action-menu" onKeyDown={menuKeyDown}>
+        {!editing && onRename && <button type="button" role="menuitem" tabIndex={-1} className="text-button"
+          onClick={() => activate(() => {setName(title); setRenameError(undefined); setEditing(true);})}>Rename trip</button>}
+        {isCanceled ? <button type="button" role="menuitem" tabIndex={-1} className="text-button" disabled
+          title="This trip has been canceled" aria-label={`Trip ${trip.label} is canceled`}>Trip canceled</button>
+          : trip.hasBookingHistory ? <button type="button" role="menuitem" tabIndex={-1} className="text-button delete-button"
+            disabled={isPast || trip.expiredAlternativeCount > 0}
+            title={isPast || trip.expiredAlternativeCount > 0 ? 'Past or expired trips cannot be canceled' : undefined}
+            onClick={() => activate(() => onCancel?.(trip))} aria-label={`Cancel trip ${trip.label}`}>Cancel trip</button>
+          : <button type="button" role="menuitem" tabIndex={-1} className="text-button delete-button"
+            onClick={() => activate(() => onDelete(trip))} aria-label={`Delete trip ${trip.label}`}>Delete trip</button>}
+      </div>}
+      {editing && <form className="trip-rename-form" onSubmit={submitRename}>
+        <label htmlFor={`rename-${trip.id}`}>Trip name</label>
+        <input ref={inputRef} id={`rename-${trip.id}`} value={name} disabled={renamePending} aria-invalid={Boolean(renameError)}
+          aria-describedby={renameError ? `rename-error-${trip.id}` : undefined} onChange={event => setName(event.target.value)} />
+        {renameError && <p id={`rename-error-${trip.id}`} className="field-error" role="alert">{renameError}</p>}
+        <button type="submit" disabled={renamePending}>{renamePending ? 'Saving…' : 'Save name'}</button>
+        <button type="button" disabled={renamePending} onClick={finishRename}>Cancel rename</button>
+      </form>}
     </article>
   );
 }
@@ -188,9 +192,10 @@ export function TripListSection({
   headingLevel = 3,
 }: TripListSectionProps) {
   const [filter, setFilter] = useState<'all' | 'upcoming' | 'past' | 'canceled'>('all');
-  const upcomingTrips = upcoming.filter(trip => trip.status !== 'CANCELED');
-  const pastTrips = past.filter(trip => trip.status !== 'CANCELED');
-  const canceledTrips = [...upcoming, ...past].filter(trip => trip.status === 'CANCELED');
+  const upcomingTrips = upcoming.filter(trip => trip.status !== 'CANCELED').sort((a, b) =>
+    Number(Boolean(b.inProgress)) - Number(Boolean(a.inProgress)) || lexical(a.startDate, b.startDate) || byName(a, b));
+  const pastTrips = past.filter(trip => trip.status !== 'CANCELED').sort((a, b) => lexical(b.endDate, a.endDate) || byName(a, b));
+  const canceledTrips = [...upcoming, ...past].filter(trip => trip.status === 'CANCELED').sort((a, b) => lexical(b.startDate, a.startDate) || byName(a, b));
   const handlePlanTrip = onStartPlanTrip ?? onPlanTrip;
   const SectionHeading = headingLevel === 2 ? 'h2' : 'h3';
 
@@ -242,7 +247,7 @@ export function TripListSection({
             {upcomingTrips.map((trip) => (
               <TripCard
                 key={trip.id}
-                trip={trip}
+                trip={trip} headingLevel={headingLevel}
                 onSelect={onSelectTrip}
                 onDelete={onDeleteTrip}
                 onCancel={onCancelTrip}
@@ -264,7 +269,7 @@ export function TripListSection({
             {pastTrips.map((trip) => (
               <TripCard
                 key={trip.id}
-                trip={trip}
+                trip={trip} headingLevel={headingLevel}
                 onSelect={onSelectTrip}
                 onDelete={onDeleteTrip}
                 onRename={onRenameTrip}
@@ -284,7 +289,7 @@ export function TripListSection({
         ) : (
           <div className="trips-grid">
             {canceledTrips.map(trip => (
-              <TripCard key={trip.id} trip={trip} onSelect={onSelectTrip} onDelete={onDeleteTrip}
+              <TripCard key={trip.id} trip={trip} headingLevel={headingLevel} onSelect={onSelectTrip} onDelete={onDeleteTrip}
                 onCancel={onCancelTrip} onRename={onRenameTrip} />
             ))}
           </div>

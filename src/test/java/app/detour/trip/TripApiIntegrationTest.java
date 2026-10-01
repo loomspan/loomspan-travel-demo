@@ -1409,6 +1409,126 @@ class TripApiIntegrationTest {
     }
 
     @Test
+    void profileUsesDisplayedEndDateWhenSavedOptionEndsLater() throws Exception {
+        testClock.setInstant(ZonedDateTime.of(2027, 3, 1, 12, 0, 0, 0, ClockConfiguration.PDX_ZONE).toInstant());
+        Client owner = register("displayed-end@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"), validRequest("\"startDate\":\"2027-03-15\",\"endDate\":\"2027-03-19\""))
+                .andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(created, "id");
+        String draftId = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(created.getResponse().getContentAsString()).get("workingPlan").get("id").asString();
+        insertSfoStaySelection(draftId);
+        MvcResult saved = owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Later stay\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated()).andReturn();
+        owner.unsafe(put("/api/trips/{tripId}/working-dates", tripId),
+                "{\"expectedVersion\":1,\"expectedDraftVersion\":0,\"startDate\":\"2027-03-02\",\"endDate\":\"2027-03-05\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.startDate").value("2027-03-02"))
+                .andExpect(jsonPath("$.workingPlan.endDate").value("2027-03-05"))
+                .andExpect(jsonPath("$.savedOptions[0].startDate").value("2027-03-15"))
+                .andExpect(jsonPath("$.savedOptions[0].endDate").value("2027-03-19"));
+        testClock.setInstant(ZonedDateTime.of(2027, 3, 6, 12, 0, 0, 0, ClockConfiguration.PDX_ZONE).toInstant());
+        for (String endpoint : java.util.List.of("/api/trips", "/api/profile")) {
+            mockMvc.perform(get(endpoint).session(owner.session).cookie(owner.csrf))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.upcoming.length()").value(0))
+                    .andExpect(jsonPath("$.past[0].id").value(tripId))
+                    .andExpect(jsonPath("$.past[0].temporalStatus").value("PAST"))
+                    .andExpect(jsonPath("$.past[0].startDate").value("2027-03-02"))
+                    .andExpect(jsonPath("$.past[0].endDate").value("2027-03-05"))
+                    .andExpect(jsonPath("$.past[0].inProgress").value(false))
+                    .andExpect(jsonPath("$.past[0].plannedCount").value(1))
+                    .andExpect(jsonPath("$.past[0].bookedCount").value(0))
+                    .andExpect(jsonPath("$.past[0].expiredAlternativeCount").value(1))
+                    .andExpect(jsonPath("$.past[0].alternatives[0].expired").value(true))
+                    .andExpect(jsonPath("$.past[0].alternatives[1].expired").value(false));
+        }
+        String optionId = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(saved.getResponse().getContentAsString()).get("savedOptions").get(0).get("id").asString();
+        owner.unsafe(post("/api/trips/{tripId}/options/{optionId}/load", tripId, optionId),
+                "{\"expectedVersion\":2,\"expectedDraftVersion\":1,\"expectedOptionVersion\":0,\"replaceWorking\":true}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.startDate").value("2027-03-15"));
+        for (String endpoint : java.util.List.of("/api/trips", "/api/profile")) {
+            mockMvc.perform(get(endpoint).session(owner.session).cookie(owner.csrf))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.past.length()").value(0))
+                    .andExpect(jsonPath("$.upcoming[0].startDate").value("2027-03-15"))
+                    .andExpect(jsonPath("$.upcoming[0].inProgress").value(false))
+                    .andExpect(jsonPath("$.upcoming[0].expiredAlternativeCount").value(0));
+        }
+    }
+
+    @Test
+    void profileUsesFutureDisplayedDatesWhenSavedOptionHasEnded() throws Exception {
+        testClock.setInstant(ZonedDateTime.of(2027, 3, 1, 12, 0, 0, 0, ClockConfiguration.PDX_ZONE).toInstant());
+        Client owner = register("displayed-future@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"), validRequest("\"startDate\":\"2027-03-02\",\"endDate\":\"2027-03-05\""))
+                .andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(created, "id");
+        String draftId = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(created.getResponse().getContentAsString()).get("workingPlan").get("id").asString();
+        insertSfoStaySelection(draftId);
+        owner.unsafe(post("/api/trips/{tripId}/options", tripId),
+                "{\"name\":\"Later stay\",\"expectedVersion\":0,\"expectedDraftVersion\":0}")
+                .andExpect(status().isCreated());
+        owner.unsafe(put("/api/trips/{tripId}/working-dates", tripId),
+                "{\"expectedVersion\":1,\"expectedDraftVersion\":0,\"startDate\":\"2027-03-15\",\"endDate\":\"2027-03-19\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.startDate").value("2027-03-15"))
+                .andExpect(jsonPath("$.workingPlan.endDate").value("2027-03-19"))
+                .andExpect(jsonPath("$.savedOptions[0].startDate").value("2027-03-02"))
+                .andExpect(jsonPath("$.savedOptions[0].endDate").value("2027-03-05"));
+        testClock.setInstant(ZonedDateTime.of(2027, 3, 6, 12, 0, 0, 0, ClockConfiguration.PDX_ZONE).toInstant());
+        for (String endpoint : java.util.List.of("/api/trips", "/api/profile")) {
+            mockMvc.perform(get(endpoint).session(owner.session).cookie(owner.csrf))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.past.length()").value(0))
+                    .andExpect(jsonPath("$.upcoming[0].id").value(tripId))
+                    .andExpect(jsonPath("$.upcoming[0].temporalStatus").value("UPCOMING"))
+                    .andExpect(jsonPath("$.upcoming[0].startDate").value("2027-03-15"))
+                    .andExpect(jsonPath("$.upcoming[0].endDate").value("2027-03-19"))
+                    .andExpect(jsonPath("$.upcoming[0].inProgress").value(false))
+                    .andExpect(jsonPath("$.upcoming[0].plannedCount").value(1))
+                    .andExpect(jsonPath("$.upcoming[0].bookedCount").value(0))
+                    .andExpect(jsonPath("$.upcoming[0].expiredAlternativeCount").value(1))
+                    .andExpect(jsonPath("$.upcoming[0].alternatives[0].expired").value(false))
+                    .andExpect(jsonPath("$.upcoming[0].alternatives[1].expired").value(true));
+        }
+    }
+
+    @Test
+    void profileMarksInclusiveInProgressBoundariesFromPortlandClock() throws Exception {
+        Client owner = register("in-progress-boundaries@example.test");
+        MvcResult created = owner.unsafe(post("/api/trips"), validRequest("\"startDate\":\"2027-03-13\",\"endDate\":\"2027-03-15\""))
+                .andExpect(status().isCreated()).andReturn();
+        String tripId = jsonField(created, "id");
+        Instant start = java.time.LocalDate.of(2027, 3, 13).atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant();
+        Instant afterEnd = java.time.LocalDate.of(2027, 3, 16).atStartOfDay(ClockConfiguration.PDX_ZONE).toInstant();
+        Instant[] instants = {start.minusMillis(1), start, afterEnd.minusMillis(1), afterEnd};
+        for (int index = 0; index < instants.length; index++) {
+            testClock.setInstant(instants[index]);
+            String section = index == 3 ? "past" : "upcoming";
+            for (String endpoint : java.util.List.of("/api/trips", "/api/profile")) {
+                mockMvc.perform(get(endpoint).session(owner.session).cookie(owner.csrf))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$." + section + "[0].id").value(tripId))
+                        .andExpect(jsonPath("$." + section + "[0].inProgress").value(index == 1 || index == 2))
+                        .andExpect(jsonPath("$." + section + "[0].expiredAlternativeCount").value(index == 0 ? 0 : 1));
+            }
+        }
+        // Cancelled summaries can retain temporal UPCOMING membership but never an active badge.
+        jdbc.update("UPDATE detour_trip SET status = 'CANCELED' WHERE public_id = ?", UUID.fromString(tripId));
+        testClock.setInstant(start);
+        for (String endpoint : java.util.List.of("/api/trips", "/api/profile")) {
+            mockMvc.perform(get(endpoint).session(owner.session).cookie(owner.csrf))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.upcoming[0].status").value("CANCELED"))
+                    .andExpect(jsonPath("$.upcoming[0].inProgress").value(false));
+        }
+    }
+
+    @Test
     void profileProjectionReturnsOwnerTripsPartitionedByDateWithAccurateCounts() throws Exception {
         Client owner = register("profile-projection@example.test");
         owner.unsafe(post("/api/trips"), validRequest("\"travelerAges\":[25,30],\"budgetCents\":50000"))
