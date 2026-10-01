@@ -13,8 +13,8 @@ const ownedProfile = {email: 'ada@example.test', upcoming: [{id: trip.id, label:
   temporalStatus: 'UPCOMING', draftCount: 0, plannedCount: 0, expiredAlternativeCount: 0, bookedCount: 0,
   hasBookingHistory: false, alternatives: []}], past: []};
 
-async function fillTrip(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', {name: 'Plan a Trip'}));
+async function fillTrip(user: ReturnType<typeof userEvent.setup>, enterPlanning = true) {
+  if (enterPlanning) await user.click(screen.getByRole('button', {name: 'Plan a Trip'}));
   const planNewTrip = screen.queryByRole('button', {name: 'Plan a new trip'});
   if (planNewTrip) await user.click(planNewTrip);
   await user.clear(screen.getByLabelText('Trip name'));
@@ -64,7 +64,8 @@ describe('public trip start and authentication handoff', () => {
       throw new Error(`Unexpected request ${url}`);
     });
     const user = userEvent.setup(); render(<App />);
-    await fillTrip(user);
+    await user.click(screen.getByRole('button', {name: 'Stay'}));
+    await fillTrip(user, false);
     await user.click(screen.getByRole('button', {name: 'Search options'}));
     await user.click(screen.getByRole('tab', {name: 'Search stays'}));
     await user.click(await screen.findByRole('button', {name: 'Select stay'}));
@@ -87,6 +88,8 @@ describe('public trip start and authentication handoff', () => {
     await user.click(screen.getByRole('button', {name: 'Log in'}));
     await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips')).toHaveLength(1));
     await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips/trip-1/drafts/draft-1/stays')).toHaveLength(1));
+    expect(await screen.findByRole('heading', {name: 'My Trips'})).toBeInTheDocument();
+    expect(screen.queryByRole('heading', {name: 'Plan a Trip'})).not.toBeInTheDocument();
   });
 
   it('keeps a selected flight prominent above searchable options', async () => {
@@ -167,7 +170,7 @@ describe('public trip start and authentication handoff', () => {
     await user.type(screen.getByLabelText('Password'), 'aaaaaaaaaaaa');
     await user.click(screen.getByRole('button', {name: 'Log in'}));
     await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips/trip-1/drafts/draft-1/stays')).toHaveLength(1));
-    expect(await screen.findByRole('heading', {name: 'Home'})).toBeInTheDocument();
+    expect(await screen.findByRole('heading', {name: 'My Trips'})).toBeInTheDocument();
   });
 
   it('requires every traveler age before saving', async () => {

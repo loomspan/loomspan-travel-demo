@@ -33,6 +33,7 @@ import {
 import {TripComparisonPage} from './TripComparisonPage';
 import {RentalSlot} from './RentalSlot';
 import {ConfirmRemoveModal} from './ConfirmRemoveModal';
+import {currentScreen, rememberScreen, type WorkspaceView} from '../screenHistory';
 
 type TripWorkspaceProps = {
   initialTrip: TripResponse;
@@ -55,6 +56,7 @@ type TripWorkspaceProps = {
 export type TripWorkspaceHandle = {
   refreshIfClean: () => Promise<void>;
   hasUnsavedChanges: () => boolean;
+  rememberNavigation: () => void;
 };
 
 const SUPPORTED_DESTINATIONS = [
@@ -200,7 +202,8 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [activeOptionDialog, optionActionPending]);
 
-  const [selectedForCompareIds, setSelectedForCompareIds] = useState<string[]>([]);
+  const initialNavigation = useRef(currentScreen()?.tripId === initialTrip.id ? currentScreen() : null).current;
+  const [selectedForCompareIds, setSelectedForCompareIds] = useState<string[]>(initialNavigation?.comparedOptionIds ?? []);
   const [compareNotification, setCompareNotification] = useState<string | undefined>();
   useEffect(() => {
     if (autosaveStatus !== 'saved') return;
@@ -252,11 +255,35 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
   const pacificToday = `${pacificDateParts.find(part => part.type === 'year')?.value}-${pacificDateParts.find(part => part.type === 'month')?.value}-${pacificDateParts.find(part => part.type === 'day')?.value}`;
   const bookedOptionExpired = bookedOptionStartDate
     ? bookedOptionStartDate <= pacificToday : isExpired || temporalStatus === 'PAST';
-  const [workspaceView, setWorkspaceView] = useState<
-    'workspace' | 'compare' | 'booking-review' | 'booking-confirmation'
-  >('workspace');
-  const [reviewAlternativeId, setReviewAlternativeId] = useState<string | null>(null);
-  const [reviewReturnView, setReviewReturnView] = useState<'workspace' | 'compare'>('workspace');
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(initialNavigation?.workspaceView ?? 'workspace');
+  const [reviewAlternativeId, setReviewAlternativeId] = useState<string | null>(initialNavigation?.reviewOptionId ?? null);
+  const [reviewReturnView, setReviewReturnView] = useState<'workspace' | 'compare'>(initialNavigation?.reviewReturnView ?? 'workspace');
+
+  const recordWorkspaceView = (view: WorkspaceView, optionId = reviewAlternativeId, returnView = reviewReturnView, replace = false) => {
+    rememberScreen('trips', trip.id, replace, view === 'workspace' ? {} : {
+      workspaceView: view, comparedOptionIds: selectedForCompareIds,
+      ...(view === 'booking-review' && optionId ? {reviewOptionId: optionId, reviewReturnView: returnView} : {}),
+    });
+  };
+  const navigateWorkspace = (view: WorkspaceView, optionId = reviewAlternativeId, returnView = reviewReturnView) => {
+    // Record the starting screen as well when this workspace is opened without an existing Trip entry.
+    if (currentScreen()?.tripId !== trip.id) recordWorkspaceView(workspaceView);
+    recordWorkspaceView(view, optionId, returnView);
+    setWorkspaceView(view);
+  };
+
+  useEffect(() => {
+    const restoreWorkspace = () => {
+      const previous = currentScreen();
+      if (previous?.destination !== 'trips' || previous.tripId !== trip.id) return;
+      setWorkspaceView(previous.workspaceView ?? 'workspace');
+      if (previous.comparedOptionIds) setSelectedForCompareIds(previous.comparedOptionIds);
+      setReviewAlternativeId(previous.reviewOptionId ?? null);
+      setReviewReturnView(previous.reviewReturnView ?? 'workspace');
+    };
+    window.addEventListener('popstate', restoreWorkspace);
+    return () => window.removeEventListener('popstate', restoreWorkspace);
+  }, [trip.id]);
 
   useEffect(() => {
     const headingId = {
@@ -432,6 +459,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
 
   useImperativeHandle(ref, () => ({
     hasUnsavedChanges,
+    rememberNavigation: () => recordWorkspaceView(workspaceView),
     refreshIfClean: async () => {
       if (hasUnsavedChanges()) return;
       const requestedVersion = trip.version;
@@ -450,7 +478,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         setAutosaveMessage('Could not refresh trip. Retry when you return.');
       }
     },
-  }), [hasUnsavedChanges, trip.id, trip.version, applyTripState]);
+  }), [hasUnsavedChanges, trip.id, trip.version, applyTripState, workspaceView, selectedForCompareIds, reviewAlternativeId, reviewReturnView]);
 
   // Autosave execution with serialization
   const executeAutosave = useCallback(async () => {
@@ -1023,14 +1051,14 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
     if (activeBooking) return;
     setReviewAlternativeId(alternativeId);
     setReviewReturnView(returnTarget);
-    setWorkspaceView('booking-review');
+    navigateWorkspace('booking-review', alternativeId, returnTarget);
   };
 
   const handleBookingSuccess = async (booking: BookingResponse) => {
     setActiveBooking(booking);
     setHasEverBooked(true);
     setHistoryRefreshKey((prev) => prev + 1);
-    setWorkspaceView('booking-confirmation');
+    navigateWorkspace('booking-confirmation');
     try {
       const refreshedTrip = await tripsApi.getTrip(trip.id);
       applyTripState(refreshedTrip);
@@ -1144,7 +1172,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         <ItineraryComparisonView
           trip={trip}
           alternatives={comparedAlternatives}
-          onBack={() => setWorkspaceView('workspace')}
+          onBack={() => navigateWorkspace('workspace')}
           onSelectForBookingReview={(id) => handleSelectForBookingReview(id, 'compare')}
           hasActiveBooking={Boolean(activeBooking)}
           bookedOptionId={activeBooking?.plannedItineraryId ?? trip.booking?.plannedItineraryId}
@@ -1162,7 +1190,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
             trip={trip}
             alternative={reviewAlternative}
             returnTarget={reviewReturnView}
-            onBack={() => setWorkspaceView(reviewReturnView)}
+            onBack={() => navigateWorkspace(reviewReturnView)}
             onBookingSuccess={(booking) => void handleBookingSuccess(booking)}
           />
         </section>
@@ -1176,7 +1204,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
         <BookingConfirmationView
           trip={trip}
           booking={activeBooking}
-          onViewInWorkspace={() => setWorkspaceView('workspace')}
+          onViewInWorkspace={() => navigateWorkspace('workspace')}
           onViewAllTrips={onBack}
         />
       </section>
@@ -1332,7 +1360,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
               <button
                 type="button"
                 className="primary-button view-details-action-btn"
-                onClick={() => setWorkspaceView('booking-confirmation')}
+                onClick={() => navigateWorkspace('booking-confirmation')}
               >
                 View Booking Details
               </button>
@@ -1616,7 +1644,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
                   type="button"
                   className="primary-button compare-launch-btn"
                   disabled={selectedForCompareIds.length < 2}
-                  onClick={() => setWorkspaceView('compare')}
+                  onClick={() => navigateWorkspace('compare')}
                   aria-label={`Compare selected options (${selectedForCompareIds.length})`}
                 >
                   Compare selected options ({selectedForCompareIds.length})
@@ -1670,7 +1698,7 @@ export const TripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>
                 isSelectedForCompare={selectedForCompareIds.includes(alt.id)}
                 isBooked={Boolean(alt.booked || activeBooking?.plannedItineraryId === alt.id || trip.booking?.plannedItineraryId === alt.id)}
                 hasActiveBooking={Boolean(activeBooking)}
-                onViewBookingDetails={activeBooking?.plannedItineraryId === alt.id ? () => setWorkspaceView('booking-confirmation') : undefined}
+                onViewBookingDetails={activeBooking?.plannedItineraryId === alt.id ? () => navigateWorkspace('booking-confirmation') : undefined}
                 onToggleCompare={handleToggleCompare}
                 onSelectForBookingReview={(id) => handleSelectForBookingReview(id, 'workspace')}
               />

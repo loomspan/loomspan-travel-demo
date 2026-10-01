@@ -36,7 +36,6 @@ export default function App() {
   const [guestSelections, setGuestSelections] = useState<GuestSelections>({});
   const [leaveTarget, setLeaveTarget] = useState<'home' | 'trips' | 'auth' | null>(null);
   const [saveAfterLogin, setSaveAfterLogin] = useState(false);
-  const [afterSaveDestination, setAfterSaveDestination] = useState<'home' | 'trips'>('trips');
   const [profileViewNonce, setProfileViewNonce] = useState(0);
   const guestSaveInFlight = useRef(false);
   const guestSavedTrip = useRef<TripResponse | null>(null);
@@ -115,7 +114,8 @@ export default function App() {
         }
         setGuestSelections({}); setGuestExploring(false); setTripDraft(emptyTripStartDraft);
         guestSavedTrip.current = null; setGuestSaveFailed(false);
-        rememberScreen(afterSaveDestination); setPublicDestination(afterSaveDestination);
+        setStartMode('PLAN_TRIP');
+        rememberScreen('trips'); setPublicDestination('trips');
         await loadProfile();
         setProfileViewNonce(value => value + 1);
         setNotice({kind: 'status', message: 'Your selections were saved to your Trip.'});
@@ -244,10 +244,10 @@ export default function App() {
           <button type="button" className="text-button" onClick={() => navigatePublic('auth')}><ActionIcon name="profile" />Log in</button>
         </nav>
         {publicDestination === 'home' ? <HomeScreen onStart={mode => { setStartMode(mode); navigatePublic('trips'); }} />
-          : guestExploring ? <GuestTripExplorer draft={tripDraft} mode={startMode} selections={guestSelections} onChange={setGuestSelections} onSave={() => { setAfterSaveDestination('trips'); setSaveAfterLogin(true); rememberScreen('auth'); setAuthActive(true); }} />
+          : guestExploring ? <GuestTripExplorer draft={tripDraft} mode={startMode} selections={guestSelections} onChange={setGuestSelections} onSave={() => { setSaveAfterLogin(true); rememberScreen('auth'); setAuthActive(true); }} />
           : <TripStartForm draft={tripDraft} onChange={setTripDraft} mode={startMode} authenticated={false} onAuthenticationRequired={() => navigatePublic('auth')} onSuccess={() => {}} onExplore={() => setGuestExploring(true)} />}
       </>}
-    {leaveTarget && <div className="modal-backdrop"><section className="card modal" role="dialog" aria-modal="true" aria-labelledby="leave-guest-heading"><h2 id="leave-guest-heading">Save your selections?</h2><p>You have a flight or stay selected. Save it before leaving this page?</p><div className="modal-actions"><button type="button" className="primary" onClick={() => { setAfterSaveDestination(leaveTarget === 'home' ? 'home' : 'trips'); setLeaveTarget(null); setSaveAfterLogin(true); rememberScreen('auth'); setAuthActive(true); }}>Yes, save</button><button type="button" className="secondary" onClick={discardAndNavigate}>No, discard</button><button type="button" className="text-button" onClick={() => setLeaveTarget(null)}>Keep planning</button></div></section></div>}
+    {leaveTarget && <div className="modal-backdrop"><section className="card modal" role="dialog" aria-modal="true" aria-labelledby="leave-guest-heading"><h2 id="leave-guest-heading">Save your selections?</h2><p>You have a flight or stay selected. Save it before leaving this page?</p><div className="modal-actions"><button type="button" className="primary" onClick={() => { setLeaveTarget(null); setSaveAfterLogin(true); rememberScreen('auth'); setAuthActive(true); }}>Yes, save</button><button type="button" className="secondary" onClick={discardAndNavigate}>No, discard</button><button type="button" className="text-button" onClick={() => setLeaveTarget(null)}>Keep planning</button></div></section></div>}
     {authActive && <AuthScreen onRegister={register} onLogin={login} onFailure={showFailure} onCancel={screen.kind === 'public' ? () => { setSaveAfterLogin(false); window.history.back(); setAuthActive(false); } : undefined} />}
   </main>;
 }

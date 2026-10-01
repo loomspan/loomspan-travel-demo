@@ -218,6 +218,7 @@ function createMockTripWithPlanned(plannedCount: number): TripResponse {
 
 describe('Itinerary Comparison and Booking Selection', () => {
   beforeEach(() => {
+    window.history.replaceState({}, '', '/');
     vi.stubGlobal('fetch', vi.fn());
     document.cookie = 'detour_session=valid-token; path=/';
   });
@@ -225,6 +226,65 @@ describe('Itinerary Comparison and Booking Selection', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     document.cookie = 'detour_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  });
+
+  function renderProfile(trip = createMockTripWithPlanned(2)) {
+    vi.spyOn(tripsApi, 'getTrip').mockResolvedValue(trip);
+    render(<ProfileScreen
+      email="ada@example.test" initialDestination="trips"
+      upcoming={[{id: trip.id, label: trip.label, destinationKey: trip.destinationKey,
+        destinationName: trip.destinationName, startDate: trip.startDate, endDate: trip.endDate,
+        version: trip.version, temporalStatus: 'UPCOMING', draftCount: 0, plannedCount: trip.planned.length,
+        expiredAlternativeCount: 0, bookedCount: 0, hasBookingHistory: false, alternatives: []}]}
+      onLogout={async () => {}} logoutPending={false} onPasswordChange={async () => {}} onFailure={() => {}}
+    />);
+    return trip;
+  }
+
+  it('restores each Trip screen with browser Back and Forward', async () => {
+    const user = userEvent.setup();
+    const trip = renderProfile();
+    await user.click(screen.getByRole('button', {name: 'My Trips'}));
+    await user.click(screen.getByRole('button', {name: `Open trip ${trip.label}`}));
+    const choices = await screen.findAllByRole('checkbox', {name: /select .* for comparison/i});
+    await user.click(choices[0]); await user.click(choices[1]);
+    await user.click(screen.getByRole('button', {name: /compare selected options/i}));
+    await user.click(screen.getAllByRole('button', {name: /select choice 1 for booking review/i})[0]);
+    expect(screen.getByRole('heading', {name: /review itinerary & component snapshots/i})).toBeVisible();
+    window.history.back();
+    expect(await screen.findByRole('heading', {name: 'Comparing 2 Saved options'})).toBeVisible();
+    window.history.back();
+    expect(await screen.findByRole('heading', {name: trip.label})).toBeVisible();
+    window.history.back();
+    expect(await screen.findByRole('heading', {name: 'My Trips'})).toBeVisible();
+    window.history.forward();
+    await waitFor(() => expect(screen.getByRole('heading', {name: trip.label})).toBeVisible());
+    window.history.forward();
+    expect(await screen.findByRole('heading', {name: 'Comparing 2 Saved options'})).toBeVisible();
+    window.history.forward();
+    expect(await screen.findByRole('heading', {name: /review itinerary & component snapshots/i})).toBeVisible();
+  });
+
+  it('returns directly from Booking Review to Workspace when opened there', async () => {
+    const user = userEvent.setup();
+    const trip = renderProfile(createMockTripWithPlanned(1));
+    await user.click(screen.getByRole('button', {name: 'My Trips'}));
+    await user.click(screen.getByRole('button', {name: `Open trip ${trip.label}`}));
+    await user.click(await screen.findByRole('button', {name: /select choice 1 for booking review/i}));
+    window.history.back();
+    expect(await screen.findByRole('heading', {name: trip.label})).toBeVisible();
+  });
+
+  it('restores Plan a Trip separately from My Trips with Back and Forward', async () => {
+    const user = userEvent.setup();
+    renderProfile();
+    await user.click(screen.getByRole('button', {name: 'My Trips'}));
+    await user.click(screen.getByRole('button', {name: 'Plan a new trip'}));
+    expect(screen.getByRole('heading', {name: 'Plan a Trip'})).toBeVisible();
+    window.history.back();
+    expect(await screen.findByRole('heading', {name: 'My Trips'})).toBeVisible();
+    window.history.forward();
+    expect(await screen.findByRole('heading', {name: 'Plan a Trip'})).toBeVisible();
   });
 
   it('focuses a retained comparison view when returning from Home', async () => {
@@ -732,7 +792,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     );
 
     // Navigate to booking review
-    await user.click(screen.getByRole('button', {name: /select choice 1 for booking review/i}));
+    await user.click(screen.getAllByRole('button', {name: /select choice 1 for booking review/i})[0]);
     expect(screen.getByRole('heading', {name: /review itinerary & component snapshots/i})).toBeInTheDocument();
 
     // Click Confirm Booking
