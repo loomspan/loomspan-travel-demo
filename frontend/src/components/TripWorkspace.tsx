@@ -1219,7 +1219,7 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
         <button type="button" className="text-button" onClick={onBack}>
           ← Back to all trips
         </button>
-        <div style={{display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap'}}>
+        <div className="button-row">
           {!effectiveHasBookingHistory ? (
             <button
               type="button"
@@ -1271,7 +1271,7 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
       <header className="workspace-header">
         <div>
           <p className="eyebrow wordmark">DeTour</p>
-          <div className="badge-row" style={{marginBottom: '0.35rem'}}>
+          <div className="badge-row">
             <span className={`badge ${temporalStatus === 'PAST' ? 'badge-past' : 'badge-upcoming'}`}>
               {temporalStatus === 'PAST' ? 'Past' : 'Upcoming'}
             </span>
@@ -1358,7 +1358,7 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
                 Booking Reference: <strong className="ref-code">{activeBooking.bookingReference}</strong>
               </p>
             </div>
-            <div className="active-booking-actions" style={{display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap'}}>
+            <div className="active-booking-actions">
               <button
                 type="button"
                 className="primary-button view-details-action-btn"
@@ -1639,7 +1639,7 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
           <h3 id="alternatives-heading" tabIndex={-1}>
             Saved options ({savedOptions.length})
           </h3>
-          <div className="alternatives-actions" style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center'}}>
+          <div className="alternatives-actions">
             {plannedAlternatives.length >= 2 && (
               <>
                 <button

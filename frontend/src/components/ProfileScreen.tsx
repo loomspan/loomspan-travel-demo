@@ -2,6 +2,7 @@ import {FormEvent, useEffect, useRef, useState} from 'react';
 import {PasswordField, passwordRangeError} from './PasswordField';
 import type {FormFailure} from './AuthScreen';
 import {ActionIcon} from './ActionIcon';
+import {BrandMark} from './BrandMark';
 import {TripListSection} from './TripListSection';
 import {HomeScreen, type StartMode} from './HomeScreen';
 import {TripStartForm, emptyTripStartDraft, type TripStartDraft} from './TripStartForm';
@@ -316,7 +317,8 @@ export function ProfileScreen({
 
   return (
     <>
-    <nav className="card primary-navigation" aria-label="Primary navigation">
+    <nav className="primary-navigation" aria-label="Primary navigation">
+      <BrandMark />
       <button type="button" className="text-button" aria-current={viewMode === 'home' ? 'page' : undefined} onClick={() => navigateTo('home')}><ActionIcon name="home" />Home</button>
       <button type="button" className="text-button" aria-current={viewMode === 'trips' && showStartForm && !showWorkspace ? 'page' : undefined} onClick={() => startCreateTrip('PLAN_TRIP')}><ActionIcon name="trip" />Plan a Trip</button>
       <button type="button" className="text-button" aria-current={viewMode === 'trips' && (!showStartForm || showWorkspace) ? 'page' : undefined} onClick={() => navigateTo('trips')}><ActionIcon name="trip" />My Trips</button>
@@ -329,7 +331,7 @@ export function ProfileScreen({
       {activeTrip && <span className={`navigation-save-status status-${saveState}`}>{tripDirty ? saveState === 'conflict' ? 'Trip has a save conflict' : saveState === 'error' ? 'Trip changes not saved' : 'Trip changes pending' : saveState === 'saved' ? 'Trip saved' : ''}</span>}
     </nav>
     {openingTripId && <p className="card" role="status">Opening Trip…</p>}
-    {openError && <div className="card" role="alert"><p>{openError.message}</p><button type="button" onClick={() => void handleOpenTrip(openError.tripId)}>Retry opening Trip</button></div>}
+    {openError && <div className="callout callout-danger" role="alert"><p>{openError.message}</p><button type="button" className="secondary" onClick={() => void handleOpenTrip(openError.tripId)}>Retry opening Trip</button></div>}
     {activeTrip && <div hidden={viewMode !== 'trips' || !showWorkspace}>
       <TripWorkspace
         ref={workspaceRef}
@@ -363,7 +365,7 @@ export function ProfileScreen({
     </div>}
     {viewMode === 'home' && <HomeScreen onStart={startCreateTrip} onReturn={activeTrip ? {label: activeTrip.label, open: () => void handleOpenTrip(activeTrip.id)} : undefined} />}
     {viewMode === 'trips' && !showWorkspace && (showStartForm ? <div className="trip-start-view">
-      <button type="button" className="text-button trip-list-back" onClick={() => navigateTo('trips')}>← Back to your trips</button>
+      <button type="button" className="text-button back-link trip-list-back" onClick={() => navigateTo('trips')}>← Back to your trips</button>
       <TripStartForm draft={tripDraft} onChange={onTripDraftChange} mode={startMode} authenticated existingNames={[...upcoming, ...past].map(item => item.name ?? item.label)} onAuthenticationRequired={onAuthenticationRequired} onSuccess={(createdTrip, mode, accommodationType) => {
       openingSequence.current += 1;
       setEntryContext({mode, accommodationType});

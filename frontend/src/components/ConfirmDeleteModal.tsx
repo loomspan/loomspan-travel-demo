@@ -149,7 +149,7 @@ export function ConfirmDeleteModal({
         <p className="delete-description">{description}</p>
 
         {errorMessage && (
-          <div className="field-error" role="alert" style={{marginBottom: '1rem'}}>
+          <div className="field-error" role="alert">
             {errorMessage}
           </div>
         )}

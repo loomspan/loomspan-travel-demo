@@ -22,10 +22,10 @@ export function PlanNavigation({plans, selectedId, onSelect, disabled}: {
           else return;
           event.preventDefault(); refs.current[next]?.focus();
         }}>
-        {plan.name} {plan.primary && <span className="badge">Primary</span>} {plan.booked && <span className="badge">Booked</span>}
+        {plan.name} {plan.primary && <span className="badge badge-upcoming">Primary</span>} {plan.booked && <span className="badge badge-booked">Booked</span>}
       </button>)}
     </div>
-    <label>All plans <select value={selectedId} disabled={disabled} onChange={event => onSelect(event.target.value)}>
+    <label className="plan-select">All plans <select value={selectedId} disabled={disabled} onChange={event => onSelect(event.target.value)}>
       {plans.map(plan => <option key={plan.id} value={plan.id}>{plan.name}{plan.primary ? ' (Primary)' : ''}</option>)}
     </select></label>
   </nav>;

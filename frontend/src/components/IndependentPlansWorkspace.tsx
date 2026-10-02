@@ -183,40 +183,46 @@ export const IndependentPlansWorkspace = forwardRef<TripWorkspaceHandle, TripWor
     {confirmationError ? <p role="alert">{confirmationError}</p> : <p role="status">Loading booking details…</p>}</section>;
 
   return <section className="card workspace-card" aria-labelledby="workspace-heading">
-    <div className="workspace-nav"><button type="button" onClick={() => guard(props.onBack)}>← Back to all trips</button>
-      {props.onLogout && <button type="button" disabled={pending || props.logoutPending} onClick={() => guard(() => {void props.onLogout?.();})}>Log out</button>}</div>
+    <div className="workspace-nav"><button type="button" className="text-button back-link" onClick={() => guard(props.onBack)}>← Back to all trips</button>
+      {props.onLogout && <button type="button" className="text-button" disabled={pending || props.logoutPending} onClick={() => guard(() => {void props.onLogout?.();})}>Log out</button>}</div>
     <header className="workspace-header"><div><p className="eyebrow wordmark">DeTour</p><h1 id="workspace-heading" tabIndex={-1}>{trip.name ?? trip.label}</h1>
-      <p>From {trip.originAirportCode} to {trip.destinationName}</p>{canceled && <p className="badge">Canceled trip · plans are read-only</p>}</div></header>
+      <p className="trip-route">From {trip.originAirportCode} to {trip.destinationName}</p>{canceled && <p className="badge badge-canceled">Canceled trip · plans are read-only</p>}</div></header>
     <PlanNavigation plans={plans} selectedId={plan.id} onSelect={id => guard(() => switchPlan(id))} disabled={pending} />
     <div className="plan-actions">
-      <button type="button" disabled={pending || plans.length < 2} onClick={() => guard(() => {setCompareIds(plan.primary ? [plan.id] : [trip.primaryPlanId!, plan.id]); setDialog('compare');})}>Compare plans</button>
-      <button type="button" disabled={pending || canceled} onClick={() => open('create')}>Create plan</button>
-      <button type="button" disabled={pending || canceled} onClick={() => open('copy')}>Copy plan</button>
-      <button type="button" disabled={pending || canceled} onClick={() => open('name')}>Rename plan</button>
-      {!plan.primary && <button type="button" disabled={pending || canceled} onClick={() => guard(() => {void mutate(() => tripsApi.makePrimary(trip.id, plan.id, versions()));})}>Make primary</button>}
-      <button type="button" disabled={pending || canceled} onClick={() => open('delete')}>Delete plan</button>
-      <button type="button" disabled={pending || canceled || Boolean(activeBooking) || plan.booked} onClick={() => review(plan.id, 'workspace')}>Review booking</button>
+      <div className="plan-actions-group">
+      <button type="button" className="secondary button-sm" disabled={pending || plans.length < 2} onClick={() => guard(() => {setCompareIds(plan.primary ? [plan.id] : [trip.primaryPlanId!, plan.id]); setDialog('compare');})}>Compare plans</button>
+      <button type="button" className="secondary button-sm" disabled={pending || canceled} onClick={() => open('create')}>Create plan</button>
+      <button type="button" className="secondary button-sm" disabled={pending || canceled} onClick={() => open('copy')}>Copy plan</button>
+      <button type="button" className="secondary button-sm" disabled={pending || canceled} onClick={() => open('name')}>Rename plan</button>
+      {!plan.primary && <button type="button" className="secondary button-sm" disabled={pending || canceled} onClick={() => guard(() => {void mutate(() => tripsApi.makePrimary(trip.id, plan.id, versions()));})}>Make primary</button>}
+      <button type="button" className="button-danger-outline button-sm" disabled={pending || canceled} onClick={() => open('delete')}>Delete plan</button>
+      </div>
+      <button type="button" className="primary button-sm" disabled={pending || canceled || Boolean(activeBooking) || plan.booked} onClick={() => review(plan.id, 'workspace')}>Review booking</button>
     </div>
-    {message && <p role="status">{message}</p>}{error && <p role="alert" className="field-error">{error} Your plan has not been overwritten.</p>}
-    <button type="button" disabled={pending} onClick={() => guard(() => {void mutate(() => tripsApi.getTrip(trip.id));})}>Reload from server</button>
+    <div className="workspace-status-row">{message && <p role="status">{message}</p>}{error && <p role="alert" className="field-error">{error} Your plan has not been overwritten.</p>}
+      <button type="button" className="text-button button-sm" disabled={pending} onClick={() => guard(() => {void mutate(() => tripsApi.getTrip(trip.id));})}>Reload from server</button></div>
     {trip.revisionSummary && <RevisionSummaryBanner summary={trip.revisionSummary} onDismiss={() => setTrip({...trip, revisionSummary: null})} />}
-    <section role="tabpanel" id={`plan-panel-${plan.id}`} aria-labelledby={`plan-tab-${plan.id}`}>
-      <h2>{plan.name}</h2>
-      <fieldset disabled={pending || canceled}><legend>Planning details for {plan.name}</legend>
+    <section role="tabpanel" className="plan-panel" id={`plan-panel-${plan.id}`} aria-labelledby={`plan-tab-${plan.id}`}>
+      <div className="plan-panel-header"><h2>{plan.name}</h2>
+        <p className="plan-total">{!plan.selections.airfare || !plan.selections.stay || !plan.selections.rental ? 'Partial total' : 'Total'}: {formatTallyCents(plan.tally?.grandTotalCents)}</p></div>
+      <fieldset className="plan-details" disabled={pending || canceled}><legend>Planning details for {plan.name}</legend>
+        <div className="plan-details-fields">
         <label>Departure date <input type="date" value={input.startDate} min="2027-03-01" max="2027-03-30" onChange={e => setInput({...input, startDate: e.target.value})} /></label>
         <label>Return date <input type="date" value={input.endDate} min="2027-03-02" max="2027-03-31" onChange={e => setInput({...input, endDate: e.target.value})} /></label>
         <label>Travelers <input type="number" value={input.travelerCount} min={1} max={8} onChange={e => {
           const count = Number(e.target.value); setInput({...input, travelerCount: e.target.value, ages: Number.isInteger(count) && count >= 1 && count <= 8 ? Array.from({length: count}, (_, i) => input.ages[i] ?? '') : input.ages});
         }} /></label>
         {input.ages.map((age, i) => <label key={i}>Traveler {i + 1} age <TravelerAgeInput id={`plan-age-${i}`} value={age} onChange={value => setInput({...input, ages: input.ages.map((old, j) => i === j ? value : old)})} /></label>)}
-        <button type="button" disabled={!dirty} onClick={() => {void save();}}>Save plan</button>
-        <button type="button" disabled={!dirty} onClick={() => guard(() => {setInput(fields(tripRef.current.plans!.find(p => p.id === selectedRef.current)!));})}>Discard edits</button>
+        </div>
+        <div className="plan-details-actions">
+        <button type="button" className="primary" disabled={!dirty} onClick={() => {void save();}}>Save plan</button>
+        <button type="button" className="secondary" disabled={!dirty} onClick={() => guard(() => {setInput(fields(tripRef.current.plans!.find(p => p.id === selectedRef.current)!));})}>Discard edits</button>
+        </div>
       </fieldset>
-      <p className="plan-total">{!plan.selections.airfare || !plan.selections.stay || !plan.selections.rental ? 'Partial total' : 'Total'}: {formatTallyCents(plan.tally?.grandTotalCents)}</p>
-      {dirty && <p>Prices and searches use saved planning details. Save to search with your changes.</p>}
-      {plan.purchase && <section aria-label="Purchased details"><h3>{plan.purchase.status === 'ACTIVE' ? 'Confirmed bookings' : 'Booking history'} · purchased details are locked</h3>
+      {dirty && <p className="hint plan-dirty-hint">Prices and searches use saved planning details. Save to search with your changes.</p>}
+      {plan.purchase && <section className="plan-purchase" aria-label="Purchased details"><h3>{plan.purchase.status === 'ACTIVE' ? 'Confirmed bookings' : 'Booking history'} · purchased details are locked</h3>
         <p>Purchased dates: {plan.purchase.purchasedStartDate} to {plan.purchase.purchasedEndDate} · {plan.purchase.purchasedTravelerCount} travelers · Total {formatTallyCents(plan.purchase.grandTotalCents)}</p>
-        <button type="button" onClick={() => guard(() => {setConfirmation(plan.purchase!); setConfirmationId(plan.purchase!.id); setView('booking-confirmation'); record('booking-confirmation', plan.id, false, plan.purchase!.id);})}>View booking details</button></section>}
+        <button type="button" className="secondary button-sm" onClick={() => guard(() => {setConfirmation(plan.purchase!); setConfirmationId(plan.purchase!.id); setView('booking-confirmation'); record('booking-confirmation', plan.id, false, plan.purchase!.id);})}>View booking details</button></section>}
       <TripComparisonPage key={plan.id} trip={context} draftId={plan.id} name={plan.name}
         initialSearch={props.initialEntryMode === 'AIRFARE' && !plan.lockedComponents.includes('airfare') ? 'AIRFARE' : props.initialEntryMode === 'STAY' && !plan.lockedComponents.includes('stay') ? 'STAY' : null}
         savedAirfare={plan.selections.airfare} savedStay={plan.selections.stay} pending={pending || dirty || canceled}
@@ -232,38 +238,44 @@ export const IndependentPlansWorkspace = forwardRef<TripWorkspaceHandle, TripWor
         mode={rentalSearch ? 'searching' : plan.selections.rental ? 'selected' : 'hidden'} pending={pending || dirty || canceled || plan.lockedComponents.includes('rental')}
         onSelect={async (option, pickupAt, returnAt) => component(() => tripsApi.selectRental(trip.id, plan.id, {...revision, rentalUnitId: option.rentalUnitId, pickupAt, returnAt}))}
         onChange={() => setRentalSearch(true)} onRemove={() => guard(() => {void mutate(() => tripsApi.removeRental(trip.id, plan.id, revision));})} onCancelSearch={() => setRentalSearch(false)} />
-      {!plan.selections.rental && !rentalSearch && <button type="button" disabled={pending || dirty || canceled} onClick={() => setRentalSearch(true)}>Add a car</button>}
-      {!plan.selections.airfare && <p>Flights: Not selected</p>}{!plan.selections.stay && <p>Stay: Not selected</p>}{!plan.selections.rental && <p>Rental: Not selected</p>}
+      {!plan.selections.rental && !rentalSearch && <button type="button" className="secondary add-car-btn" disabled={pending || dirty || canceled} onClick={() => setRentalSearch(true)}>Add a car</button>}
+      <div className="plan-missing">{!plan.selections.airfare && <p>Flights: Not selected</p>}{!plan.selections.stay && <p>Stay: Not selected</p>}{!plan.selections.rental && <p>Rental: Not selected</p>}</div>
     </section>
-    <details><summary>Trip settings</summary><p>Destination and budget are shared trip settings.</p>
+    <details className="settings-disclosure"><summary>Trip settings</summary><div className="disclosure-body"><p>Destination and budget are shared trip settings.</p>
       <label>Trip budget (USD) <input value={budget} disabled={pending || canceled} aria-invalid={Boolean(budgetError)} onChange={e => {setBudget(e.target.value); setBudgetError(undefined);}} /></label>
       {budgetError && <p role="alert" className="field-error">{budgetError}</p>}
-      <button type="button" disabled={pending || canceled} onClick={saveBudget}>Save trip budget</button></details>
+      <button type="button" className="secondary" disabled={pending || canceled} onClick={saveBudget}>Save trip budget</button></div></details>
     <BookingHistorySection tripId={trip.id} refreshKey={trip.version} />
-    {canceled && <button type="button" onClick={() => setDuplicateOpen(true)}>Duplicate trip</button>}
+    {(canceled || activeBooking || trip.booking) && <div className="workspace-footer-actions">
+      {canceled && <button type="button" className="secondary" onClick={() => setDuplicateOpen(true)}>Duplicate trip</button>}
+      {activeBooking && <button type="button" className="button-danger-outline" disabled={pending || canceled} onClick={() => guard(() => setCancelBookingOpen(true))}>Cancel booking</button>}
+      {trip.booking && <button type="button" className="button-danger-outline" disabled={pending || canceled} onClick={() => guard(() => setCancelTripOpen(true))}>Cancel trip</button>}
+    </div>}
     <TripRevisionModal isOpen={duplicateOpen} trip={{...trip, planned: plans.map(p => ({id: p.id, name: p.name, startDate: p.startDate, endDate: p.endDate, version: p.version, selections: p.selections, tally: p.tally}))}} existingNames={props.existingTripNames} mode="duplicate" onClose={() => setDuplicateOpen(false)} onSuccess={fresh => {setDuplicateOpen(false); props.onTripUpdated?.(fresh); props.onBack();}} />
-    {activeBooking && <button type="button" disabled={pending || canceled} onClick={() => guard(() => setCancelBookingOpen(true))}>Cancel booking</button>}
-    {trip.booking && <button type="button" disabled={pending || canceled} onClick={() => guard(() => setCancelTripOpen(true))}>Cancel trip</button>}
     <CancelBookingModal isOpen={cancelBookingOpen} tripLabel={trip.label} bookingReference={activeBooking?.bookingReference ?? ''} pending={pending} errorMessage={error}
       onClose={() => setCancelBookingOpen(false)} onConfirm={() => {if (activeBooking) void mutate(() => tripsApi.cancelBooking(trip.id, activeBooking.id, {expectedVersion: trip.version})).then(ok => {if (ok) setCancelBookingOpen(false);});}} />
     <CancelTripModal isOpen={cancelTripOpen} tripLabel={trip.label} hasActiveBooking={Boolean(activeBooking)} pending={pending} errorMessage={error}
       onClose={() => setCancelTripOpen(false)} onConfirm={() => {void mutate(() => tripsApi.cancelTrip(trip.id, {expectedVersion: trip.version})).then(ok => {if (ok) setCancelTripOpen(false);});}} />
     {transition && <PlanDialog title="Unsaved plan edits" pending={pending} onClose={() => setTransition(null)}>
-      <p>Save your edits, discard them, or cancel to keep editing.</p>{error && <p role="alert">{error}</p>}
-      <button type="button" disabled={pending} onClick={() => {void save().then(ok => {if (ok) {const action = transition; setTransition(null); action();}});}}>Save</button>
-      <button type="button" disabled={pending} onClick={() => {setInput(fields(plan)); const action = transition; setTransition(null); action();}}>Discard</button>
-      <button type="button" disabled={pending} onClick={() => setTransition(null)}>Cancel</button>
+      <p>Save your edits, discard them, or cancel to keep editing.</p>{error && <p role="alert" className="field-error">{error}</p>}
+      <div className="modal-actions">
+      <button type="button" className="primary" disabled={pending} onClick={() => {void save().then(ok => {if (ok) {const action = transition; setTransition(null); action();}});}}>Save</button>
+      <button type="button" className="secondary" disabled={pending} onClick={() => {setInput(fields(plan)); const action = transition; setTransition(null); action();}}>Discard</button>
+      <button type="button" className="text-button" disabled={pending} onClick={() => setTransition(null)}>Cancel</button>
+      </div>
     </PlanDialog>}
     {dialog && <PlanDialog title={dialog === 'delete' ? plans.length === 1 ? 'This is the only plan for this trip. Delete the trip?' : `Delete ${plan.name}?` : dialog === 'compare' ? 'Compare plans' : `${dialog === 'name' ? 'Rename' : dialog === 'copy' ? 'Copy' : 'Create'} plan`} pending={pending} onClose={() => setDialog(null)}>
-      {dialog === 'compare' ? <><p>Select two or three distinct plans.</p>{plans.map(p => <label key={p.id}><input type="checkbox" checked={compareIds.includes(p.id)} disabled={!compareIds.includes(p.id) && compareIds.length >= 3} onChange={e => setCompareIds(e.target.checked ? [...compareIds, p.id] : compareIds.filter(id => id !== p.id))} />{p.name}{p.primary && ' (Primary)'}</label>)}
-        <button type="button" disabled={compareIds.length < 2 || compareIds.length > 3} onClick={() => {setDialog(null); setView('compare'); record('compare');}}>Compare selected plans</button></> : dialog === 'delete' ? <>
-        {plan.booked ? <p>This plan contains confirmed bookings or booking history and can't be deleted.</p> : <>
-          {plan.primary && plans.length > 1 && <label>Replacement primary <select value={replacement} onChange={e => setReplacement(e.target.value)}><option value="">Choose a plan</option>{plans.filter(p => p.id !== plan.id).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}
-          <button type="button" disabled={pending || (plan.primary && plans.length > 1 && !replacement)} onClick={() => {void mutate(() => tripsApi.deletePlan(trip.id, plan.id, {...versions(), confirmed: true, expectedPlanCount: plans.length, ...(plans.length === 1 ? {deleteTrip: true} : replacement ? {replacementPrimaryPlanId: replacement} : {})})).then(ok => {if (ok) setDialog(null);});}}>{plans.length === 1 ? 'Delete trip' : 'Delete plan'}</button>
-        </>}
-      </> : <><label>Plan name <input value={name} maxLength={300} disabled={pending} onChange={e => setName(e.target.value)} /></label>
-        <button type="button" disabled={pending || !name.trim()} onClick={() => {void mutate(() => dialog === 'create' ? tripsApi.createPlan(trip.id, {expectedVersion: trip.version, name: name.trim(), startDate: plan.startDate, endDate: plan.endDate, travelerCount: plan.travelerCount, travelerAges: plan.travelerAges}) : dialog === 'copy' ? tripsApi.copyPlan(trip.id, plan.id, {...versions(), name: name.trim()}) : tripsApi.renamePlan(trip.id, plan.id, {...versions(), name: name.trim()})).then(ok => {if (ok) setDialog(null);});}}>{dialog === 'name' ? 'Rename' : dialog === 'copy' ? 'Copy' : 'Create'}</button></>}
-      {error && <p role="alert">{error}</p>}<button type="button" disabled={pending} onClick={() => setDialog(null)}>{dialog === 'delete' && plans.length === 1 ? 'Keep trip' : 'Cancel'}</button>
+      {dialog === 'compare' ? <><p>Select two or three distinct plans.</p><div className="checkbox-list">{plans.map(p => <label key={p.id} className="checkbox-label"><input type="checkbox" checked={compareIds.includes(p.id)} disabled={!compareIds.includes(p.id) && compareIds.length >= 3} onChange={e => setCompareIds(e.target.checked ? [...compareIds, p.id] : compareIds.filter(id => id !== p.id))} />{p.name}{p.primary && ' (Primary)'}</label>)}</div></>
+        : dialog === 'delete' ? plan.booked ? <p>This plan contains confirmed bookings or booking history and can't be deleted.</p>
+          : plan.primary && plans.length > 1 && <label>Replacement primary <select value={replacement} onChange={e => setReplacement(e.target.value)}><option value="">Choose a plan</option>{plans.filter(p => p.id !== plan.id).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+        : <label>Plan name <input value={name} maxLength={300} disabled={pending} onChange={e => setName(e.target.value)} /></label>}
+      {error && <p role="alert" className="field-error">{error}</p>}
+      <div className="modal-actions">
+        {dialog === 'compare' ? <button type="button" className="primary" disabled={compareIds.length < 2 || compareIds.length > 3} onClick={() => {setDialog(null); setView('compare'); record('compare');}}>Compare selected plans</button>
+          : dialog === 'delete' ? !plan.booked && <button type="button" className="danger-button" disabled={pending || (plan.primary && plans.length > 1 && !replacement)} onClick={() => {void mutate(() => tripsApi.deletePlan(trip.id, plan.id, {...versions(), confirmed: true, expectedPlanCount: plans.length, ...(plans.length === 1 ? {deleteTrip: true} : replacement ? {replacementPrimaryPlanId: replacement} : {})})).then(ok => {if (ok) setDialog(null);});}}>{plans.length === 1 ? 'Delete trip' : 'Delete plan'}</button>
+          : <button type="button" className="primary" disabled={pending || !name.trim()} onClick={() => {void mutate(() => dialog === 'create' ? tripsApi.createPlan(trip.id, {expectedVersion: trip.version, name: name.trim(), startDate: plan.startDate, endDate: plan.endDate, travelerCount: plan.travelerCount, travelerAges: plan.travelerAges}) : dialog === 'copy' ? tripsApi.copyPlan(trip.id, plan.id, {...versions(), name: name.trim()}) : tripsApi.renamePlan(trip.id, plan.id, {...versions(), name: name.trim()})).then(ok => {if (ok) setDialog(null);});}}>{dialog === 'name' ? 'Rename' : dialog === 'copy' ? 'Copy' : 'Create'}</button>}
+        <button type="button" className="text-button" disabled={pending} onClick={() => setDialog(null)}>{dialog === 'delete' && plans.length === 1 ? 'Keep trip' : 'Cancel'}</button>
+      </div>
     </PlanDialog>}
   </section>;
 });

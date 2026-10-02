@@ -6,6 +6,7 @@ import {ProfileScreen} from './components/ProfileScreen';
 import {HomeScreen, type StartMode} from './components/HomeScreen';
 import {TripStartForm, createTripFromDraft, emptyTripStartDraft, type TripStartDraft} from './components/TripStartForm';
 import {ActionIcon} from './components/ActionIcon';
+import {BrandMark} from './components/BrandMark';
 import {StatusRegion} from './components/StatusRegion';
 import {GuestTripExplorer, type GuestSelections} from './components/GuestTripExplorer';
 import {tripsApi, type TripResponse} from './api/tripsApi';
@@ -219,7 +220,7 @@ export default function App() {
     {screen.kind === 'profile' && guestSaveFailed && <button type="button" className="primary" onClick={() => { setGuestSaveFailed(false); setSaveAfterLogin(true); }}>Retry saving selections</button>}
     <AboutDemoTab />
     {screen.kind === 'profile'
-      ? <div hidden={authActive}>
+      ? <div className="app-frame" hidden={authActive}>
         <ProfileScreen
           key={`${screen.profile.email}:${profileViewNonce}`}
           email={screen.profile.email}
@@ -238,7 +239,8 @@ export default function App() {
         />
         </div>
       : !authActive && <>
-        <nav className="card primary-navigation" aria-label="Primary navigation">
+        <nav className="primary-navigation" aria-label="Primary navigation">
+          <BrandMark />
           <button type="button" className="text-button" aria-current={publicDestination === 'home' ? 'page' : undefined} onClick={() => navigatePublic('home')}><ActionIcon name="home" />Home</button>
           <button type="button" className="text-button" aria-current={publicDestination === 'trips' ? 'page' : undefined} onClick={() => navigatePublic('trips')}><ActionIcon name="trip" />Plan a Trip</button>
           <button type="button" className="text-button" onClick={() => navigatePublic('auth')}><ActionIcon name="profile" />Log in</button>

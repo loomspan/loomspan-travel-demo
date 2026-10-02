@@ -26,6 +26,14 @@ export function createTripFromDraft(draft: TripStartDraft, existingNames: string
   });
 }
 
+const destinationTickets: Record<string, {code: string; name: string; image: string}> = {
+  'destination-sfo': {code: 'SFO', name: 'San Francisco', image: '/images/destinations/san-francisco.webp'},
+  'destination-muc': {code: 'MUC', name: 'Munich', image: '/images/destinations/munich.webp'},
+  'destination-mex': {code: 'MEX', name: 'Mexico City', image: '/images/destinations/mexico-city.webp'},
+};
+const ticketDateFormatter = new Intl.DateTimeFormat('en-US', {month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC'});
+const ticketDate = (date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date) ? ticketDateFormatter.format(new Date(`${date}T00:00:00Z`)) : '—';
+
 type Props = {
   draft: TripStartDraft;
   onChange: (draft: TripStartDraft) => void;
@@ -94,7 +102,8 @@ export function TripStartForm({draft, onChange, mode, authenticated, onAuthentic
     } finally { pendingRef.current = false; setPending(false); }
   };
 
-  return <section className="card profile-card" aria-labelledby="trips-heading">
+  const ticket = destinationTickets[draft.destinationKey];
+  return <section className="card profile-card trip-start-card" aria-labelledby="trips-heading">
     <p className="eyebrow wordmark">DeTour</p><h1 id="trips-heading" tabIndex={-1}>Plan a Trip</h1>
     <h2>Start a new trip</h2>
     <p>Explore your trip details now. An account is required when you save your selections.</p>
@@ -111,5 +120,20 @@ export function TripStartForm({draft, onChange, mode, authenticated, onAuthentic
       {errors.ages && <p id="trip-ages-error" className="field-error">{errors.ages}</p>}
       <button className="primary" type="submit" disabled={pending}>{pending ? 'Starting…' : onExplore ? 'Search options' : 'Start planning'}</button>
     </form>
+    {ticket && <aside className="trip-start-aside" aria-hidden="true">
+      <div className="boarding-pass">
+        <img src={ticket.image} alt="" width="960" height="640" />
+        <div className="boarding-pass-body">
+          <p className="eyebrow">Boarding pass preview</p>
+          <div className="boarding-pass-route"><span><strong>PDX</strong>Portland</span><span className="route-line" /><span><strong>{ticket.code}</strong>{ticket.name}</span></div>
+          <dl>
+            <div><dt>Depart</dt><dd>{ticketDate(draft.startDate)}</dd></div>
+            <div><dt>Return</dt><dd>{ticketDate(draft.endDate)}</dd></div>
+            <div><dt>Party</dt><dd>{Number.isInteger(count) && count >= 1 ? `${count} traveler${count === 1 ? '' : 's'}` : '—'}</dd></div>
+            <div><dt>Budget</dt><dd>{draft.budget ? `$${draft.budget}` : 'Flexible'}</dd></div>
+          </dl>
+        </div>
+      </div>
+    </aside>}
   </section>;
 }

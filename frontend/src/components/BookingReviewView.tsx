@@ -99,6 +99,8 @@ export function BookingReviewView({
         <span className="alternative-id">Itinerary Snapshot ID: {alternative.id}</span>
       </header>
 
+      <div className="booking-review-layout">
+      <div className="booking-review-main">
       {/* Trip parameters overview */}
       <div className="card booking-trip-summary">
         <h3 className="section-title">Trip Parameters</h3>
@@ -153,7 +155,7 @@ export function BookingReviewView({
                 </p>
               </div>
 
-              <div className="flight-leg-detail" style={{marginTop: '0.75rem'}}>
+              <div className="flight-leg-detail">
                 <h4>Return Flight</h4>
                 <p>
                   <strong>{selections.airfare.returnCarrierName || 'Unknown Carrier'}</strong> {selections.airfare.returnFlightNumber || ''} •{' '}
@@ -167,7 +169,7 @@ export function BookingReviewView({
                 </p>
               </div>
 
-              <p className="meta-note" style={{marginTop: '0.75rem'}}>
+              <p className="meta-note">
                 Total air duration: {formatMinutes(selections.airfare.totalDurationMinutes || 0)} • Party of {trip.travelerCount}
               </p>
             </div>
@@ -201,7 +203,7 @@ export function BookingReviewView({
                   <span>• {(selections.stay.distanceToCityCenterMeters / 1000).toFixed(1)} km to city center</span>
                 )}
               </p>
-              <div className="stay-nights-list" style={{marginTop: '0.75rem'}}>
+              <div className="stay-nights-list">
                 <h4>Nightly Breakdown ({selections.stay.nights.length} nights)</h4>
                 <ul>
                   {selections.stay.nights.map((n) => (
@@ -253,6 +255,8 @@ export function BookingReviewView({
         </article>
       </div>
 
+      </div>
+      <div className="booking-review-sidebar">
       {/* Itemized totals & budget position */}
       <div className="card booking-totals-card">
         <h3 className="section-title">Booking totals <span className="currency-note">(USD)</span></h3>
@@ -350,6 +354,8 @@ export function BookingReviewView({
         >
           {isSubmitting ? 'Reserving inventory…' : 'Confirm Booking'}
         </button>
+      </div>
+      </div>
       </div>
     </section>
   );

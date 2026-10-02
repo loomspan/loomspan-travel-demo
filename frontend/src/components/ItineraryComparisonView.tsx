@@ -224,7 +224,7 @@ export function ItineraryComparisonView({
                     )}
                     <FlightSchedule departureAirport={trip.originAirportCode} departureTime={activeAlt.selections.airfare.outboundDepartureTime} departureTimeZone={activeAlt.selections.airfare.outboundDepartureTimeZone} arrivalAirport={trip.destinationKey.replace('destination-', '').toUpperCase()} arrivalTime={activeAlt.selections.airfare.outboundArrivalTime} arrivalTimeZone={activeAlt.selections.airfare.outboundArrivalTimeZone} />
                     <div>Duration: {formatMinutes(activeAlt.selections.airfare.outboundDurationMinutes || 0)}</div>
-                    <div style={{marginTop: '0.35rem'}}>
+                    <div>
                       <strong>Return:</strong> {activeAlt.selections.airfare.returnCarrierName || 'Unknown Carrier'} {activeAlt.selections.airfare.returnFlightNumber || ''} •{' '}
                       {activeAlt.selections.airfare.returnStopCount === 0
                         ? 'Nonstop'
@@ -508,7 +508,7 @@ export function ItineraryComparisonView({
                   {alt.selections.stay ? (
                     <div className="cell-stay-block">
                       <strong>{alt.selections.stay.propertyName}</strong>
-                      <div style={{marginTop: '0.25rem'}}>
+                      <div>
                         <span className="badge badge-upcoming">
                           {alt.selections.stay.propertyCategory || 'HOTEL'}
                         </span>
@@ -581,7 +581,7 @@ export function ItineraryComparisonView({
                   {alt.selections.rental ? (
                     <div>
                       <strong>{alt.selections.rental.vehicleClassName}</strong>
-                      <span className="badge badge-draft" style={{marginLeft: '0.4rem'}}>
+                      <span className="badge badge-draft">
                         {alt.selections.rental.vehicleCategory || 'SEDAN'}
                       </span>
                     </div>

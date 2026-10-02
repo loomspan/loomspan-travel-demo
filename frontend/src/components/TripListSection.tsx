@@ -170,8 +170,8 @@ function TripCard({trip, onSelect, onDelete, onCancel, onRename, headingLevel}: 
         <input ref={inputRef} id={`rename-${trip.id}`} value={name} disabled={renamePending} aria-invalid={Boolean(renameError)}
           aria-describedby={renameError ? `rename-error-${trip.id}` : undefined} onChange={event => setName(event.target.value)} />
         {renameError && <p id={`rename-error-${trip.id}`} className="field-error" role="alert">{renameError}</p>}
-        <button type="submit" disabled={renamePending}>{renamePending ? 'Saving…' : 'Save name'}</button>
-        <button type="button" disabled={renamePending} onClick={finishRename}>Cancel rename</button>
+        <button type="submit" className="primary button-sm" disabled={renamePending}>{renamePending ? 'Saving…' : 'Save name'}</button>
+        <button type="button" className="text-button" disabled={renamePending} onClick={finishRename}>Cancel rename</button>
       </form>}
     </article>
   );
@@ -203,7 +203,7 @@ export function TripListSection({
     <div className="trips-container">
       {!hideHeading && <div className="trips-header">
         <h2>My Trips</h2>
-        {handlePlanTrip && <div className="trips-header-actions" style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
+        {handlePlanTrip && <div className="trips-header-actions">
           <button type="button" className="primary" onClick={handlePlanTrip}>
             Plan Trip
           </button>

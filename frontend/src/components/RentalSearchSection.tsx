@@ -153,7 +153,6 @@ export function RentalSearchSection({
         <div
           className="driver-age-notice"
           role="alert"
-          style={{marginBottom: '1rem', color: '#c53030', backgroundColor: '#fff5f5', padding: '0.75rem', borderRadius: '4px', border: '1px solid #feb2b2'}}
         >
           {serverExplanation || DRIVER_AGE_EXPLANATION}
         </div>

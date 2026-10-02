@@ -210,7 +210,7 @@ export function TripRevisionModal({
         <p className="hint">{displayHint}</p>
 
         {globalError && (
-          <div className="field-error" role="alert" style={{marginBottom: '1rem'}}>
+          <div className="field-error" role="alert">
             {globalError}
           </div>
         )}

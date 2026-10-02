@@ -71,7 +71,7 @@ export function BookingHistorySection({
       <details className="booking-history-accordion" open>
         <summary className="booking-history-summary">
           <span id="booking-history-heading">Booking History ({bookings.length})</span>
-          <span className="hint" style={{fontWeight: 'normal', fontSize: '0.85rem'}}>
+          <span className="hint">
             Immutable audit record
           </span>
         </summary>
@@ -94,7 +94,6 @@ export function BookingHistorySection({
                   <div>
                     <span
                       className={`badge ${isCanceled ? 'badge-canceled' : 'badge-booked'}`}
-                      style={{marginRight: '0.5rem'}}
                     >
                       {isCanceled ? 'Canceled Booking' : 'Booking'}
                     </span>

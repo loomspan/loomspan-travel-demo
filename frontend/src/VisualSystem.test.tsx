@@ -38,9 +38,9 @@ describe('DeTour visual language', () => {
   it('keeps native control states visible in standard and forced colors', () => {
     const css = readFileSync('src/style.css', 'utf8');
     expect(css).toMatch(/select:hover:not\(:disabled\)/);
-    expect(css).toMatch(/select:focus-visible, input\[type="checkbox"\]:focus-visible/);
+    expect(css).toMatch(/select:focus-visible,\s*input\[type="checkbox"\]:focus-visible/);
     expect(css).toMatch(/select:disabled/);
-    expect(css).toMatch(/select\[aria-invalid="true"\], input\[type="checkbox"\]\[aria-invalid="true"\]/);
+    expect(css).toMatch(/select\[aria-invalid="true"\],\s*input\[type="checkbox"\]\[aria-invalid="true"\]/);
     expect(css).toMatch(/input\[type="checkbox"\]:checked/);
     expect(css).toMatch(/input\[type="checkbox"\]:disabled/);
     expect(css).toMatch(/@media \(forced-colors: active\)/);
@@ -51,7 +51,7 @@ describe('DeTour visual language', () => {
     expect(css).toMatch(/\.trip-action-menu\s*\{[^}]*max-width: 100%[^}]*min-width: 0[^}]*box-sizing: border-box/);
     expect(css).toMatch(/\.trip-action-menu button\s*\{[^}]*white-space: normal[^}]*overflow-wrap: anywhere/);
     expect(css).toMatch(/\.trip-card-summary\s*\{[^}]*flex-wrap: wrap/);
-    expect(css).toMatch(/\.component-slots-grid, \.alternatives-grid, \.trips-grid\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\)/);
+    expect(css).toMatch(/\.component-slots-grid,\s*\.alternatives-grid,\s*\.trips-grid\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\)/);
     expect(css).toMatch(/\.trip-card-actions\s*\{[^}]*flex-direction: column/);
     expect(css).toMatch(/:focus-visible\s*\{[^}]*outline:/);
     expect(css).toMatch(/@media \(forced-colors: active\)/);

@@ -12,7 +12,7 @@ export function PlanDialog({title, children, onClose, pending}: {title: string; 
       else document.querySelector<HTMLElement>('[role="tab"][aria-selected="true"], #workspace-heading')?.focus();
     };
   }, []);
-  return <div className="modal-overlay"><div className="modal-content" role="dialog" aria-modal="true" aria-labelledby="plan-dialog-title" ref={ref}
+  return <div className="modal-backdrop modal-overlay"><div className="modal modal-content" role="dialog" aria-modal="true" aria-labelledby="plan-dialog-title" ref={ref}
     onKeyDown={event => {
       if (event.key === 'Escape' && !busy.current) {event.preventDefault(); close.current();}
       if (event.key !== 'Tab') return;
