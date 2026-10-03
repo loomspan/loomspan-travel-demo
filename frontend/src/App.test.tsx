@@ -1430,7 +1430,7 @@ describe('App identity experience', () => {
         sourcePlannedItineraryIds: ['plan-1'],
         travelerAges: [25, 30],
         budgetCents: 150000,
-        name: 'Munich - 2027-03-15 to 2027-03-20',
+        name: 'Munich — Mar 15–20, 2027',
       }),
     }));
 

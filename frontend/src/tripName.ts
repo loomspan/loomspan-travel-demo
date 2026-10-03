@@ -7,7 +7,22 @@ const destinationNames: Record<string, string> = {
 export function tripBaseName(destinationKey: string, startDate: string, endDate: string): string {
   if (!startDate || !endDate) return '';
   const city = destinationNames[destinationKey];
-  return city ? `${city} - ${startDate} to ${endDate}` : '';
+  if (!city) return '';
+  const start = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return '';
+  const month = (date: Date) => date.toLocaleDateString('en-US', {month: 'short', timeZone: 'UTC'});
+  const first = `${month(start)} ${start.getUTCDate()}`;
+  const last = `${month(end)} ${end.getUTCDate()}`;
+  const sameYear = start.getUTCFullYear() === end.getUTCFullYear();
+  const dates = !sameYear
+    ? `${first}, ${start.getUTCFullYear()} – ${last}, ${end.getUTCFullYear()}`
+    : start.getUTCMonth() !== end.getUTCMonth()
+      ? `${first} – ${last}, ${end.getUTCFullYear()}`
+      : startDate === endDate
+        ? `${first}, ${start.getUTCFullYear()}`
+        : `${first}–${end.getUTCDate()}, ${start.getUTCFullYear()}`;
+  return `${city} — ${dates}`;
 }
 
 export function suggestedTripName(base: string, existingNames: string[] = []): string {

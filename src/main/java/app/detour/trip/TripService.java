@@ -685,7 +685,7 @@ public class TripService {
     }
 
     private String suggestName(long ownerUserId, String city, LocalDate startDate, LocalDate endDate) {
-        String base = city + " - " + startDate + " to " + endDate;
+        String base = label(city, startDate, endDate);
         List<String> names = trips.findNamesByOwnerUserId(ownerUserId);
         if (names.stream().noneMatch(name -> name.equalsIgnoreCase(base))) return base;
         for (int index = 1; ; index++) {
@@ -704,7 +704,9 @@ public class TripService {
     private String updatedGeneratedName(long ownerUserId, Trip trip, Destination destination,
             LocalDate startDate, LocalDate endDate) {
         String oldBase = trip.destination().name() + " - " + trip.startDate() + " to " + trip.endDate();
-        if (!trip.label().equals(oldBase) && !trip.label().matches(java.util.regex.Pattern.quote(oldBase) + " - [A-Z]+")) {
+        String base = label(trip.destination().name(), trip.startDate(), trip.endDate());
+        if (!trip.label().equals(oldBase) && !trip.label().matches(java.util.regex.Pattern.quote(oldBase) + " - [A-Z]+")
+                && !trip.label().equals(base) && !trip.label().matches(java.util.regex.Pattern.quote(base) + " - [A-Z]+")) {
             return trip.label();
         }
         trips.lockOwnerForNaming(ownerUserId);
@@ -729,9 +731,21 @@ public class TripService {
         if (nights < 1 || nights > 14) throw validation("dates", "Trip length must be between 1 and 14 nights.");
     }
 
-    private static String label(String destinationName, LocalDate startDate, LocalDate endDate) {
-        return destinationName + " \u2014 " + startDate.getMonth().getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.US)
-                + " " + startDate.getDayOfMonth() + "\u2013" + endDate.getDayOfMonth() + ", " + startDate.getYear();
+    static String label(String destinationName, LocalDate startDate, LocalDate endDate) {
+        var formatter = java.time.format.DateTimeFormatter.ofPattern("MMM d", java.util.Locale.US);
+        String first = startDate.format(formatter);
+        String last = endDate.format(formatter);
+        String dates;
+        if (startDate.getYear() != endDate.getYear()) {
+            dates = first + ", " + startDate.getYear() + " – " + last + ", " + endDate.getYear();
+        } else if (startDate.getMonth() != endDate.getMonth()) {
+            dates = first + " – " + last + ", " + endDate.getYear();
+        } else if (startDate.equals(endDate)) {
+            dates = first + ", " + startDate.getYear();
+        } else {
+            dates = first + "–" + endDate.getDayOfMonth() + ", " + startDate.getYear();
+        }
+        return destinationName + " — " + dates;
     }
 
     public TripResponse toResponse(Trip trip) {

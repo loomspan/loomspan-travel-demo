@@ -204,7 +204,7 @@ describe('public trip start and authentication handoff', () => {
   });
 
   it('adds an editable letter when the city and dates already have a Trip', async () => {
-    const existingName = 'San Francisco - 2027-03-10 to 2027-03-14';
+    const existingName = 'San Francisco — Mar 10–14, 2027';
     fetchMock.mockResolvedValueOnce(json(200, {email: 'ada@example.test', upcoming: [{
       id: 'existing-trip', name: existingName, label: existingName,
       destinationKey: 'destination-sfo', destinationName: 'San Francisco',

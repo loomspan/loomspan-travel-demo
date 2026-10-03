@@ -303,8 +303,8 @@ class TripApiIntegrationTest {
     @Test
     void tripNameRemainsStableWhenPlanDatesChange() throws Exception {
         Client owner = register("dated-trip-name@example.test");
-        String base = "San Francisco - 2027-03-10 to 2027-03-14";
-        String target = "San Francisco - 2027-03-15 to 2027-03-19";
+        String base = "San Francisco — Mar 10–14, 2027";
+        String target = "San Francisco — Mar 15–19, 2027";
         owner.unsafe(post("/api/trips"), validRequest("\"name\":\"" + target + "\""))
                 .andExpect(status().isCreated());
         MvcResult created = owner.unsafe(post("/api/trips"), validRequest("\"name\":\"" + base + "\""))
@@ -1182,7 +1182,7 @@ class TripApiIntegrationTest {
                 "{\"expectedVersion\":2,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":80000,\"sourcePlannedItineraryIds\":[\"" + planned1Id + "\",\"" + planned2Id + "\"]}")
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.version").value(0))
-                .andExpect(jsonPath("$.name").value("San Francisco - 2027-03-10 to 2027-03-14"))
+                .andExpect(jsonPath("$.name").value("San Francisco — Mar 10–14, 2027"))
                 .andExpect(jsonPath("$.budgetCents").value(80000))
                 .andExpect(jsonPath("$.drafts.length()").value(1))
                 .andExpect(jsonPath("$.planned.length()").value(2))
@@ -1194,7 +1194,7 @@ class TripApiIntegrationTest {
         owner.unsafe(post("/api/trips/{tripId}/duplicate", tripId),
                 "{\"expectedVersion\":2,\"destinationKey\":\"destination-sfo\",\"startDate\":\"2027-03-10\",\"endDate\":\"2027-03-14\",\"travelerCount\":2,\"travelerAges\":[25,30],\"budgetCents\":80000,\"sourcePlannedItineraryIds\":[\"" + planned1Id + "\",\"" + planned2Id + "\"]}")
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.name").value("San Francisco - 2027-03-10 to 2027-03-14 - A"));
+                .andExpect(jsonPath("$.name").value("San Francisco — Mar 10–14, 2027 - A"));
 
         String newTripId = jsonField(duplicated, "id");
         org.junit.jupiter.api.Assertions.assertNotEquals(tripId, newTripId);

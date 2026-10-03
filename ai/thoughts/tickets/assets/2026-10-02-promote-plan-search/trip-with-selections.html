@@ -1,0 +1,89 @@
+<style>
+#saved-plan {--canvas:light-dark(#faf7f2,#212321);--surface:light-dark(#ffffff,#292e30);--ink:light-dark(#152c3c,#eef2f2);--muted:light-dark(#627180,#b6c2c9);--teal:light-dark(#0d6d70,#81d3ce);--button:light-dark(#0d6d70,#125d60);--button-text:light-dark(#ffffff,#ffffff);--line:light-dark(#e6dbcc,#475153);--soft:light-dark(#e2f1ef,#243e3d);--coral:light-dark(#ec7146,#ffa984);color:var(--ink);font-family:system-ui,sans-serif;background:var(--canvas);padding:24px;}
+#saved-plan *{box-sizing:border-box;}
+#saved-plan h1,#saved-plan h2,#saved-plan h3,#saved-plan .brand{font-family:Georgia,serif;margin:0 0 12px;}
+#saved-plan p{margin:8px 0;}
+#saved-plan .row{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;}
+#saved-plan .nav{border-bottom:1px solid var(--line);padding-bottom:16px;}
+#saved-plan .brand{color:var(--teal);margin:0;}
+#saved-plan .actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+#saved-plan header{padding:22px 0 16px;}
+#saved-plan .muted{color:var(--muted);}
+#saved-plan .button{font:inherit;background:var(--surface);color:var(--teal);border:1px solid var(--line);border-radius:24px;padding:10px 17px;min-height:44px;}
+#saved-plan .primary{background:var(--button);color:var(--button-text);border-color:var(--button);}
+#saved-plan .text{border:0;background:transparent;padding:8px 0;}
+#saved-plan .button:disabled{opacity:.55;}
+#saved-plan .planbar{padding-bottom:16px;border-bottom:1px solid var(--line);margin-bottom:24px;}
+#saved-plan .badge{display:inline-block;border-radius:24px;padding:5px 10px;background:var(--soft);color:var(--teal);}
+#saved-plan .layout{display:grid;grid-template-columns:minmax(0,1fr) 285px;gap:24px;align-items:start;}
+#saved-plan .search,#saved-plan .summary{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px;min-width:0;}
+#saved-plan .tabs{display:flex;gap:20px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:14px 0 20px;}
+#saved-plan .tab{border:0;border-radius:0;background:transparent;color:var(--ink);font:inherit;padding:13px 0;min-height:44px;}
+#saved-plan .tab[aria-selected=true]{color:var(--teal);border-bottom:3px solid var(--coral);}
+#saved-plan .current{background:var(--soft);border-radius:12px;padding:16px;margin-bottom:20px;}
+#saved-plan .filter{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px;}
+#saved-plan select{font:inherit;background:var(--surface);color:var(--ink);border:1px solid var(--line);padding:10px;border-radius:8px;max-width:100%;}
+#saved-plan .result{padding-top:20px;border-top:1px dashed var(--line);}
+#saved-plan .difference{color:var(--teal);margin:16px 0;}
+#saved-plan .item{border-bottom:1px dashed var(--line);padding:16px 0;}
+#saved-plan .summary h3{margin-bottom:0;}
+#saved-plan .total{padding:16px 0;}
+#saved-plan .status{margin-top:16px;min-height:24px;}
+#saved-plan dialog{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:18px;padding:24px;max-width:420px;width:calc(100% - 32px);}
+#saved-plan dialog::backdrop{background:light-dark(#152c3c66,#00000099);}
+@media(max-width:740px){#saved-plan{padding:14px;}#saved-plan .layout{grid-template-columns:1fr;}#saved-plan .summary{grid-row:1;}#saved-plan .search,#saved-plan .summary{padding:16px;}#saved-plan .tabs{gap:14px;}}
+</style>
+<div id="saved-plan" aria-label="Build your plan with existing selections">
+<nav class="nav row" aria-label="Main navigation"><strong class="brand">DeTour</strong><div class="actions"><span>Home</span><span>My Trips</span><span>Profile</span></div></nav>
+<header><h1>San Francisco — Mar 13–20, 2027</h1><div class="row"><p class="muted">Portland → San Francisco · Mar 13–20 · 2 travelers</p><button class="button text cursor-interaction" type="button" data-details>Edit trip details</button></div></header>
+<div class="planbar row"><div class="actions"><strong>Primary plan</strong><span class="badge">Primary</span></div><button class="button text cursor-interaction" type="button" data-copy>Copy plan</button></div>
+<div class="layout">
+<section class="search"><h2>Build your plan</h2><p class="muted">Keep exploring. Your selections stay in place until you replace them.</p>
+<div class="tabs" role="tablist" aria-label="Search options"><button id="populated-flight-tab" class="tab cursor-interaction" type="button" role="tab" aria-controls="populated-results" aria-selected="true" data-search="flight"><i data-lucide="plane" aria-hidden="true"></i> Search flights</button><button id="populated-stay-tab" class="tab cursor-interaction" type="button" role="tab" aria-controls="populated-results" aria-selected="false" data-search="stay"><i data-lucide="bed-double" aria-hidden="true"></i> Search stays</button><button id="populated-car-tab" class="tab cursor-interaction" type="button" role="tab" aria-controls="populated-results" aria-selected="false" data-search="car"><i data-lucide="car-front" aria-hidden="true"></i> Search cars</button></div>
+<div id="populated-results" role="tabpanel" aria-labelledby="populated-flight-tab">
+<div class="current"><div class="row"><strong data-current-label>Currently selected flight</strong><span class="badge" data-current-badge>In your plan</span></div><p data-current-title>Morning nonstop · $680 for 2 travelers</p><p class="muted" data-current-details>PDX → SFO · Round trip · Economy</p></div>
+<div class="filter"><h3 data-search-title>Other flights</h3><label>Sort by <select aria-label="Sort results"><option>Lowest price</option><option>Recommended</option></select></label></div>
+<article class="result"><div class="row"><strong data-result-name>Afternoon nonstop</strong><strong data-result-price>$300 / traveler</strong></div><p data-result-description>PDX → SFO · Round trip · Economy</p><p class="muted" data-result-details>Outbound 1:00 PM · Return 3:30 PM</p><p class="difference" data-difference>$80 less than your selected flight · 2 travelers</p><div class="row"><button class="button text cursor-interaction" type="button" data-view>View details</button><button class="button primary cursor-interaction" type="button" data-replace>Replace flight</button></div></article>
+</div></section>
+<aside class="summary"><h3>Your selections</h3><p class="muted">Saved to Primary plan</p>
+<div class="item"><div class="row"><strong>Flight</strong><span data-flight-price>$680</span></div><p data-flight-name>Morning nonstop</p><p class="muted">Round trip · 2 travelers</p><button class="button text cursor-interaction" type="button" data-change="flight">Change flight</button></div>
+<div class="item"><div class="row"><strong>Stay</strong><span data-stay-price>$1,225</span></div><p data-stay-name>Downtown hotel</p><p class="muted">7 nights · 1 room · 2 guests</p><button class="button text cursor-interaction" type="button" data-change="stay">Change stay</button></div>
+<div class="item"><div class="row"><strong>Car · optional</strong><span data-car-price>$315</span></div><p data-car-name>Compact rental</p><p class="muted">7 days · Airport pickup</p><button class="button text cursor-interaction" type="button" data-change="car">Change car</button></div>
+<div class="total row"><strong>Plan total</strong><strong data-total>$2,220</strong></div><button class="button primary cursor-interaction" type="button" data-review>Review plan</button>
+</aside></div>
+<p class="muted status" aria-live="polite" data-status>Illustrative options and prices · Selections are unbooked.</p>
+<dialog aria-labelledby="replace-title"><h3 id="replace-title">Replace flight?</h3><p data-dialog-description>Replace Morning nonstop with Afternoon nonstop?</p><p class="difference" data-dialog-difference>Your plan total will decrease by $80.</p><div class="actions"><button class="button primary cursor-interaction" type="button" data-confirm>Replace flight</button><button class="button cursor-interaction" type="button" data-cancel>Keep current selection</button></div></dialog>
+</div>
+<script>
+(()=>{
+const root=document.getElementById('saved-plan'), q=s=>root.querySelector(s);
+const data={flight:{name:'Morning nonstop',price:680,description:'PDX → SFO · Round trip · Economy',alternative:'Afternoon nonstop',alternativePrice:600,unit:'$300 / traveler',detail:'Outbound 1:00 PM · Return 3:30 PM',basis:'2 travelers'},stay:{name:'Downtown hotel',price:1225,description:'Mar 13–20 · 7 nights · 2 guests',alternative:'Waterfront hotel',alternativePrice:1120,unit:'$160 / night',detail:'1 room · Free cancellation · Breakfast available',basis:'7 nights'},car:{name:'Compact rental',price:315,description:'Mar 13–20 · Airport pickup · 7 days',alternative:'Midsize rental',alternativePrice:350,unit:'$50 / day',detail:'Automatic · 5 seats · Airport pickup',basis:'7 days'}};
+const choices={flight:true,stay:true,car:true};let active='flight';
+function total(){return Object.keys(data).reduce((sum,key)=>sum+(choices[key]?data[key].price:0),0);}
+function money(value){return '$'+value.toLocaleString('en-US');}
+function render(){
+const item=data[active],has=choices[active],delta=item.alternativePrice-(has?item.price:0);
+root.querySelectorAll('[data-search]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.search===active)));
+q('[role=tabpanel]').setAttribute('aria-labelledby',q('[data-search='+active+']').id);
+q('[data-current-label]').textContent=has?'Currently selected '+active:'Add a '+active;
+q('[data-current-badge]').hidden=!has;q('[data-current-title]').textContent=has?item.name+' · '+money(item.price)+' total':'No '+active+' selected yet';
+q('[data-current-details]').textContent=item.description;
+q('[data-search-title]').textContent=(has?'Other ':'Available ')+(active==='stay'?'stays':active+'s');
+q('[data-result-name]').textContent=item.alternative;q('[data-result-price]').textContent=item.unit;q('[data-result-description]').textContent=item.description;q('[data-result-details]').textContent=item.detail;
+q('[data-difference]').textContent=has?(delta===0?'Same total price':money(Math.abs(delta))+(delta<0?' less':' more')+' than your selected '+active)+' · '+item.basis:money(item.alternativePrice)+' total · '+item.basis;
+q('[data-replace]').textContent=(has?'Replace ':'Save ')+active+(has?'':' to plan');q('[data-replace]').disabled=has&&item.name===item.alternative;
+Object.keys(data).forEach(key=>{q('[data-'+key+'-name]').textContent=choices[key]?data[key].name:'Not selected yet';q('[data-'+key+'-price]').textContent=choices[key]?money(data[key].price):'—';q('[data-change='+key+']').textContent=(choices[key]?'Change ':'Find ')+key;});
+q('[data-total]').textContent=money(total());
+}
+root.querySelectorAll('[data-search],[data-change]').forEach(b=>b.addEventListener('click',()=>{active=b.dataset.search||b.dataset.change;render();}));
+q('[data-replace]').addEventListener('click',()=>{const item=data[active];if(!choices[active]){apply();return;}q('#replace-title').textContent='Replace '+active+'?';q('[data-dialog-description]').textContent='Replace '+item.name+' with '+item.alternative+'?';const delta=item.alternativePrice-item.price;q('[data-dialog-difference]').textContent='New plan total: '+money(total()+delta)+' ('+money(Math.abs(delta))+(delta<0?' less':' more')+').';q('[data-confirm]').textContent='Replace '+active;q('dialog').showModal();});
+function apply(){const item=data[active];item.name=item.alternative;item.price=item.alternativePrice;choices[active]=true;q('[data-status]').textContent='Saved '+item.name+' to Primary plan.';render();}
+q('[data-confirm]').addEventListener('click',()=>{apply();q('dialog').close();});q('[data-cancel]').addEventListener('click',()=>q('dialog').close());
+q('[data-view]').addEventListener('click',()=>q('[data-status]').textContent=data[active].detail+' · '+data[active].description);
+q('[data-review]').addEventListener('click',()=>q('[data-status]').textContent='Review Primary plan · '+money(total())+' selected total.');
+q('[data-details]').addEventListener('click',()=>q('[data-status]').textContent='San Francisco · Mar 13–20, 2027 · 2 travelers.');
+q('[data-copy]').addEventListener('click',()=>q('[data-status]').textContent='A copied plan would keep these selections so you can explore a separate alternative.');
+render();
+if(globalThis.Tweak){const tweak=new Tweak({container:root,onChange:render});tweak.addToggle(choices,'flight',{label:'Flight selected'});tweak.addToggle(choices,'stay',{label:'Stay selected'});tweak.addToggle(choices,'car',{label:'Car selected'});}
+})();
+</script>

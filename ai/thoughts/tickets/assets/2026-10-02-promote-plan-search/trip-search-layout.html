@@ -1,0 +1,92 @@
+<style>
+#detour-mock { --sand:light-dark(#faf7f2,#20201e); --surface:var(--card); --ink:var(--foreground); --teal:light-dark(#0d6d70,#80cdcb); --coral:light-dark(#e9693e,#ffa57c); --line:var(--border); color:var(--ink); }
+#detour-mock .stage { min-height:720px; background:var(--sand); padding:20px; }
+#detour-mock .topbar,#detour-mock .row {display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+#detour-mock .topbar {padding:0 0 18px;border-bottom:1px solid var(--line);}
+#detour-mock .brand,#detour-mock h1,#detour-mock h2,#detour-mock h3 {font-family:Georgia,serif;}
+#detour-mock .brand {color:var(--teal);}
+#detour-mock header {padding:22px 0 16px;}
+#detour-mock h1,#detour-mock h2,#detour-mock h3,#detour-mock p {margin:0 0 10px;}
+#detour-mock .meta {color:var(--muted-foreground);}
+#detour-mock .planbar {display:flex;gap:16px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:22px;}
+#detour-mock .work {display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:24px;}
+#detour-mock .search,#detour-mock .summary {background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px;}
+#detour-mock .search-tabs {display:flex;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:18px 0;}
+#detour-mock .tab {background:transparent;color:var(--ink);border:0;border-radius:0;padding:12px 0;min-height:44px;font-weight:500;}
+#detour-mock .tab[aria-selected=true] {border-bottom:3px solid var(--coral);color:var(--teal);}
+#detour-mock .controls {display:flex;gap:14px;align-items:end;flex-wrap:wrap;margin-bottom:20px;}
+#detour-mock .controls label {display:grid;gap:6px;flex:1;min-width:140px;}
+#detour-mock .result {border-top:1px dashed var(--line);padding:20px 0 0;margin-top:18px;}
+#detour-mock .result-details {display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:12px 0;}
+#detour-mock .route {color:var(--teal);}
+#detour-mock .summary {align-self:start;}
+#detour-mock .summary-item {padding:16px 0;border-top:1px dashed var(--line);}
+#detour-mock .summary-item p {margin:8px 0 0;}
+#detour-mock .foot {margin-top:20px;}
+#detour-mock .choices {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:22px;}
+#detour-mock .choice {border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:22px;display:flex;flex-direction:column;gap:14px;}
+#detour-mock .choice i {color:var(--teal);}
+#detour-mock .choice p {flex:1;}
+#detour-mock .guided-results {margin-top:22px;}
+#detour-mock .saved-strip {margin:18px 0;padding:14px 0;border-block:1px dashed var(--line);}
+@media(max-width:700px){#detour-mock .work,#detour-mock .choices{grid-template-columns:1fr;}#detour-mock .stage{padding:14px;min-height:1000px;}#detour-mock .search,#detour-mock .summary{padding:16px;}}
+</style>
+<div id="detour-mock">
+<div class="viz-carousel" aria-label="New trip plan layout options">
+<section data-variant="Search first" aria-label="Search first design">
+<div class="stage">
+<nav class="topbar" aria-label="Main navigation"><strong class="brand">DeTour</strong><div class="viz-row"><button class="btn btn-ghost" type="button">Home</button><button class="btn btn-ghost" type="button">My Trips</button><button class="btn btn-ghost" type="button">Profile</button></div></nav>
+<header><div class="row"><h1>San Francisco — Mar 13–20, 2027</h1><button class="btn btn-ghost" type="button" data-edit>Edit trip details</button></div><p class="meta">Portland → San Francisco · Mar 13–20, 2027 · 2 travelers</p></header>
+<div class="planbar"><strong>Primary plan</strong><span class="viz-badge">Primary</span><button class="btn btn-ghost" type="button" data-plan>Plan actions</button></div>
+<div class="work">
+<section class="search"><h2>Build your plan</h2><p class="meta">Choose a flight or stay to get started.</p>
+<div class="search-tabs" role="tablist" aria-label="Search your trip"><button class="tab cursor-interaction" type="button" role="tab" id="search-flight-tab" aria-controls="search-results" aria-selected="true" data-category="Flights"><i data-lucide="plane" aria-hidden="true"></i> Search flights</button><button class="tab cursor-interaction" type="button" role="tab" id="search-stay-tab" aria-controls="search-results" aria-selected="false" data-category="Stays"><i data-lucide="bed-double" aria-hidden="true"></i> Search stays</button><button class="tab cursor-interaction" type="button" role="tab" id="search-car-tab" aria-controls="search-results" aria-selected="false" data-category="Cars"><i data-lucide="car-front" aria-hidden="true"></i> Search cars</button></div>
+<div id="search-results" role="tabpanel" aria-labelledby="search-flight-tab">
+<div class="controls"><label>Sort by<select class="form-select"><option>Lowest price</option><option>Recommended</option></select></label><label data-filter-label>Stops<select class="form-select"><option>Any stops</option><option>Nonstop only</option></select></label></div>
+<div class="row"><h3 data-result-heading>Flights for your trip</h3><span class="meta text-small">Illustrative results</span></div>
+<article class="result"><div class="row"><strong data-result-title>Morning nonstop</strong><strong data-result-price>$340 / traveler</strong></div><p class="route" data-result-route>PDX → SFO · Round trip</p><div class="result-details meta" data-result-details>Outbound 8:00 AM · Return 11:30 AM · Economy</div><div class="row"><button class="btn btn-ghost" type="button" data-details>View details</button><button class="btn btn-primary" type="button" data-save>Save flight to plan</button></div></article>
+</div></section>
+<aside class="summary"><h3>Your selections</h3><div class="summary-item"><strong>Flight</strong><p class="meta" data-summary-flight>Not selected yet</p></div><div class="summary-item"><strong>Stay</strong><p class="meta" data-summary-stay>Not selected yet</p></div><div class="summary-item"><strong>Car · optional</strong><p class="meta" data-summary-car>Not selected yet</p></div><div class="summary-item"><span class="meta">Selected total</span><p><strong data-total>—</strong></p></div></aside>
+</div><p class="meta text-small foot" aria-live="polite" data-feedback>Your trip details are saved. Add selections as you explore.</p>
+</div></section>
+<section data-variant="Guided start" aria-label="Guided start design" hidden>
+<div class="stage">
+<nav class="topbar" aria-label="Main navigation"><strong class="brand">DeTour</strong><div class="viz-row"><button class="btn btn-ghost" type="button">Home</button><button class="btn btn-ghost" type="button">My Trips</button><button class="btn btn-ghost" type="button">Profile</button></div></nav>
+<header><div class="row"><h1>San Francisco — Mar 13–20, 2027</h1><button class="btn btn-ghost" type="button" data-edit>Edit trip details</button></div><p class="meta">Portland → San Francisco · Mar 13–20, 2027 · 2 travelers</p></header>
+<div class="planbar"><strong>Primary plan</strong><span class="viz-badge">Primary</span><button class="btn btn-ghost" type="button" data-plan>Plan actions</button></div>
+<h2>What would you like to add first?</h2><p class="meta">Your trip is saved. Start with a flight or a place to stay.</p>
+<div class="choices"><section class="choice"><i data-lucide="plane" aria-hidden="true"></i><h3>Find your flight</h3><p class="meta">Round-trip flights from Portland to San Francisco.</p><button class="btn btn-primary" type="button" data-guided="Flights">Search flights</button></section><section class="choice"><i data-lucide="bed-double" aria-hidden="true"></i><h3>Find your stay</h3><p class="meta">A place for 2 travelers, for all 7 nights.</p><button class="btn" type="button" data-guided="Stays">Search stays</button></section><section class="choice"><i data-lucide="car-front" aria-hidden="true"></i><h3>Add a car</h3><p class="meta">Explore rental options if you need a car.</p><button class="btn" type="button" data-guided="Cars">Search cars</button></section></div>
+<section class="search guided-results" hidden aria-live="polite"><div class="row"><h3 data-guided-heading>Flights for your trip</h3><span class="meta text-small">Illustrative result</span></div><p data-guided-description>PDX → SFO · Round trip · $340 / traveler</p><button class="btn btn-primary" type="button" data-guided-save>Save flight to plan</button></section>
+<div class="saved-strip meta" aria-live="polite" data-guided-summary>No flight, stay, or car selected yet.</div>
+<p class="meta text-small foot" aria-live="polite" data-feedback>Your trip details are saved. Add selections as you explore.</p>
+</div></section>
+</div></div>
+<script>
+(() => {
+const root=document.getElementById('detour-mock');
+const catalog={Flights:{title:'Morning nonstop',price:'$340 / traveler',route:'PDX → SFO · Round trip',details:'Outbound 8:00 AM · Return 11:30 AM · Economy',singular:'flight',total:680},Stays:{title:'Downtown hotel',price:'$175 / night',route:'San Francisco · Mar 13–20 · 7 nights',details:'One room · 2 guests · Free cancellation',singular:'stay',total:1225},Cars:{title:'Compact rental',price:'$45 / day',route:'San Francisco airport · Mar 13–20',details:'Automatic · 5 seats · Optional',singular:'car',total:315}};
+root.querySelectorAll('[data-variant]').forEach(variant=>{
+let category='Flights'; const saved=new Set();
+const status=variant.querySelector('[data-feedback]');
+variant.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>status.textContent='Trip details: San Francisco · Mar 13–20, 2027 · 2 travelers.'));
+variant.querySelectorAll('[data-plan]').forEach(b=>b.addEventListener('click',()=>status.textContent='Plan actions: Rename plan · Copy plan · Create another plan.'));
+variant.querySelectorAll('[data-category]').forEach(button=>button.addEventListener('click',()=>{
+category=button.dataset.category;const item=catalog[category];
+variant.querySelectorAll('[data-category]').forEach(b=>b.setAttribute('aria-selected',String(b===button)));
+variant.querySelector('[role=tabpanel]').setAttribute('aria-labelledby',button.id);
+variant.querySelector('[data-result-heading]').textContent=category+' for your trip';
+variant.querySelector('[data-result-title]').textContent=item.title;
+variant.querySelector('[data-result-price]').textContent=item.price;
+variant.querySelector('[data-result-route]').textContent=item.route;
+variant.querySelector('[data-result-details]').textContent=item.details;
+variant.querySelector('[data-filter-label]').firstChild.textContent=category==='Flights'?'Stops':category==='Stays'?'Property type':'Vehicle type';
+variant.querySelector('[data-filter-label] select').innerHTML=category==='Flights'?'<option>Any stops</option><option>Nonstop only</option>':category==='Stays'?'<option>All properties</option><option>Hotels</option>':'<option>All vehicles</option><option>Compact</option>';
+variant.querySelector('[data-save]').textContent='Save '+item.singular+' to plan';
+}));
+const detail=variant.querySelector('[data-details]');if(detail)detail.addEventListener('click',()=>status.textContent=catalog[category].details+' · Dates and travelers use your saved trip.');
+const save=variant.querySelector('[data-save]');if(save)save.addEventListener('click',()=>{const item=catalog[category];saved.add(category);variant.querySelector('[data-summary-'+item.singular+']').textContent=item.title;variant.querySelector('[data-total]').textContent='$'+[...saved].reduce((sum,key)=>sum+catalog[key].total,0).toLocaleString('en-US');variant.querySelector('.search h2').textContent='Explore more options';variant.querySelector('.search > p').textContent='Keep searching or add another part of your plan.';status.textContent='Saved '+item.singular+' to Primary plan.';});
+variant.querySelectorAll('[data-guided]').forEach(b=>b.addEventListener('click',()=>{category=b.dataset.guided;const item=catalog[category];variant.querySelector('.guided-results').hidden=false;variant.querySelector('[data-guided-heading]').textContent=category+' for your trip';variant.querySelector('[data-guided-description]').textContent=item.route+' · '+item.price;variant.querySelector('[data-guided-save]').textContent='Save '+item.singular+' to plan';}));
+const guidedSave=variant.querySelector('[data-guided-save]');if(guidedSave)guidedSave.addEventListener('click',()=>{saved.add(category);variant.querySelector('[data-guided-summary]').textContent='Selected: '+[...saved].map(key=>catalog[key].title).join(' · ');status.textContent='Saved '+catalog[category].singular+' to Primary plan.';});
+});
+})();
+</script>
