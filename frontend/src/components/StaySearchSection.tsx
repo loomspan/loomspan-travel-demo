@@ -7,6 +7,7 @@ import {
   type AccommodationType,
 } from '../api/tripsApi';
 import {formatCents} from './ItinerarySummaryTally';
+import {selectedOptionsFirst} from './selectedOptionsFirst';
 
 type StaySearchSectionProps = {
   trip: TripResponse;
@@ -68,6 +69,10 @@ export function StaySearchSection({
     };
   }, [trip.id, trip.version, trip.destinationKey, trip.startDate, trip.endDate, trip.travelerCount, trip.budgetCents, draftId, publicSearch, type, sort, retryKey]);
 
+  const isSelected = (option: StayOptionResponse) => selectedUnitId !== undefined &&
+    option.accommodationUnitId === selectedUnitId &&
+    (selectedRoomCount === undefined || selectedRoomCount === option.pricing.requiredRooms);
+
   return (
     <div className="component-search-section stay-search" aria-label={inTabs ? 'Stay search options' : undefined} aria-labelledby={inTabs ? undefined : 'stay-search-heading'}>
       {!inTabs && <div className="search-header">
@@ -120,7 +125,7 @@ export function StaySearchSection({
 
       {!loading && !error && options.length > 0 && (
         <div className="stay-options-list">
-          {options.map((opt) => (
+          {selectedOptionsFirst(options, isSelected).map((opt) => (
             <article key={opt.accommodationUnitId} className="card stay-option-card">
               <div className="stay-main-info">
                 <div className="stay-headline">
@@ -168,9 +173,9 @@ export function StaySearchSection({
                   type="button"
                   className="primary"
                   onClick={() => void onSelect(opt)}
-                  disabled={pending || (selectedUnitId !== undefined && opt.accommodationUnitId === selectedUnitId && (selectedRoomCount === undefined || selectedRoomCount === opt.pricing.requiredRooms))}
+                  disabled={pending || isSelected(opt)}
                 >
-                  {selectedUnitId !== undefined && opt.accommodationUnitId === selectedUnitId && (selectedRoomCount === undefined || selectedRoomCount === opt.pricing.requiredRooms) ? 'Selected' : actionLabel}
+                  {isSelected(opt) ? 'Selected' : actionLabel}
                 </button>
               </div>
             </article>

@@ -252,7 +252,7 @@ class JdbcTripRepository implements TripRepository {
     @Override public void insertDraft(long tripId, UUID publicId) {
         LocalDate start = jdbc.queryForObject("SELECT start_date FROM detour_trip WHERE id = ?", LocalDate.class, tripId);
         LocalDate end = jdbc.queryForObject("SELECT end_date FROM detour_trip WHERE id = ?", LocalDate.class, tripId);
-        insertPlanned(tripId, publicId, "Primary plan", start, end, new DraftSelections(null, null, null));
+        insertPlanned(tripId, publicId, "Plan 1", start, end, new DraftSelections(null, null, null));
         setPrimary(tripId, jdbc.queryForObject("SELECT id FROM detour_planned_itinerary WHERE public_id = ?", Long.class, publicId));
     }
     @Override public void deleteDraft(long tripId, long draftId) { jdbc.update("DELETE FROM detour_planned_itinerary WHERE trip_id = ? AND id = ?", tripId, draftId); }

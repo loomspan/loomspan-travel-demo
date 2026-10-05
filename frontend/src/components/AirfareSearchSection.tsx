@@ -7,6 +7,7 @@ import {
 } from '../api/tripsApi';
 import {formatCents} from './ItinerarySummaryTally';
 import {FlightSchedule} from './FlightSchedule';
+import {selectedOptionsFirst} from './selectedOptionsFirst';
 
 type AirfareSearchSectionProps = {
   trip: TripResponse;
@@ -72,6 +73,10 @@ export function AirfareSearchSection({
     };
   }, [trip.id, trip.version, trip.destinationKey, trip.startDate, trip.endDate, trip.travelerCount, draftId, publicSearch, directOnly, sort, retryKey]);
 
+  const isSelected = (option: FlightCombinationResponse) =>
+    (selectedKey !== undefined && option.combinationKey === selectedKey) ||
+    Boolean(selectedFlightIds && option.outbound.flightInstanceId === selectedFlightIds[0] && option.returnFlight.flightInstanceId === selectedFlightIds[1]);
+
   return (
     <div className="component-search-section airfare-search" aria-label={inTabs ? 'Flight search options' : undefined} aria-labelledby={inTabs ? undefined : 'airfare-search-heading'}>
       {!inTabs && <div className="search-header">
@@ -124,7 +129,7 @@ export function AirfareSearchSection({
 
       {!loading && !error && options.length > 0 && (
         <div className="flight-options-list">
-          {options.map((opt) => (
+          {selectedOptionsFirst(options, isSelected).map((opt) => (
             <article key={opt.combinationKey} className="card flight-option-card">
               <div className="flight-legs">
                 <div className="flight-leg">
@@ -174,9 +179,9 @@ export function AirfareSearchSection({
                   type="button"
                   className="primary"
                   onClick={() => void onSelect(opt)}
-                  disabled={pending || (selectedKey !== undefined && opt.combinationKey === selectedKey) || Boolean(selectedFlightIds && opt.outbound.flightInstanceId === selectedFlightIds[0] && opt.returnFlight.flightInstanceId === selectedFlightIds[1])}
+                  disabled={pending || isSelected(opt)}
                 >
-                  {(selectedKey !== undefined && opt.combinationKey === selectedKey) || (selectedFlightIds && opt.outbound.flightInstanceId === selectedFlightIds[0] && opt.returnFlight.flightInstanceId === selectedFlightIds[1]) ? 'Selected' : actionLabel}
+                  {isSelected(opt) ? 'Selected' : actionLabel}
                 </button>
               </div>
             </article>

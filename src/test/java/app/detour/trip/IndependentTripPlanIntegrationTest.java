@@ -72,6 +72,8 @@ class IndependentTripPlanIntegrationTest {
 
     @Test void createCopyRenamePromoteAndDeletePreserveIndependentIdentities() throws Exception {
         Client c = client(), other = client(); var trip = create(c); var primary = trip.get("plans").get(0);
+        org.junit.jupiter.api.Assertions.assertEquals("Plan 1", primary.get("name").asString());
+        org.junit.jupiter.api.Assertions.assertTrue(primary.get("primary").asBoolean());
         String base = path(trip), originalId = primary.get("id").asString();
         trip = data(call(c, "POST", base + "/plans", "{\"expectedVersion\":0,\"name\":\"Alternative\"," + DETAILS + "}").andExpect(status().isCreated()));
         var option = trip.get("plans").get(1);
@@ -87,6 +89,10 @@ class IndependentTripPlanIntegrationTest {
         var promoted = data(call(c, "PUT", planPath(trip, option) + "/primary", "{" + versions(trip, option) + "}").andExpect(status().isOk()));
         org.junit.jupiter.api.Assertions.assertEquals(option.get("id"), promoted.get("primaryPlanId"));
         org.junit.jupiter.api.Assertions.assertEquals("Renamed", promoted.get("plans").get(0).get("name").asString());
+        var original = promoted.get("plans").get(1);
+        org.junit.jupiter.api.Assertions.assertEquals(originalId, original.get("id").asString());
+        org.junit.jupiter.api.Assertions.assertEquals("Plan 1", original.get("name").asString());
+        org.junit.jupiter.api.Assertions.assertFalse(original.get("primary").asBoolean());
         invariant(trip.get("id").asString());
         call(c, "PUT", planPath(trip, option) + "/primary", "{" + versions(trip, option) + "}").andExpect(status().isConflict());
         call(c, "DELETE", planPath(promoted, promoted.get("plans").get(0)), "{" + versions(promoted, promoted.get("plans").get(0)) + ",\"confirmed\":true,\"expectedPlanCount\":3}").andExpect(status().isBadRequest());

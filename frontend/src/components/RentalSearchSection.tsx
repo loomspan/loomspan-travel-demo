@@ -8,6 +8,7 @@ import {
 } from '../api/tripsApi';
 import {formatCents} from './ItinerarySummaryTally';
 import {sameRental} from './planSearchComparison';
+import {selectedOptionsFirst} from './selectedOptionsFirst';
 
 type RentalSearchSectionProps = {
   trip: TripResponse;
@@ -142,6 +143,9 @@ export function RentalSearchSection({
     };
   }, [trip.id, trip.version, trip.startDate, trip.endDate, trip.travelerAges, trip.destinationKey, draftId, pickupAt, returnAt, sort, retryKey]);
 
+  const isSelected = (option: RentalOptionResponse) => sameRental(selectedRental, option.rentalUnitId,
+    formatLocalToDestinationIso(pickupAt, trip.destinationKey), formatLocalToDestinationIso(returnAt, trip.destinationKey));
+
   return (
     <div className="component-search-section rental-search" aria-label={inTabs ? 'Car search options' : undefined} aria-labelledby={inTabs ? undefined : 'rental-search-heading'}>
       {!inTabs && <div className="search-header">
@@ -213,7 +217,7 @@ export function RentalSearchSection({
 
       {!loading && !error && !dateError && options.length > 0 && (
         <div className="rental-options-list">
-          {options.map((opt) => (
+          {selectedOptionsFirst(options, isSelected).map((opt) => (
             <article key={opt.rentalUnitId} className="card rental-option-card">
               <div className="rental-main-info">
                 <div className="rental-headline">
@@ -257,14 +261,14 @@ export function RentalSearchSection({
                       formatLocalToDestinationIso(returnAt, trip.destinationKey)
                     )
                   }
-                  disabled={!driverEligible || selectionDisabled || pending || sameRental(selectedRental, opt.rentalUnitId, formatLocalToDestinationIso(pickupAt, trip.destinationKey), formatLocalToDestinationIso(returnAt, trip.destinationKey))}
+                  disabled={!driverEligible || selectionDisabled || pending || isSelected(opt)}
                   title={
                     !driverEligible
                       ? 'Rental cars require at least one traveler aged 25 or older.'
                       : undefined
                   }
                 >
-                  {sameRental(selectedRental, opt.rentalUnitId, formatLocalToDestinationIso(pickupAt, trip.destinationKey), formatLocalToDestinationIso(returnAt, trip.destinationKey)) ? 'Selected' : actionLabel}
+                  {isSelected(opt) ? 'Selected' : actionLabel}
                 </button>
               </div>
             </article>
