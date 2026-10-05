@@ -338,6 +338,7 @@ export type RentalSearchParams = {
 };
 
 export type ItineraryTallyResponse = {
+  partial?: boolean;
   airfareTotalCents: number;
   stayTotalCents: number;
   rentalTotalCents: number;

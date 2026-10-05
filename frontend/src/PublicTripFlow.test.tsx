@@ -68,15 +68,16 @@ describe('public trip start and authentication handoff', () => {
     await fillTrip(user, false);
     await user.click(screen.getByRole('button', {name: 'Search options'}));
     await user.click(screen.getByRole('tab', {name: 'Search stays'}));
-    await user.click(await screen.findByRole('button', {name: 'Select stay'}));
+    await user.click(await screen.findByRole('button', {name: 'Add stay'}));
     expect(screen.getByText('Selected stay')).toBeInTheDocument();
     expect(screen.getByRole('tab', {name: 'Search stays'})).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('button', {name: 'Selected'})).toBeDisabled();
     const selection = screen.getByText('Selected stay').closest('article')!;
     const save = screen.getByRole('button', {name: 'Save selections'});
-    const compare = screen.getByRole('heading', {name: 'Compare more options'});
+    expect(screen.queryByRole('heading', {name: 'Compare more options'})).not.toBeInTheDocument();
+    const compare = screen.getByRole('heading', {name: 'Build your plan'});
     expect(selection.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(save.compareDocumentPosition(compare) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(compare.compareDocumentPosition(selection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/trips')).toHaveLength(0);
     await user.click(screen.getByRole('button', {name: 'Home'}));
     expect(screen.getByRole('dialog', {name: 'Save your selections?'})).toBeInTheDocument();
@@ -112,7 +113,7 @@ describe('public trip start and authentication handoff', () => {
     const user = userEvent.setup(); render(<App />);
     await fillTrip(user);
     await user.click(screen.getByRole('button', {name: 'Search options'}));
-    await user.click(await screen.findByRole('button', {name: 'Select flight'}));
+    await user.click(await screen.findByRole('button', {name: 'Add flight'}));
     const selection = screen.getByText('Selected flight').closest('article')!;
     expect(selection).toHaveTextContent('MA118');
     expect(selection).toHaveTextContent('MA119');
@@ -135,7 +136,7 @@ describe('public trip start and authentication handoff', () => {
     await fillTrip(user);
     await user.click(screen.getByRole('button', {name: 'Search options'}));
     await user.click(screen.getByRole('tab', {name: 'Search stays'}));
-    await user.click(await screen.findByRole('button', {name: 'Select stay'}));
+    await user.click(await screen.findByRole('button', {name: 'Add stay'}));
     await user.click(screen.getByRole('button', {name: 'Home'}));
     await user.click(screen.getByRole('button', {name: 'No, discard'}));
     expect(screen.getByRole('heading', {name: 'Home'})).toBeInTheDocument();
@@ -162,7 +163,7 @@ describe('public trip start and authentication handoff', () => {
     await fillTrip(user);
     await user.click(screen.getByRole('button', {name: 'Search options'}));
     await user.click(screen.getByRole('tab', {name: 'Search stays'}));
-    await user.click(await screen.findByRole('button', {name: 'Select stay'}));
+    await user.click(await screen.findByRole('button', {name: 'Add stay'}));
     await user.click(screen.getByRole('button', {name: 'Home'}));
     await user.click(screen.getByRole('button', {name: 'Yes, save'}));
     expect(screen.getByRole('heading', {name: 'Welcome back'})).toBeInTheDocument();

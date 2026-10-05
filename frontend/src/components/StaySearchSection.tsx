@@ -18,6 +18,9 @@ type StaySearchSectionProps = {
   publicSearch?: boolean;
   inTabs?: boolean;
   selectedUnitId?: number;
+  selectedRoomCount?: number;
+  actionLabel?: string;
+  comparison?: (option: StayOptionResponse) => string;
 };
 
 export function StaySearchSection({
@@ -30,6 +33,7 @@ export function StaySearchSection({
   publicSearch = false,
   inTabs = false,
   selectedUnitId,
+  selectedRoomCount, actionLabel = 'Select stay', comparison,
 }: StaySearchSectionProps) {
   const [type, setType] = useState<AccommodationType>(initialType);
   const [sort, setSort] = useState<StaySort>('DEFAULT');
@@ -62,7 +66,7 @@ export function StaySearchSection({
     return () => {
       active = false;
     };
-  }, [trip.id, trip.destinationKey, trip.startDate, trip.endDate, trip.travelerCount, trip.budgetCents, draftId, publicSearch, type, sort, retryKey]);
+  }, [trip.id, trip.version, trip.destinationKey, trip.startDate, trip.endDate, trip.travelerCount, trip.budgetCents, draftId, publicSearch, type, sort, retryKey]);
 
   return (
     <div className="component-search-section stay-search" aria-label={inTabs ? 'Stay search options' : undefined} aria-labelledby={inTabs ? undefined : 'stay-search-heading'}>
@@ -108,7 +112,7 @@ export function StaySearchSection({
       </div>
 
       {loading && <p className="hint" role="status">Searching accommodations…</p>}
-      {error && <div role="alert"><p className="field-error">{error} Retry the accommodation search.</p><button type="button" onClick={() => setRetryKey((value) => value + 1)}>Retry stay search</button></div>}
+      {error && <div role="alert"><p className="field-error">{error} Retry the accommodation search.</p><button type="button" className="secondary" onClick={() => setRetryKey((value) => value + 1)}>Retry stay search</button></div>}
 
       {!loading && !error && options.length === 0 && (
         <p className="hint">No accommodations found matching your criteria.</p>
@@ -151,6 +155,7 @@ export function StaySearchSection({
               </div>
 
               <div className="stay-pricing-action">
+                {comparison && <p className="plan-price-difference">{comparison(opt)}</p>}
                 <div className="stay-price-box">
                   <span className="stay-price-total">
                     {formatCents(opt.pricing.totalPriceCents)}
@@ -163,9 +168,9 @@ export function StaySearchSection({
                   type="button"
                   className="primary"
                   onClick={() => void onSelect(opt)}
-                  disabled={pending || (selectedUnitId !== undefined && opt.accommodationUnitId === selectedUnitId)}
+                  disabled={pending || (selectedUnitId !== undefined && opt.accommodationUnitId === selectedUnitId && (selectedRoomCount === undefined || selectedRoomCount === opt.pricing.requiredRooms))}
                 >
-                  {selectedUnitId !== undefined && opt.accommodationUnitId === selectedUnitId ? 'Selected' : 'Select stay'}
+                  {selectedUnitId !== undefined && opt.accommodationUnitId === selectedUnitId && (selectedRoomCount === undefined || selectedRoomCount === opt.pricing.requiredRooms) ? 'Selected' : actionLabel}
                 </button>
               </div>
             </article>

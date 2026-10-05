@@ -18,6 +18,8 @@ type AirfareSearchSectionProps = {
   inTabs?: boolean;
   selectedKey?: string;
   selectedFlightIds?: [number, number];
+  actionLabel?: string;
+  comparison?: (option: FlightCombinationResponse) => string;
 };
 
 export function formatMinutes(minutes: number): string {
@@ -36,6 +38,7 @@ export function AirfareSearchSection({
   inTabs = false,
   selectedKey,
   selectedFlightIds,
+  actionLabel = 'Select flight', comparison,
 }: AirfareSearchSectionProps) {
   const [directOnly, setDirectOnly] = useState(false);
   const [sort, setSort] = useState<AirfareSort>('DEFAULT');
@@ -67,7 +70,7 @@ export function AirfareSearchSection({
     return () => {
       active = false;
     };
-  }, [trip.id, trip.destinationKey, trip.startDate, trip.endDate, trip.travelerCount, draftId, publicSearch, directOnly, sort, retryKey]);
+  }, [trip.id, trip.version, trip.destinationKey, trip.startDate, trip.endDate, trip.travelerCount, draftId, publicSearch, directOnly, sort, retryKey]);
 
   return (
     <div className="component-search-section airfare-search" aria-label={inTabs ? 'Flight search options' : undefined} aria-labelledby={inTabs ? undefined : 'airfare-search-heading'}>
@@ -113,7 +116,7 @@ export function AirfareSearchSection({
       </div>
 
       {loading && <p className="hint" role="status">Searching flights…</p>}
-      {error && <div role="alert"><p className="field-error">{error} Retry the flight search.</p><button type="button" onClick={() => setRetryKey((value) => value + 1)}>Retry flight search</button></div>}
+      {error && <div role="alert"><p className="field-error">{error} Retry the flight search.</p><button type="button" className="secondary" onClick={() => setRetryKey((value) => value + 1)}>Retry flight search</button></div>}
 
       {!loading && !error && options.length === 0 && (
         <p className="hint" role="status">No flights found matching your criteria. Change the filters and search again.</p>
@@ -158,6 +161,7 @@ export function AirfareSearchSection({
               </div>
 
               <div className="flight-pricing-action">
+                {comparison && <p className="plan-price-difference">{comparison(opt)}</p>}
                 <div className="flight-price-box">
                   <span className="flight-price-total">
                     {formatCents(opt.pricing.partyTotalPriceCents)}
@@ -172,7 +176,7 @@ export function AirfareSearchSection({
                   onClick={() => void onSelect(opt)}
                   disabled={pending || (selectedKey !== undefined && opt.combinationKey === selectedKey) || Boolean(selectedFlightIds && opt.outbound.flightInstanceId === selectedFlightIds[0] && opt.returnFlight.flightInstanceId === selectedFlightIds[1])}
                 >
-                  {(selectedKey !== undefined && opt.combinationKey === selectedKey) || (selectedFlightIds && opt.outbound.flightInstanceId === selectedFlightIds[0] && opt.returnFlight.flightInstanceId === selectedFlightIds[1]) ? 'Selected' : 'Select flight'}
+                  {(selectedKey !== undefined && opt.combinationKey === selectedKey) || (selectedFlightIds && opt.outbound.flightInstanceId === selectedFlightIds[0] && opt.returnFlight.flightInstanceId === selectedFlightIds[1]) ? 'Selected' : actionLabel}
                 </button>
               </div>
             </article>

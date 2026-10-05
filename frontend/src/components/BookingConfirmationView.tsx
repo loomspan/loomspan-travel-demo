@@ -121,7 +121,8 @@ export function BookingConfirmationView({
 
       {/* Trip Details & Itinerary Summary */}
       <div className="card booking-details-card">
-        <h3 className="section-title">Trip Summary</h3>
+        <h3 className="section-title">Your selections</h3>
+        <p className="hint">Purchased dates, travelers, and prices are preserved with this booking.</p>
         <div className="summary-grid">
           <div className="summary-item">
             <span className="summary-label">Destination</span>

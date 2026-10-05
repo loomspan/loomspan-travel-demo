@@ -4,15 +4,21 @@ import {
   type TripResponse,
   type RentalOptionResponse,
   type RentalSort,
+  type RentalComponentResponse,
 } from '../api/tripsApi';
 import {formatCents} from './ItinerarySummaryTally';
+import {sameRental} from './planSearchComparison';
 
 type RentalSearchSectionProps = {
   trip: TripResponse;
   draftId: string;
   onSelect: (option: RentalOptionResponse, pickupAtIso: string, returnAtIso: string) => Promise<void>;
-  onCancel: () => void;
+  onCancel?: () => void;
   pending: boolean;
+  inTabs?: boolean;
+  selectedRental?: RentalComponentResponse | null;
+  actionLabel?: string;
+  comparison?: (option: RentalOptionResponse, pickup: string, returned: string) => string;
 };
 
 export function isDriverEligible(travelerAges?: number[] | null): boolean {
@@ -62,6 +68,7 @@ export function RentalSearchSection({
   onSelect,
   onCancel,
   pending,
+  inTabs = false, selectedRental, actionLabel = 'Select car', comparison,
 }: RentalSearchSectionProps) {
   const [pickupAt, setPickupAt] = useState(`${trip.startDate}T10:00`);
   const [returnAt, setReturnAt] = useState(`${trip.endDate}T10:00`);
@@ -72,6 +79,7 @@ export function RentalSearchSection({
   const [retryKey, setRetryKey] = useState(0);
   const [dateError, setDateError] = useState<string | undefined>();
   const [serverExplanation, setServerExplanation] = useState<string | null>(null);
+  const [selectionDisabled, setSelectionDisabled] = useState(false);
 
   const driverEligible = isDriverEligible(trip.travelerAges);
 
@@ -117,9 +125,8 @@ export function RentalSearchSection({
       .then((res) => {
         if (active) {
           setOptions(res.options || []);
-          if (res.explanation) {
-            setServerExplanation(res.explanation);
-          }
+          setServerExplanation(res.disabledReason || res.explanation || null);
+          setSelectionDisabled(res.selectionDisabled === true || res.driverEligible === false);
           setLoading(false);
         }
       })
@@ -133,11 +140,11 @@ export function RentalSearchSection({
     return () => {
       active = false;
     };
-  }, [trip.id, trip.startDate, trip.endDate, trip.destinationKey, draftId, pickupAt, returnAt, sort, retryKey]);
+  }, [trip.id, trip.version, trip.startDate, trip.endDate, trip.travelerAges, trip.destinationKey, draftId, pickupAt, returnAt, sort, retryKey]);
 
   return (
-    <div className="component-search-section rental-search" aria-labelledby="rental-search-heading">
-      <div className="search-header">
+    <div className="component-search-section rental-search" aria-label={inTabs ? 'Car search options' : undefined} aria-labelledby={inTabs ? undefined : 'rental-search-heading'}>
+      {!inTabs && <div className="search-header">
         <h4 id="rental-search-heading">Search rental cars</h4>
         <button
           type="button"
@@ -147,9 +154,9 @@ export function RentalSearchSection({
         >
           Cancel
         </button>
-      </div>
+      </div>}
 
-      {!driverEligible && (
+      {(!driverEligible || selectionDisabled) && (
         <div
           className="driver-age-notice"
           role="alert"
@@ -198,7 +205,7 @@ export function RentalSearchSection({
 
       {dateError && <p id="rental-date-error" className="field-error" role="alert">{dateError} Adjust the pickup and return fields.</p>}
       {loading && <p className="hint" role="status">Searching cars…</p>}
-      {error && <div role="alert"><p className="field-error">{error}</p><button type="button" onClick={() => setRetryKey((value) => value + 1)}>Retry rental search</button></div>}
+      {error && <div role="alert"><p className="field-error">{error}</p><button type="button" className="secondary" onClick={() => setRetryKey((value) => value + 1)}>Retry rental search</button></div>}
 
       {!loading && !error && !dateError && options.length === 0 && (
         <p className="hint" role="status">No rental cars found matching your criteria. Change the dates or sort and search again.</p>
@@ -231,6 +238,7 @@ export function RentalSearchSection({
               </div>
 
               <div className="rental-pricing-action">
+                {comparison && <p className="plan-price-difference">{comparison(opt, formatLocalToDestinationIso(pickupAt, trip.destinationKey), formatLocalToDestinationIso(returnAt, trip.destinationKey))}</p>}
                 <div className="rental-price-box">
                   <span className="rental-price-total">
                     {formatCents(opt.pricing.totalPriceCents)}
@@ -249,14 +257,14 @@ export function RentalSearchSection({
                       formatLocalToDestinationIso(returnAt, trip.destinationKey)
                     )
                   }
-                  disabled={!driverEligible || pending}
+                  disabled={!driverEligible || selectionDisabled || pending || sameRental(selectedRental, opt.rentalUnitId, formatLocalToDestinationIso(pickupAt, trip.destinationKey), formatLocalToDestinationIso(returnAt, trip.destinationKey))}
                   title={
                     !driverEligible
                       ? 'Rental cars require at least one traveler aged 25 or older.'
                       : undefined
                   }
                 >
-                  Select car
+                  {sameRental(selectedRental, opt.rentalUnitId, formatLocalToDestinationIso(pickupAt, trip.destinationKey), formatLocalToDestinationIso(returnAt, trip.destinationKey)) ? 'Selected' : actionLabel}
                 </button>
               </div>
             </article>

@@ -4,7 +4,6 @@ import type {TripWorkspaceHandle, TripWorkspaceProps} from './TripWorkspace';
 import {PlanNavigation} from './PlanNavigation';
 import {PlanDialog} from './PlanDialog';
 import {TripComparisonPage} from './TripComparisonPage';
-import {RentalSlot} from './RentalSlot';
 import {TravelerAgeInput} from './TravelerAgeInput';
 import {ItineraryComparisonView} from './ItineraryComparisonView';
 import {BookingReviewView} from './BookingReviewView';
@@ -52,7 +51,7 @@ export const IndependentPlansWorkspace = forwardRef<TripWorkspaceHandle, TripWor
   const [cancelBookingOpen, setCancelBookingOpen] = useState(false);
   const [cancelTripOpen, setCancelTripOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
-  const [rentalSearch, setRentalSearch] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [budget, setBudget] = useState(trip.budgetCents == null ? '' : String(trip.budgetCents / 100));
   const [budgetError, setBudgetError] = useState<string>();
   const inputRef = useRef(input); inputRef.current = input;
@@ -83,7 +82,7 @@ export const IndependentPlansWorkspace = forwardRef<TripWorkspaceHandle, TripWor
   };
   const switchPlan = (id: string, history = true) => {
     const next = tripRef.current.plans!.find(p => p.id === id) ?? tripRef.current.plans!.find(p => p.primary)!;
-    setSelectedId(next.id); setInput(fields(next)); setRentalSearch(false); setMessage(undefined);
+    setSelectedId(next.id); setInput(fields(next)); setMessage(undefined);
     if (history) record('workspace', next.id);
     setView('workspace');
   };
@@ -106,7 +105,7 @@ export const IndependentPlansWorkspace = forwardRef<TripWorkspaceHandle, TripWor
   const mutate = async (action: () => Promise<TripResponse | void>): Promise<boolean> => {
     if (busy.current) return false;
     busy.current = true; setPending(true);
-    try {const fresh = await action(); if (fresh) apply(fresh, true); else props.onTripDeleted(); return true;}
+    try {const fresh = await action(); if (fresh) apply(fresh, true); else props.onTripDeleted(); setError(undefined); return true;}
     catch (e) {setError(e instanceof Error ? e.message : 'Could not complete the action.'); return false;}
     finally {busy.current = false; setPending(false);}
   };
@@ -149,11 +148,12 @@ export const IndependentPlansWorkspace = forwardRef<TripWorkspaceHandle, TripWor
   }));
   const open = (action: typeof dialog) => guard(() => {setDialog(action); setName(action === 'name' ? plan.name : ''); setReplacement('');});
   const review = (id: string, from: 'workspace' | 'compare') => guard(() => {setReviewId(id); setReviewReturn(from); setView('booking-review'); rememberScreen('trips', trip.id, false, {selectedPlanId: plan.id, workspaceView: 'booking-review', comparedOptionIds: compareIds, reviewOptionId: id, reviewReturnView: from});});
-  const component = async (action: () => Promise<TripResponse>) => {
-    if (dirtyRef.current) {guard(() => {void mutate(action);}); return;}
-    await mutate(action);
+  const component = async (category: string, action: () => Promise<TripResponse>): Promise<boolean> => {
+    const current = tripRef.current.plans!.find(p => p.id === selectedRef.current)!;
+    if (dirtyRef.current || tripRef.current.status === 'CANCELED' || current.id !== plan.id || current.lockedComponents.includes(category)) return false;
+    return mutate(action);
   };
-  const revision = {expectedVersion: trip.version, expectedDraftVersion: plan.version};
+  const revision = () => ({expectedVersion: tripRef.current.version, expectedDraftVersion: tripRef.current.plans!.find(p => p.id === selectedRef.current)!.version});
   const versions = () => ({expectedVersion: tripRef.current.version, expectedPlanVersion: tripRef.current.plans!.find(p => p.id === selectedRef.current)!.version});
   const saveBudget = () => {
     const amount = budget.trim() === '' ? null : Number(budget);
@@ -203,8 +203,8 @@ export const IndependentPlansWorkspace = forwardRef<TripWorkspaceHandle, TripWor
       <button type="button" className="text-button button-sm" disabled={pending} onClick={() => guard(() => {void mutate(() => tripsApi.getTrip(trip.id));})}>Reload from server</button></div>
     {trip.revisionSummary && <RevisionSummaryBanner summary={trip.revisionSummary} onDismiss={() => setTrip({...trip, revisionSummary: null})} />}
     <section role="tabpanel" className="plan-panel" id={`plan-panel-${plan.id}`} aria-labelledby={`plan-tab-${plan.id}`}>
-      <div className="plan-panel-header"><h2>{plan.name}</h2>
-        <p className="plan-total">{!plan.selections.airfare || !plan.selections.stay || !plan.selections.rental ? 'Partial total' : 'Total'}: {formatTallyCents(plan.tally?.grandTotalCents)}</p></div>
+      <div className="plan-panel-header"><h2>{plan.name}</h2></div>
+      <details className="settings-disclosure" open={detailsOpen || dirty} onToggle={event => {if (dirty) event.currentTarget.open = true; else setDetailsOpen(event.currentTarget.open);}}><summary>Edit plan details</summary>
       <fieldset className="plan-details" disabled={pending || canceled}><legend>Planning details for {plan.name}</legend>
         <div className="plan-details-fields">
         <label>Departure date <input type="date" value={input.startDate} min="2027-03-01" max="2027-03-30" onChange={e => setInput({...input, startDate: e.target.value})} /></label>
@@ -218,28 +218,24 @@ export const IndependentPlansWorkspace = forwardRef<TripWorkspaceHandle, TripWor
         <button type="button" className="primary" disabled={!dirty} onClick={() => {void save();}}>Save plan</button>
         <button type="button" className="secondary" disabled={!dirty} onClick={() => guard(() => {setInput(fields(tripRef.current.plans!.find(p => p.id === selectedRef.current)!));})}>Discard edits</button>
         </div>
-      </fieldset>
+      </fieldset></details>
       {dirty && <p className="hint plan-dirty-hint">Prices and searches use saved planning details. Save to search with your changes.</p>}
       {plan.purchase && <section className="plan-purchase" aria-label="Purchased details"><h3>{plan.purchase.status === 'ACTIVE' ? 'Confirmed bookings' : 'Booking history'} · purchased details are locked</h3>
         <p>Purchased dates: {plan.purchase.purchasedStartDate} to {plan.purchase.purchasedEndDate} · {plan.purchase.purchasedTravelerCount} travelers · Total {formatTallyCents(plan.purchase.grandTotalCents)}</p>
         <button type="button" className="secondary button-sm" onClick={() => guard(() => {setConfirmation(plan.purchase!); setConfirmationId(plan.purchase!.id); setView('booking-confirmation'); record('booking-confirmation', plan.id, false, plan.purchase!.id);})}>View booking details</button></section>}
       <TripComparisonPage key={plan.id} trip={context} draftId={plan.id} name={plan.name}
         initialSearch={props.initialEntryMode === 'AIRFARE' && !plan.lockedComponents.includes('airfare') ? 'AIRFARE' : props.initialEntryMode === 'STAY' && !plan.lockedComponents.includes('stay') ? 'STAY' : null}
-        savedAirfare={plan.selections.airfare} savedStay={plan.selections.stay} pending={pending || dirty || canceled}
+        savedAirfare={plan.selections.airfare} savedStay={plan.selections.stay} savedRental={plan.selections.rental} tally={plan.tally} purchasedTally={plan.purchase?.tally} pending={pending || dirty} readOnly={canceled}
         lockedAirfare={plan.lockedComponents.includes('airfare')} lockedStay={plan.lockedComponents.includes('stay')}
         purchaseCanceled={plan.purchase?.status === 'CANCELED'}
         purchasedTravelerCount={plan.purchase?.purchasedTravelerCount} purchasedStartDate={plan.purchase?.purchasedStartDate} purchasedEndDate={plan.purchase?.purchasedEndDate}
-        onSelectAirfare={async option => component(() => tripsApi.selectAirfare(trip.id, plan.id, {...revision, outboundFlightInstanceId: option.outbound.flightInstanceId, returnFlightInstanceId: option.returnFlight.flightInstanceId}))}
-        onSelectStay={async option => component(() => tripsApi.selectStay(trip.id, plan.id, {...revision, accommodationUnitId: option.accommodationUnitId, unitCount: option.pricing.requiredRooms}))}
-        onRemoveAirfare={() => guard(() => {void mutate(() => tripsApi.removeAirfare(trip.id, plan.id, revision));})}
-        onRemoveStay={() => guard(() => {void mutate(() => tripsApi.removeStay(trip.id, plan.id, revision));})} />
-      <RentalSlot key={`rental-${plan.id}`} trip={context} draftId={plan.id} selectedRental={plan.selections.rental} locked={plan.lockedComponents.includes('rental')}
-        purchaseCanceled={plan.purchase?.status === 'CANCELED'}
-        mode={rentalSearch ? 'searching' : plan.selections.rental ? 'selected' : 'hidden'} pending={pending || dirty || canceled || plan.lockedComponents.includes('rental')}
-        onSelect={async (option, pickupAt, returnAt) => component(() => tripsApi.selectRental(trip.id, plan.id, {...revision, rentalUnitId: option.rentalUnitId, pickupAt, returnAt}))}
-        onChange={() => setRentalSearch(true)} onRemove={() => guard(() => {void mutate(() => tripsApi.removeRental(trip.id, plan.id, revision));})} onCancelSearch={() => setRentalSearch(false)} />
-      {!plan.selections.rental && !rentalSearch && <button type="button" className="secondary add-car-btn" disabled={pending || dirty || canceled} onClick={() => setRentalSearch(true)}>Add a car</button>}
-      <div className="plan-missing">{!plan.selections.airfare && <p>Flights: Not selected</p>}{!plan.selections.stay && <p>Stay: Not selected</p>}{!plan.selections.rental && <p>Rental: Not selected</p>}</div>
+        lockedRental={plan.lockedComponents.includes('rental')}
+        onSelectAirfare={async option => component('airfare', () => tripsApi.selectAirfare(trip.id, plan.id, {...revision(), outboundFlightInstanceId: option.outbound.flightInstanceId, returnFlightInstanceId: option.returnFlight.flightInstanceId}))}
+        onSelectStay={async option => component('stay', () => tripsApi.selectStay(trip.id, plan.id, {...revision(), accommodationUnitId: option.accommodationUnitId, unitCount: option.pricing.requiredRooms}))}
+        onSelectRental={async (option, pickupAt, returnAt) => component('rental', () => tripsApi.selectRental(trip.id, plan.id, {...revision(), rentalUnitId: option.rentalUnitId, pickupAt, returnAt}))}
+        onRemoveAirfare={() => {void component('airfare', () => tripsApi.removeAirfare(trip.id, plan.id, revision()));}}
+        onRemoveStay={() => {void component('stay', () => tripsApi.removeStay(trip.id, plan.id, revision()));}}
+        onRemoveRental={() => {void component('rental', () => tripsApi.removeRental(trip.id, plan.id, revision()));}} />
     </section>
     <details className="settings-disclosure"><summary>Trip settings</summary><div className="disclosure-body"><p>Destination and budget are shared trip settings.</p>
       <label>Trip budget (USD) <input value={budget} disabled={pending || canceled} aria-invalid={Boolean(budgetError)} onChange={e => {setBudget(e.target.value); setBudgetError(undefined);}} /></label>

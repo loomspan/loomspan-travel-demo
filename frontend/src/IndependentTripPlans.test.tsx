@@ -1,10 +1,11 @@
 import {createRef} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {act, render, screen, within, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, within, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {ProfileScreen} from './components/ProfileScreen';
 import {TripWorkspace, type TripWorkspaceHandle} from './components/TripWorkspace';
 import {tripsApi, type BookingResponse, type PlanResponse, type TripResponse} from './api/tripsApi';
+import {flight, stay, rental, flightOption, stayOption, rentalOption} from './components/planSearchFixtures';
 
 const p = (id: string, name: string, primary = false): PlanResponse => ({id, name, primary, booked: false, version: 0,
   startDate: primary ? '2027-03-10' : '2027-03-15', endDate: primary ? '2027-03-14' : '2027-03-19',
@@ -15,15 +16,55 @@ function fixture(plans = [p('a', 'Preferred spring', true), p('b', 'Later getawa
     startDate: '2027-03-10', endDate: '2027-03-14', travelerCount: 2, travelerAges: [25, 30], budgetCents: null, version: 0,
     drafts: [], planned: [], alternatives: [], revisionSummary: null, plans, primaryPlanId: plans.find(p => p.primary)!.id};
 }
-function setup(trip = fixture()) {
+function setup(trip = fixture(), edit = true) {
   const ref = createRef<TripWorkspaceHandle>(), back = vi.fn(), deleted = vi.fn();
   render(<TripWorkspace ref={ref} initialTrip={trip} onBack={back} onTripDeleted={deleted} />);
+  if (edit) fireEvent.click(screen.getByText('Edit plan details'));
   return {user: userEvent.setup(), ref, back, deleted};
 }
-beforeEach(() => {window.history.replaceState({}, '', '/profile'); vi.spyOn(tripsApi, 'getBookingHistory').mockResolvedValue([]);});
+beforeEach(() => {window.history.replaceState({}, '', '/profile'); vi.spyOn(tripsApi, 'getBookingHistory').mockResolvedValue([]); vi.spyOn(tripsApi, 'searchAirfare').mockResolvedValue({options: []} as never); vi.spyOn(tripsApi, 'searchStays').mockResolvedValue({options: []} as never); vi.spyOn(tripsApi, 'searchRentals').mockResolvedValue({options: []} as never);});
 afterEach(() => vi.restoreAllMocks());
 
 describe('Independent plan workspace', () => {
+  it('keeps unsaved plan edits visible when the disclosure is closed', async () => {
+    const {user} = setup();
+    await user.clear(screen.getByLabelText('Departure date'));
+    const disclosure = screen.getByText('Edit plan details').closest('details')!;
+    disclosure.open = false;
+    fireEvent(disclosure, new Event('toggle'));
+    expect(disclosure).toHaveAttribute('open');
+    expect(screen.getByLabelText('Departure date')).toBeVisible();
+  });
+  it.each(['flight', 'stay', 'car'] as const)('saves %s with current versions and applies only the returned selected-plan tally', async category => {
+    const trip = fixture(); const selected = trip.plans![1]; selected.selections = {airfare: flight, stay, rental}; selected.tally = {...selected.tally!, grandTotalCents: 12345};
+    const fresh = {...trip, version: 9, plans: [trip.plans![0], {...selected, version: 8, startDate: '2027-03-16'}]};
+    const saved = {...fresh, version: 10, plans: [fresh.plans[0], {...fresh.plans[1], version: 9, tally: {...selected.tally!, grandTotalCents: 54321}}]};
+    vi.spyOn(tripsApi, 'savePlan').mockResolvedValue(fresh);
+    const api = category === 'flight' ? 'selectAirfare' : category === 'stay' ? 'selectStay' : 'selectRental';
+    const select = vi.spyOn(tripsApi, api).mockRejectedValueOnce(new Error('Network unavailable')).mockResolvedValueOnce(saved);
+    vi.mocked(tripsApi.searchAirfare).mockResolvedValue({options: [flightOption]} as never); vi.mocked(tripsApi.searchStays).mockResolvedValue({options: [stayOption]} as never); vi.mocked(tripsApi.searchRentals).mockResolvedValue({options: [rentalOption], driverEligible: true} as never);
+    const {user} = setup(trip); await user.click(screen.getByRole('tab', {name: 'Later getaway'}));
+    expect(screen.getByRole('region', {name: 'Your selections'})).toHaveTextContent('$123.45');
+    expect(screen.getByText(/Later getaway · PDX/)).toHaveTextContent('2027-03-15 to 2027-03-19 · 1 traveler');
+    await user.clear(screen.getByLabelText('Departure date')); await user.type(screen.getByLabelText('Departure date'), '2027-03-16');
+    expect(screen.getByRole('button', {name: 'Remove flight'})).toBeDisabled(); expect(select).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', {name: 'Save plan'})); await waitFor(() => expect(screen.getByRole('button', {name: 'Save plan'})).toBeDisabled());
+    await user.click(screen.getByRole('tab', {name: category === 'flight' ? 'Search flights' : category === 'stay' ? 'Search stays' : 'Search cars'}));
+    await user.click(await screen.findByRole('button', {name: 'Replace ' + category})); await user.click(within(screen.getByRole('dialog')).getByRole('button', {name: 'Confirm replacement'}));
+    await screen.findAllByText(/Network unavailable/); expect(screen.getByRole('region', {name: 'Your selections'})).toHaveTextContent('$123.45');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', {name: 'Confirm replacement'})); await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(select).toHaveBeenLastCalledWith('trip', 'b', expect.objectContaining({expectedVersion: 9, expectedDraftVersion: 8})); expect(screen.getByRole('region', {name: 'Your selections'})).toHaveTextContent('$543.21');
+  });
+  it('opens a usable flight search for a newly saved empty plan', async () => {
+    const search = vi.spyOn(tripsApi, 'searchAirfare').mockResolvedValue({options: []} as never);
+    setup(fixture(), false);
+    expect(screen.getAllByRole('heading', {name: 'Build your plan'})).toHaveLength(1);
+    expect(screen.getByRole('tab', {name: 'Search flights'})).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByText('Compare more options')).not.toBeInTheDocument();
+    expect(screen.getByText('Edit plan details').closest('details')).not.toHaveAttribute('open');
+    expect(screen.getByRole('region', {name: 'Your selections'})).toHaveTextContent('Partial total: $0.00');
+    await waitFor(() => expect(search).toHaveBeenCalledWith('trip', 'a', expect.anything()));
+  });
   it('restores the comparison return target when revisiting booking review history', async () => {
     const {user} = setup();
     await user.click(screen.getByRole('tab', {name: 'Later getaway'}));
@@ -310,16 +351,17 @@ describe('Independent plan workspace', () => {
     trip.booking = plan.purchase;
     const {user} = setup(trip);
     expect(screen.getByText(`${status === 'ACTIVE' ? 'Confirmed' : 'Canceled booking'} flight · locked`)).toBeInTheDocument();
-    expect(screen.getByText(/Purchased outbound · 2 travelers/)).toBeInTheDocument();
+    expect(screen.getByRole('article', {name: 'Flight selection'})).toHaveTextContent('Purchased outbound');
+    expect(screen.getByRole('article', {name: 'Flight selection'})).toHaveTextContent('2 travelers');
     expect(screen.getByLabelText('Purchased details')).toHaveTextContent('2027-03-10 to 2027-03-14 · 2 travelers · Total $400.00');
     expect(screen.getByRole('tab', {name: 'Search flights'})).toBeDisabled(); expect(screen.getByRole('button', {name: 'Remove flight'})).toBeDisabled();
     if (status === 'ACTIVE') expect(screen.getByRole('tab', {name: 'Search stays'})).toBeEnabled();
     else {
       expect(screen.getByText('Canceled booking stay · locked')).toBeInTheDocument();
-      expect(screen.getByText('Canceled booking · locked')).toBeInTheDocument();
+      expect(screen.getByText('Canceled booking car · locked')).toBeInTheDocument();
       expect(screen.getByRole('tab', {name: 'Search stays'})).toBeDisabled();
       expect(screen.getByRole('button', {name: 'Remove stay'})).toBeDisabled();
-      expect(screen.getByRole('button', {name: 'Remove'})).toBeDisabled();
+      expect(screen.getByRole('button', {name: 'Remove car'})).toBeDisabled();
     }
     await user.click(screen.getByRole('button', {name: 'View booking details'}));
     expect(screen.getAllByText(/DETOUR-123/).length).toBeGreaterThan(0);

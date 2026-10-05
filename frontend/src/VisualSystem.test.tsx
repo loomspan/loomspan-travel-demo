@@ -9,6 +9,14 @@ import {ItinerarySummaryTally, formatTallyCents} from './components/ItinerarySum
 import type {DraftSelectionResponse, TripResponse} from './api/tripsApi';
 
 describe('DeTour visual language', () => {
+  it('reflows the promoted search and summary without hiding essential content', () => {
+    const css = readFileSync('src/style.css', 'utf8');
+    expect(css).toMatch(/\.plan-search-layout\s*\{[^}]*display: grid[^}]*grid-template-columns: minmax\(0, 1fr\) minmax\(16rem, 21rem\)/);
+    expect(css).toMatch(/@media \(max-width: 1050px\)\s*\{\s*\.plan-search-layout\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\)/);
+    expect(css).toMatch(/\.plan-selection-row\s*\{[^}]*min-width: 0[^}]*overflow-wrap: anywhere/);
+    expect(css).not.toMatch(/\.plan-selections-summary\s*\{[^}]*display: none/);
+    expect(css).toMatch(/\.builder-section\s*\{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*grid-template-areas: "heading" "slots"/);
+  });
   it('shows the text wordmark on the public screen', () => {
     render(<AuthScreen onLogin={vi.fn()} onRegister={vi.fn()} onFailure={vi.fn()} />);
     expect(screen.getByText('DeTour')).toHaveClass('wordmark');

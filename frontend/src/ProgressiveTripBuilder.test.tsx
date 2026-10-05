@@ -1,12 +1,12 @@
 import {createRef, useState} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {act, render, screen, waitFor, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import {identityApi, type Profile} from './api/identityApi';
 import {
   ItinerarySummaryTally,
-  formatCents,
+  formatCents, computeAirfareTotalCents, computeStayTotalCents, computeRentalTotalCents,
 } from './components/ItinerarySummaryTally';
 import {ConfirmRemoveModal} from './components/ConfirmRemoveModal';
 import {formatLocalToDestinationIso} from './components/RentalSearchSection';
@@ -14,6 +14,7 @@ import {AirfareSearchSection} from './components/AirfareSearchSection';
 import {TripWorkspace, type TripWorkspaceHandle} from './components/TripWorkspace';
 import {tripsApi} from './api/tripsApi';
 import type {TripResponse, DraftSelectionResponse} from './api/tripsApi';
+import {flight, stay, rental, flightOption} from './components/planSearchFixtures';
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {status, headers: {'Content-Type': 'application/json'}});
@@ -49,16 +50,56 @@ function createMockTrip(overrides: Partial<TripResponse> = {}): TripResponse {
     ],
     revisionSummary: null,
   };
-  return {...baseTrip, ...overrides};
+  const result = {...baseTrip, ...overrides};
+  result.drafts.forEach(draft => { const airfare = draft.selections.airfare ? computeAirfareTotalCents(draft.selections, result.travelerCount) : 0; const stay = draft.selections.stay ? computeStayTotalCents(draft.selections) : 0; const rental = draft.selections.rental ? computeRentalTotalCents(draft.selections) : 0; draft.tally = {airfareTotalCents: airfare, stayTotalCents: stay, rentalTotalCents: rental, grandTotalCents: airfare + stay + rental, isOverBudget: false, remainingBudgetCents: null, budgetOverageCents: null}; });
+  return result;
 }
 
 describe('Progressive Trip Builder Experience', () => {
+  it('keeps invalid legacy edits visible when the disclosure is closed', async () => {
+    render(<TripWorkspace initialTrip={createMockTrip()} onBack={vi.fn()} onTripDeleted={vi.fn()} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Edit trip details'));
+    await user.clear(screen.getByLabelText('Departure date'));
+    const disclosure = screen.getByText('Edit trip details').closest('details')!;
+    disclosure.open = false;
+    fireEvent(disclosure, new Event('toggle'));
+    expect(disclosure).toHaveAttribute('open');
+    expect(screen.getByLabelText('Departure date')).toBeVisible();
+  });
+  it('blocks selection while legacy details are dirty/invalid/saving and uses saved search context after autosave', async () => {
+    const initial = createMockTrip(); let resolve!: (trip: TripResponse) => void;
+    vi.spyOn(tripsApi, 'searchAirfare').mockResolvedValue({options: [flightOption]} as never);
+    const select = vi.spyOn(tripsApi, 'selectAirfare').mockResolvedValue(initial);
+    const save = vi.spyOn(tripsApi, 'replaceSharedDetails').mockImplementation(() => new Promise(done => {resolve = done;}));
+    render(<TripWorkspace initialTrip={initial} onBack={vi.fn()} onTripDeleted={vi.fn()} />); const user = userEvent.setup();
+    await user.click(screen.getByText('Edit trip details'));
+    await user.clear(screen.getByLabelText('Departure date')); await user.type(screen.getByLabelText('Departure date'), '2027-03-11');
+    expect(await screen.findByRole('button', {name: 'Save flight to plan'})).toBeDisabled();
+    expect(screen.getByText(/Trip to San Francisco · PDX/)).toHaveTextContent('2027-03-10 to 2027-03-14');
+    await waitFor(() => expect(save).toHaveBeenCalled()); expect(screen.getByRole('button', {name: 'Save flight to plan'})).toBeDisabled();
+    await act(async () => resolve(createMockTrip({version: 7, startDate: '2027-03-11', drafts: [{...initial.drafts[0], version: 6}]})));
+    await user.click(await screen.findByRole('button', {name: 'Save flight to plan'})); expect(select).toHaveBeenCalledWith('trip-1', 'draft-1', expect.objectContaining({expectedVersion: 7, expectedDraftVersion: 6}));
+  });
+  it.each(['ACTIVE', 'CANCELED'])('keeps only linked legacy %s purchases locked with their frozen context', async status => {
+    const initial = createMockTrip({drafts: [{id: 'purchased', version: 1, selections: {airfare: flight, stay, rental}}]});
+    initial.planned = [{id: 'purchased', booked: true, selections: initial.drafts[0].selections}];
+    const booking = {id: 'booking', tripId: initial.id, plannedItineraryId: 'purchased', status, bookingReference: 'TEST', purchasedStartDate: '2027-03-01', purchasedEndDate: '2027-03-05', purchasedTravelerCount: 1, selections: initial.drafts[0].selections, tally: {...initial.drafts[0].tally!, airfareTotalCents: 7777}, grandTotalCents: 7777, bookedAt: '2026-10-01T12:00:00Z', idempotencyKey: 'key'};
+    vi.spyOn(tripsApi, 'getBookingHistory').mockResolvedValue([booking]); const select = vi.spyOn(tripsApi, 'selectAirfare');
+    const rendered = render(<TripWorkspace initialTrip={initial} hasBookingHistory initialActiveBooking={null} onBack={vi.fn()} onTripDeleted={vi.fn()} />);
+    expect(screen.getByRole('tab', {name: 'Search flights'})).toBeDisabled();
+    await waitFor(() => expect(screen.getByRole('article', {name: 'Flight selection'})).toHaveTextContent('$77.77'));
+    expect(screen.getByRole('article', {name: 'Flight selection'})).toHaveTextContent('2027-03-01 to 2027-03-05 · 1 travelers'); expect(screen.getByRole('button', {name: 'Remove car'})).toBeDisabled(); expect(select).not.toHaveBeenCalled();
+    rendered.unmount(); render(<TripWorkspace initialTrip={{...initial, drafts: [{...initial.drafts[0], id: 'unconfirmed-copy'}]}} hasBookingHistory initialActiveBooking={null} onBack={vi.fn()} onTripDeleted={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('tab', {name: 'Search flights'})).toBeEnabled()); expect(screen.getByRole('button', {name: 'Remove flight'})).toBeEnabled();
+  });
   const fetchMock = vi.fn();
   let lastProfile: Profile | undefined;
   const getProfile = identityApi.getProfile;
 
   beforeEach(() => {
     vi.stubGlobal('fetch', fetchMock);
+    fetchMock.mockImplementation(async (url: string) => {if (/\/drafts\/.*\/(airfare|stays|rentals)\?/.test(url)) return json(200, {options: []}); throw new Error('Unexpected request ' + url);});
     document.cookie = 'XSRF-TOKEN=secret-token; path=/';
     window.history.replaceState({}, '', '/profile');
     lastProfile = undefined;
@@ -171,7 +212,7 @@ describe('Progressive Trip Builder Experience', () => {
     await showProfile();
     await user.click(await screen.findByRole('button', {name: `Open trip ${trip.label}`}));
     expect(await screen.findByRole('heading', {name: 'Working plan'})).toBeInTheDocument();
-    const draftTotal = screen.getByRole('heading', {name: /Working plan totals/});
+    const draftTotal = screen.getByRole('heading', {name: 'Your selections'});
     expect(draftTotal).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', {name: 'Home'}));
@@ -181,7 +222,7 @@ describe('Progressive Trip Builder Experience', () => {
     await user.click(screen.getByRole('button', {name: 'Home'}));
     await user.click(screen.getByRole('button', {name: `Return to ${trip.label}`}));
     expect(screen.getByRole('heading', {name: 'Working plan'})).toBeInTheDocument();
-    expect(screen.getByRole('heading', {name: /Working plan totals/})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: 'Your selections'})).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter((call) => ['POST', 'PUT', 'DELETE'].includes(call[1]?.method as string))).toHaveLength(0);
   });
 
@@ -331,7 +372,7 @@ describe('Progressive Trip Builder Experience', () => {
     expect(await screen.findByRole('tab', {name: 'Search flights'})).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', {name: 'Search stays'})).toBeInTheDocument();
     expect(screen.queryByRole('heading', {name: /rental car|search rental cars/i})).not.toBeInTheDocument();
-    expect(screen.getByRole('button', {name: /add a car/i})).toBeInTheDocument();
+    expect(screen.getByRole('tab', {name: 'Search cars'})).toBeInTheDocument();
 
     const anotherTrip = createMockTrip({id: 'trip-2', label: 'Second trip'});
     fetchMock.mockResolvedValueOnce(json(200, {
@@ -348,7 +389,7 @@ describe('Progressive Trip Builder Experience', () => {
     await user.click(screen.getByRole('button', {name: 'My Trips'}));
     await user.click(await screen.findByRole('button', {name: `Open trip ${anotherTrip.label}`}));
     expect(await screen.findByRole('heading', {name: 'Working plan'})).toBeInTheDocument();
-    expect(screen.getByRole('tab', {name: 'Search flights'})).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', {name: 'Search flights'})).toHaveAttribute('aria-selected', 'true');
   });
 
   it('initiates trip creation through Stay entry point with upfront accommodation type preference and opens stay search', async () => {
@@ -429,7 +470,7 @@ describe('Progressive Trip Builder Experience', () => {
     expect(screen.getByRole('tab', {name: 'Search flights'})).toBeInTheDocument();
     // Rental slot is hidden
     expect(screen.queryByRole('heading', {name: /rental car|search rental cars/i})).not.toBeInTheDocument();
-    expect(screen.getByRole('button', {name: /add a car/i})).toBeInTheDocument();
+    expect(screen.getByRole('tab', {name: 'Search cars'})).toBeInTheDocument();
   });
 
   it('initiates trip creation through Plan Trip entry point with both Airfare and Stay slots ready and Rental Car hidden', async () => {
@@ -476,12 +517,12 @@ describe('Progressive Trip Builder Experience', () => {
     await screen.findByText('Trip to San Francisco');
 
     // Both searches are available without creating separate slots.
-    expect(screen.getByRole('tab', {name: 'Search flights'})).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', {name: 'Search flights'})).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', {name: 'Search stays'})).toHaveAttribute('aria-selected', 'false');
 
     // Rental slot is hidden
     expect(screen.queryByRole('heading', {name: /rental car|search rental cars/i})).not.toBeInTheDocument();
-    expect(screen.getByRole('button', {name: /add a car/i})).toBeInTheDocument();
+    expect(screen.getByRole('tab', {name: 'Search cars'})).toBeInTheDocument();
   });
 
   it('progressively reveals Rental Car slot only after explicit Add a car action and closes without confirmation on cancel', async () => {
@@ -521,7 +562,7 @@ describe('Progressive Trip Builder Experience', () => {
 
     // Rental car is hidden upfront
     expect(screen.queryByRole('heading', {name: /rental car|search rental cars/i})).not.toBeInTheDocument();
-    const addCarBtn = screen.getByRole('button', {name: 'Add a car'});
+    const addCarBtn = screen.getByRole('tab', {name: 'Search cars'});
 
     // Mock rental search
     fetchMock.mockResolvedValueOnce(
@@ -541,16 +582,16 @@ describe('Progressive Trip Builder Experience', () => {
     await user.click(addCarBtn);
 
     // Rental search is revealed
-    expect(await screen.findByRole('heading', {name: /search rental cars/i})).toBeInTheDocument();
+    expect(screen.getByRole('tabpanel', {name: 'Search cars'})).toBeVisible();
 
     // Click "Cancel" in rental search
-    const cancelBtn = screen.getByRole('button', {name: 'Cancel'});
+    const cancelBtn = screen.getByRole('tab', {name: 'Search flights'});
     await user.click(cancelBtn);
 
     // Rental search closes without showing confirmation modal
     expect(screen.queryByRole('heading', {name: /search rental cars/i})).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', {name: 'Add a car'})).toBeInTheDocument();
+    expect(screen.getByRole('tab', {name: 'Search cars'})).toBeInTheDocument();
   });
 
   it('airfare search supports direct-only filter, sort overrides, and flight selection updates draft and persistent tally', async () => {
@@ -572,7 +613,7 @@ describe('Progressive Trip Builder Experience', () => {
 
     await screen.findByText('Trip to San Francisco');
 
-    // Click "Add airfare"
+    await user.click(screen.getByRole('tab', {name: 'Search stays'}));
     const flightOptions = [
       {
         combinationKey: 'comb-1',
@@ -710,15 +751,15 @@ describe('Progressive Trip Builder Experience', () => {
 
     fetchMock.mockResolvedValueOnce(json(200, tripWithAirfare));
 
-    await user.click(screen.getByRole('button', {name: 'Select flight'}));
+    await user.click(screen.getByRole('button', {name: 'Save flight to plan'}));
 
     // The selection appears above the same searchable options.
     expect(await screen.findByText('Selected flight')).toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Remove flight'})).toBeInTheDocument();
 
     // Persistent tally updated
-    expect(screen.getByTestId('tally-airfare-price')).toHaveTextContent('$540.00');
-    expect(screen.getByTestId('tally-grand-total')).toHaveTextContent('$540.00');
+    expect(screen.getByRole('article', {name: 'Flight selection'})).toHaveTextContent('$540.00');
+    expect(screen.getByRole('region', {name: 'Your selections'})).toHaveTextContent('Partial total: $540.00');
   });
 
   it('stay search displays calculated room count, rating, distance to center, transparent nightly breakdown, and updates draft and persistent tally', async () => {
@@ -825,15 +866,15 @@ describe('Progressive Trip Builder Experience', () => {
 
     fetchMock.mockResolvedValueOnce(json(200, tripWithStay));
 
-    await user.click(screen.getByRole('button', {name: 'Select stay'}));
+    await user.click(screen.getByRole('button', {name: 'Save stay to plan'}));
 
     // The saved stay appears above the same searchable options.
     expect((await screen.findAllByText('Pacific View Hotel')).length).toBeGreaterThan(1);
     expect(screen.getByRole('button', {name: 'Remove stay'})).toBeInTheDocument();
 
     // Tally updated
-    expect(screen.getByTestId('tally-stay-price')).toHaveTextContent('$720.00');
-    expect(screen.getByTestId('tally-grand-total')).toHaveTextContent('$720.00');
+    expect(screen.getByRole('article', {name: 'Stay selection'})).toHaveTextContent('$720.00');
+    expect(screen.getByRole('region', {name: 'Your selections'})).toHaveTextContent('Partial total: $720.00');
   });
 
   it('rental car search validates dates, enforces 25+ driver age rule with required explanation text, and updates draft and persistent tally', async () => {
@@ -902,7 +943,7 @@ describe('Progressive Trip Builder Experience', () => {
     );
 
     // Reveal rental car slot
-    await user.click(screen.getByRole('button', {name: 'Add a car'}));
+    await user.click(screen.getByRole('tab', {name: 'Search cars'}));
 
     // Verify 25+ explanation text is displayed
     expect(
@@ -912,7 +953,7 @@ describe('Progressive Trip Builder Experience', () => {
     ).toBeInTheDocument();
 
     // Verify select button is disabled
-    const selectCarBtn = screen.getByRole('button', {name: 'Select car'});
+    const selectCarBtn = screen.getByRole('button', {name: 'Save car to plan'});
     expect(selectCarBtn).toBeDisabled();
   });
 
@@ -1088,7 +1129,7 @@ describe('Progressive Trip Builder Experience', () => {
 
     expect(screen.queryByText('Selected flight')).not.toBeInTheDocument();
     expect(screen.getByRole('tab', {name: 'Search flights'})).toBeInTheDocument();
-    expect(screen.getByTestId('tally-airfare-price')).toHaveTextContent('Not selected');
+    expect(screen.getByRole('article', {name: 'Flight selection'})).toHaveTextContent('Not selected');
   });
 
   it('concurrency conflict (409 VERSION_CONFLICT) displays alert with reload action while preserving user search inputs', async () => {
@@ -1110,7 +1151,7 @@ describe('Progressive Trip Builder Experience', () => {
 
     await screen.findByText('Trip to San Francisco');
 
-    // Click "Add airfare"
+    await user.click(screen.getByRole('tab', {name: 'Search stays'}));
     const flightOptions = [
       {
         combinationKey: 'comb-1',
@@ -1190,7 +1231,7 @@ describe('Progressive Trip Builder Experience', () => {
       json(409, {code: 'VERSION_CONFLICT', message: 'The Trip has changed on the server.'})
     );
 
-    await user.click(screen.getByRole('button', {name: 'Select flight'}));
+    await user.click(screen.getByRole('button', {name: 'Save flight to plan'}));
 
     // Conflict alert is rendered
     expect(
@@ -1203,6 +1244,7 @@ describe('Progressive Trip Builder Experience', () => {
     expect(screen.getByText('SkyWays • #SK101')).toBeInTheDocument();
 
     // Reload from server updates trip version and recovers
+    vi.spyOn(tripsApi, 'searchAirfare').mockResolvedValue({options: flightOptions} as never);
     fetchMock.mockResolvedValueOnce(
       json(200, createMockTrip({version: 5, drafts: [{id: 'draft-1', version: 5, selections: {airfare: null, stay: null, rental: null}}]}))
     );
@@ -1215,7 +1257,7 @@ describe('Progressive Trip Builder Experience', () => {
         screen.queryByText('The Trip has changed on the server. Reload before saving.')
       ).not.toBeInTheDocument();
     });
-    expect(screen.getByText('SkyWays • #SK101')).toBeInTheDocument();
+    expect(await screen.findByText('SkyWays • #SK101')).toBeInTheDocument();
   });
 
   it('modal dialogs enforce accessibility: role=dialog, aria-modal=true, focus trapping, and Escape key dismissal', async () => {
@@ -1334,6 +1376,7 @@ describe('Progressive Trip Builder Experience', () => {
 
     expect(await screen.findByText('Selected flight')).toBeInTheDocument();
 
+    await user.click(screen.getByRole('tab', {name: 'Search stays'}));
     // Search for another flight from the shared comparison page.
     fetchMock.mockResolvedValueOnce(
       json(200, {
@@ -1414,8 +1457,8 @@ describe('Progressive Trip Builder Experience', () => {
     fetchMock.mockResolvedValueOnce(
       json(409, {code: 'VERSION_CONFLICT', message: 'The Trip has changed on the server.'})
     );
-    await user.click(screen.getByRole('button', {name: 'Select flight'}));
-
+    await user.click(screen.getByRole('button', {name: 'Replace flight'}));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', {name: 'Confirm replacement'}));
     expect(await screen.findByText('The Trip has changed on the server. Reload before saving.')).toBeInTheDocument();
 
     // Now reload from server, but server has cleared the airfare selection!

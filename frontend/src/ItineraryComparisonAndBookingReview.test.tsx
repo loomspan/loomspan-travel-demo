@@ -250,7 +250,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     await user.click(choices[0]); await user.click(choices[1]);
     await user.click(screen.getByRole('button', {name: /compare selected options/i}));
     await user.click(screen.getAllByRole('button', {name: /select choice 1 for booking review/i})[0]);
-    expect(screen.getByRole('heading', {name: /review itinerary & component snapshots/i})).toBeVisible();
+    expect(screen.getByRole('heading', {name: /review booking/i})).toBeVisible();
     window.history.back();
     expect(await screen.findByRole('heading', {name: 'Comparing 2 plans'})).toBeVisible();
     window.history.back();
@@ -262,7 +262,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     window.history.forward();
     expect(await screen.findByRole('heading', {name: 'Comparing 2 plans'})).toBeVisible();
     window.history.forward();
-    expect(await screen.findByRole('heading', {name: /review itinerary & component snapshots/i})).toBeVisible();
+    expect(await screen.findByRole('heading', {name: /review booking/i})).toBeVisible();
   });
 
   it('returns directly from Booking Review to Workspace when opened there', async () => {
@@ -603,10 +603,10 @@ describe('Itinerary Comparison and Booking Selection', () => {
     // In comparison view, click "Select for Booking Review" on Alternative 1
     const reviewButtons = screen.getAllByRole('button', {name: /select choice 1 for booking review/i});
     await user.click(reviewButtons[0]);
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', {name: /review itinerary & component snapshots/i})));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', {name: /review booking/i})));
 
     // Booking Review View rendered
-    expect(screen.getByRole('heading', {name: /review itinerary & component snapshots/i})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /review booking/i})).toBeInTheDocument();
 
     // Trip parameters displayed
     expect(screen.getByText(/destination/i)).toBeInTheDocument();
@@ -615,9 +615,9 @@ describe('Itinerary Comparison and Booking Selection', () => {
     expect(screen.getByText(/2 travelers \(ages: 30, 28\)/i)).toBeInTheDocument();
 
     // Component snapshots displayed
-    expect(screen.getByRole('heading', {name: /airfare snapshot/i})).toBeInTheDocument();
-    expect(screen.getByRole('heading', {name: /stay snapshot/i})).toBeInTheDocument();
-    expect(screen.getByRole('heading', {name: /rental car snapshot/i})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /^flight$/i})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /stay/i})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /car/i})).toBeInTheDocument();
 
     // Itemized and grand total
     expect(screen.getAllByText('$740.00').length).toBeGreaterThan(0); // Airfare
@@ -663,7 +663,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
     await user.click(selectBtn);
 
     // Booking Review View rendered
-    expect(screen.getByRole('heading', {name: /review itinerary & component snapshots/i})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /review booking/i})).toBeInTheDocument();
 
     // Back button says "← Back to Trip Workspace"
     const backBtn = screen.getByRole('button', {name: /← back to trip workspace/i});
@@ -793,7 +793,7 @@ describe('Itinerary Comparison and Booking Selection', () => {
 
     // Navigate to booking review
     await user.click(screen.getAllByRole('button', {name: /select choice 1 for booking review/i})[0]);
-    expect(screen.getByRole('heading', {name: /review itinerary & component snapshots/i})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /review booking/i})).toBeInTheDocument();
 
     // Click Confirm Booking
     const confirmBtn = screen.getByRole('button', {name: /confirm booking/i});
@@ -861,8 +861,8 @@ describe('Itinerary Comparison and Booking Selection', () => {
     expect(screen.getByText(/accommodation unit no longer available/i)).toBeInTheDocument();
 
     // User selections and snapshots remain intact
-    expect(screen.getByRole('heading', {name: /airfare snapshot/i})).toBeInTheDocument();
-    expect(screen.getByRole('heading', {name: /stay snapshot/i})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /^flight$/i})).toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /stay/i})).toBeInTheDocument();
 
     // Confirm button re-enabled after error
     expect(screen.getByRole('button', {name: /confirm booking/i})).toBeEnabled();

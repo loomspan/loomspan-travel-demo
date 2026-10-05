@@ -12,13 +12,16 @@ export function PlanDialog({title, children, onClose, pending}: {title: string; 
       else document.querySelector<HTMLElement>('[role="tab"][aria-selected="true"], #workspace-heading')?.focus();
     };
   }, []);
-  return <div className="modal-backdrop modal-overlay"><div className="modal modal-content" role="dialog" aria-modal="true" aria-labelledby="plan-dialog-title" ref={ref}
+  useEffect(() => {if (pending) ref.current?.focus();}, [pending]);
+  return <div className="modal-backdrop modal-overlay"><div className="modal modal-content" role="dialog" aria-modal="true" aria-labelledby="plan-dialog-title" ref={ref} tabIndex={-1}
     onKeyDown={event => {
       if (event.key === 'Escape' && !busy.current) {event.preventDefault(); close.current();}
       if (event.key !== 'Tab') return;
       const items = Array.from(ref.current?.querySelectorAll<HTMLElement>('input:not(:disabled),select:not(:disabled),button:not(:disabled)') ?? []);
+      if (!items.length) {event.preventDefault(); ref.current?.focus(); return;}
       const first = items[0], last = items.at(-1);
-      if (event.shiftKey && document.activeElement === first) {event.preventDefault(); last?.focus();}
+      if (!items.includes(document.activeElement as HTMLElement)) {event.preventDefault(); (event.shiftKey ? last : first)?.focus();}
+      else if (event.shiftKey && document.activeElement === first) {event.preventDefault(); last?.focus();}
       else if (!event.shiftKey && document.activeElement === last) {event.preventDefault(); first?.focus();}
     }}><h2 id="plan-dialog-title">{title}</h2>{children}</div></div>;
 }

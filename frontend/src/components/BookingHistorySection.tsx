@@ -6,12 +6,14 @@ type BookingHistorySectionProps = {
   tripId: string;
   refreshKey?: number;
   initialBookings?: BookingResponse[];
+  onLoaded?: (bookings: BookingResponse[]) => void;
 };
 
 export function BookingHistorySection({
   tripId,
   refreshKey = 0,
   initialBookings,
+  onLoaded,
 }: BookingHistorySectionProps) {
   const [bookings, setBookings] = useState<BookingResponse[]>(initialBookings ?? []);
   const [loading, setLoading] = useState<boolean>(!initialBookings);
@@ -28,6 +30,7 @@ export function BookingHistorySection({
       .then((data) => {
         if (!cancelled) {
           setBookings(data);
+          onLoaded?.(data);
           setLoading(false);
         }
       })

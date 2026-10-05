@@ -2118,6 +2118,70 @@ details[open]>summary {
 }
 
 /* Explore panel (shared by guest explorer and saved plans) */
+.plan-search-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 21rem);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.plan-search-main,
+.plan-selections-summary,
+.plan-current-selection,
+.plan-selection-row {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.plan-selections-summary {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+}
+
+.plan-selection-row {
+  padding: var(--space-3) 0;
+  border-bottom: 2px dashed var(--color-line);
+}
+
+.plan-selection-row h4,
+.plan-selections-summary h3 {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-display);
+}
+
+.plan-selection-row p {
+  margin: var(--space-2) 0;
+}
+
+.plan-current-selection {
+  padding: var(--space-3);
+  margin: var(--space-3) 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-line);
+}
+
+.plan-current-selection h3 {
+  margin: 0 0 var(--space-2);
+  font: 600 var(--text-lg)/1.25 var(--font-display);
+}
+
+.plan-price-difference {
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.plan-search-context {
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+.plan-replacement-details {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  overflow-wrap: anywhere;
+}
 .guest-trip-intro {
   margin: var(--space-2) 0 var(--space-5);
   color: var(--color-muted);
@@ -3458,21 +3522,14 @@ section[aria-labelledby="password-heading"] form>.primary {
 @media (min-width: 1100px) {
   .builder-section {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
-    grid-template-areas: "heading heading" "slots tally";
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "heading" "slots";
     gap: var(--space-4) var(--space-6);
     align-items: start;
   }
 
   .builder-header {
     grid-area: heading;
-    margin-bottom: 0;
-  }
-
-  .builder-section>.itinerary-tally {
-    grid-area: tally;
-    position: sticky;
-    top: calc(var(--nav-h) + var(--space-4));
     margin-bottom: 0;
   }
 
@@ -3486,6 +3543,9 @@ section[aria-labelledby="password-heading"] form>.primary {
 }
 
 @media (max-width: 1050px) {
+  .plan-search-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .flight-legs {
     grid-template-columns: minmax(0, 1fr);
   }

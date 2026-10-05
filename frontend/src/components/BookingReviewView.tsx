@@ -95,7 +95,7 @@ export function BookingReviewView({
 
       <header className="booking-review-header">
         <p className="eyebrow">BOOKING REVIEW</p>
-        <h2 id="booking-review-heading" tabIndex={-1}>Review Itinerary &amp; Component Snapshots</h2>
+        <h2 id="booking-review-heading" tabIndex={-1}>Review booking</h2>
         <span className="alternative-id">Itinerary Snapshot ID: {alternative.id}</span>
       </header>
 
@@ -128,11 +128,12 @@ export function BookingReviewView({
       </div>
 
       {/* Snapshot-locked components */}
+      <h3 className="section-title">Your selections</h3>
       <div className="booking-components-grid">
         {/* Airfare Component */}
         <article className="card booking-component-card" aria-labelledby="review-airfare-heading">
           <div className="component-card-header">
-            <h3 id="review-airfare-heading">Airfare Snapshot</h3>
+            <h3 id="review-airfare-heading">Flight</h3>
             {selections.airfare && (
               <span className="component-price">
                 {formatTallyCents(tally?.airfareTotalCents)}
@@ -181,7 +182,7 @@ export function BookingReviewView({
         {/* Stay Component */}
         <article className="card booking-component-card" aria-labelledby="review-stay-heading">
           <div className="component-card-header">
-            <h3 id="review-stay-heading">Stay Snapshot</h3>
+            <h3 id="review-stay-heading">Stay</h3>
             {selections.stay && (
               <span className="component-price">
                 {formatTallyCents(tally?.stayTotalCents)}
@@ -222,7 +223,7 @@ export function BookingReviewView({
         {/* Rental Car Component */}
         <article className="card booking-component-card" aria-labelledby="review-rental-heading">
           <div className="component-card-header">
-            <h3 id="review-rental-heading">Rental Car Snapshot</h3>
+            <h3 id="review-rental-heading">Car</h3>
             {selections.rental && (
               <span className="component-price">
                 {formatTallyCents(tally?.rentalTotalCents)}

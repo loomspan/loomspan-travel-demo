@@ -25,14 +25,12 @@ import {TravelerAgeInput} from './TravelerAgeInput';
 import {CancelTripModal} from './CancelTripModal';
 import {BookingHistorySection} from './BookingHistorySection';
 import {
-  ItinerarySummaryTally,
   formatCents,
   computeAirfareTotalCents,
   computeStayTotalCents,
   computeRentalTotalCents,
 } from './ItinerarySummaryTally';
 import {TripComparisonPage} from './TripComparisonPage';
-import {RentalSlot} from './RentalSlot';
 import {ConfirmRemoveModal} from './ConfirmRemoveModal';
 import {currentScreen, rememberScreen, type WorkspaceView} from '../screenHistory';
 
@@ -132,10 +130,8 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
     ...option, lifecycle: 'PLANNED', version: option.version ?? 0,
   }));
 
-  const [rentalMode, setRentalMode] = useState<'hidden' | 'searching' | 'selected'>(() => {
-    if (initialTrip.drafts?.[0]?.selections?.rental) return 'selected';
-    return 'hidden';
-  });
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [historyBookings, setHistoryBookings] = useState<BookingResponse[]>([]);
 
   const [stayAccommodationType, setStayAccommodationType] = useState<AccommodationType>(
     initialAccommodationType ?? 'HOTEL'
@@ -228,7 +224,7 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
     hasBookingHistory || Boolean(initialActiveBooking) || trip.status === 'CANCELED'
   );
   const isInitialTrip = trip.id === initialTrip.id;
-  const effectiveHasBookingHistory = (isInitialTrip && Boolean(hasBookingHistory)) || hasEverBooked;
+  const effectiveHasBookingHistory = (isInitialTrip && Boolean(hasBookingHistory)) || hasEverBooked || savedOptions.some(o => o.booked);
 
   const [isCancelBookingModalOpen, setIsCancelBookingModalOpen] = useState(false);
   const [cancelBookingPending, setCancelBookingPending] = useState(false);
@@ -334,13 +330,6 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
     setSelectedForCompareIds((prev) => prev.filter((id) => validIds.has(id)));
   }, [trip.savedOptions, trip.planned]);
 
-  useEffect(() => {
-    if (activeDraft?.selections?.rental) {
-      setRentalMode('selected');
-    } else {
-      setRentalMode((prev) => (prev === 'selected' ? 'hidden' : prev));
-    }
-  }, [activeDraft?.selections?.rental]);
 
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialMount = useRef(true);
@@ -634,8 +623,21 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
   };
 
   // Component Selection handlers
+  const linkedPurchase = [activeBooking, trip.booking, ...historyBookings].find(b => b && b.plannedItineraryId === activeDraft?.id);
+  const knownBooked = savedOptions.some(o => o.id === activeDraft?.id && o.booked);
+  const unresolvedPurchase = knownBooked && !linkedPurchase;
+  const lockedComponents = {
+    AIRFARE: unresolvedPurchase || Boolean(linkedPurchase?.selections.airfare),
+    STAY: unresolvedPurchase || Boolean(linkedPurchase?.selections.stay),
+    RENTAL: unresolvedPurchase || Boolean(linkedPurchase?.selections.rental),
+  };
+  const editState = validateInputs();
+  const detailsDirty = isDirty(editState.ages, editState.budgetCents) || Object.keys(editState.errors).length > 0;
+  const mutationBlocked = detailsDirty || isSavingRef.current || componentMutationPending || autosaveStatus === 'saving' || autosaveStatus === 'conflict' || isTripCanceled;
+  const mutationGate = useRef({blocked: mutationBlocked, locked: lockedComponents});
+  mutationGate.current = {blocked: mutationBlocked, locked: lockedComponents};
   const handleSelectAirfare = async (option: FlightCombinationResponse) => {
-    if (!activeDraft) return;
+    if (!activeDraft || mutationGate.current.blocked || mutationGate.current.locked.AIRFARE) return false;
     setComponentMutationPending(true);
     setAutosaveStatus('saving');
     setAutosaveMessage('Saving flight selection…');
@@ -650,6 +652,7 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
       setWorkingMutationFailed(false);
       setAutosaveStatus('saved');
       setAutosaveMessage('Flight saved to Working plan.');
+      return true;
     } catch (err) {
       setWorkingMutationFailed(true);
       if (err instanceof IdentityApiError && err.code === 'VERSION_CONFLICT') {
@@ -659,13 +662,14 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
         setAutosaveStatus('error');
         setAutosaveMessage(err instanceof Error ? err.message : 'Could not save flight.');
       }
+      return false;
     } finally {
       setComponentMutationPending(false);
     }
   };
 
   const handleSelectStay = async (option: StayOptionResponse) => {
-    if (!activeDraft) return;
+    if (!activeDraft || mutationGate.current.blocked || mutationGate.current.locked.STAY) return false;
     setComponentMutationPending(true);
     setAutosaveStatus('saving');
     setAutosaveMessage('Saving stay selection…');
@@ -680,6 +684,7 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
       setWorkingMutationFailed(false);
       setAutosaveStatus('saved');
       setAutosaveMessage('Stay saved to Working plan.');
+      return true;
     } catch (err) {
       setWorkingMutationFailed(true);
       if (err instanceof IdentityApiError && err.code === 'VERSION_CONFLICT') {
@@ -689,6 +694,7 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
         setAutosaveStatus('error');
         setAutosaveMessage(err instanceof Error ? err.message : 'Could not save stay.');
       }
+      return false;
     } finally {
       setComponentMutationPending(false);
     }
@@ -699,7 +705,7 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
     pickupAtIso: string,
     returnAtIso: string
   ) => {
-    if (!activeDraft) return;
+    if (!activeDraft || mutationGate.current.blocked || mutationGate.current.locked.RENTAL) return false;
     setComponentMutationPending(true);
     setAutosaveStatus('saving');
     setAutosaveMessage('Saving rental car selection…');
@@ -713,9 +719,9 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
       });
       applyTripState(updatedTrip);
       setWorkingMutationFailed(false);
-      setRentalMode('selected');
       setAutosaveStatus('saved');
       setAutosaveMessage('Rental car saved to Working plan.');
+      return true;
     } catch (err) {
       setWorkingMutationFailed(true);
       if (err instanceof IdentityApiError && err.code === 'VERSION_CONFLICT') {
@@ -725,13 +731,14 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
         setAutosaveStatus('error');
         setAutosaveMessage(err instanceof Error ? err.message : 'Could not save car.');
       }
+      return false;
     } finally {
       setComponentMutationPending(false);
     }
   };
 
   const promptRemoveAirfare = () => {
-    if (!activeDraft?.selections.airfare) return;
+    if (!activeDraft?.selections.airfare || mutationGate.current.blocked || mutationGate.current.locked.AIRFARE) return;
     const priceCents = computeAirfareTotalCents(activeDraft.selections, trip.travelerCount);
     setRemoveError(undefined);
     setRemoveTarget({
@@ -742,7 +749,7 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
   };
 
   const promptRemoveStay = () => {
-    if (!activeDraft?.selections.stay) return;
+    if (!activeDraft?.selections.stay || mutationGate.current.blocked || mutationGate.current.locked.STAY) return;
     const priceCents = computeStayTotalCents(activeDraft.selections);
     setRemoveError(undefined);
     setRemoveTarget({
@@ -753,7 +760,7 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
   };
 
   const promptRemoveRental = () => {
-    if (!activeDraft?.selections.rental) return;
+    if (!activeDraft?.selections.rental || mutationGate.current.blocked || mutationGate.current.locked.RENTAL) return;
     const priceCents = computeRentalTotalCents(activeDraft.selections);
     setRemoveError(undefined);
     setRemoveTarget({
@@ -764,7 +771,7 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
   };
 
   const handleConfirmRemove = async () => {
-    if (!removeTarget || !activeDraft) return;
+    if (!removeTarget || !activeDraft || mutationGate.current.blocked || mutationGate.current.locked[removeTarget.component]) return;
     setComponentMutationPending(true);
     setRemoveError(undefined);
     setAutosaveStatus('saving');
@@ -786,7 +793,6 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
           expectedVersion: trip.version,
           expectedDraftVersion: activeDraft.version,
         });
-        setRentalMode('hidden');
       }
       applyTripState(updatedTrip);
       setWorkingMutationFailed(false);
@@ -1398,74 +1404,9 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
         />
       )}
 
-      {/* Progressive Builder & Component Slots */}
-      {activeDraft && (
-        <section className="workspace-section builder-section" aria-labelledby="builder-heading">
-          <div className="section-header builder-header">
-            <h3 id="builder-heading" tabIndex={-1}>Working plan</h3>
-            <div className="option-actions">
-              <label htmlFor="option-name">Option name</label>
-              <input id="option-name" value={optionName} maxLength={300}
-                onChange={event => setOptionName(event.target.value)} placeholder="Name this option" />
-              <button type="button" className="primary-button" disabled={optionActionPending || isTripCanceled || !Boolean(activeDraft.selections.airfare || activeDraft.selections.stay || activeDraft.selections.rental)}
-                onClick={() => void handleSaveNamedOption()}>Save as new option</button>
-              {!activeDraft.selections.airfare && !activeDraft.selections.stay && !activeDraft.selections.rental && <p className="hint">Choose a flight, stay, or rental car to save an option. You can keep editing this incomplete Working plan.</p>}
-              {editingOptionId && <p className="hint">Editing a copy of {savedOptions.find(item => item.id === editingOptionId)?.name || 'a Saved option'}. Save as new to keep both, or update the original below.</p>}
-              {editingOptionId && !savedOptions.find(item => item.id === editingOptionId)?.booked && activeBooking?.plannedItineraryId !== editingOptionId && trip.booking?.plannedItineraryId !== editingOptionId && <button type="button" className="secondary-action-button"
-                disabled={optionActionPending || isTripCanceled || !Boolean(activeDraft.selections.airfare || activeDraft.selections.stay || activeDraft.selections.rental)}
-                onClick={() => setUpdateConfirmationOpen(true)}>Update this option</button>}
-            </div>
-          </div>
-
-          <ItinerarySummaryTally trip={trip} selections={activeDraft.selections} />
-
-          <div className="component-slots-grid">
-            <TripComparisonPage
-              trip={{...trip, startDate: activeDraft.startDate ?? trip.startDate, endDate: activeDraft.endDate ?? trip.endDate}}
-              draftId={activeDraft.id}
-              name={trip.name ?? trip.label}
-              initialSearch={initialEntryMode === 'STAY' ? 'STAY' : initialEntryMode === 'AIRFARE' ? 'AIRFARE' : null}
-              accommodationType={stayAccommodationType}
-              savedAirfare={activeDraft.selections.airfare}
-              savedStay={activeDraft.selections.stay}
-              onSelectAirfare={handleSelectAirfare}
-              onSelectStay={handleSelectStay}
-              onRemoveAirfare={promptRemoveAirfare}
-              onRemoveStay={promptRemoveStay}
-              pending={componentMutationPending || isTripCanceled}
-            />
-            <RentalSlot
-              trip={trip}
-              draftId={activeDraft.id}
-              selectedRental={activeDraft.selections.rental}
-              mode={rentalMode}
-              onSelect={handleSelectRental}
-              onChange={() => setRentalMode('searching')}
-              onRemove={promptRemoveRental}
-              onCancelSearch={() =>
-                setRentalMode(activeDraft.selections.rental ? 'selected' : 'hidden')
-              }
-              pending={componentMutationPending || isTripCanceled}
-            />
-
-            {(rentalMode === 'hidden' || (rentalMode === 'selected' && !activeDraft.selections.rental)) && !isTripCanceled && (
-              <div className="add-car-container">
-                <button
-                  type="button"
-                  className="secondary add-car-btn"
-                  onClick={() => setRentalMode('searching')}
-                  disabled={componentMutationPending}
-                >
-                  Add a car
-                </button>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
       {/* Shared details form */}
       <section className="workspace-section" aria-labelledby="shared-details-heading">
+        <details className="settings-disclosure" open={detailsOpen || detailsDirty} onToggle={event => {if (detailsDirty) event.currentTarget.open = true; else setDetailsOpen(event.currentTarget.open);}}><summary>Edit trip details</summary>
         <div className="section-header">
           <h3 id="shared-details-heading">Trip Details &amp; Travelers</h3>
           {hasPlanned && !isTripCanceled && (
@@ -1631,7 +1572,61 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
             </fieldset>
           </div>
         </form>
+        {detailsDirty && <div className="button-row"><button type="button" className="secondary" disabled={isSavingRef.current || componentMutationPending} onClick={() => {applyTripState(trip); setFieldErrors({}); setAutosaveStatus('idle'); setAutosaveMessage(undefined);}}>Discard edits</button></div>}
+        </details>
       </section>
+
+      {/* Progressive Builder & Component Slots */}
+      {activeDraft && (
+        <section className="workspace-section builder-section" aria-labelledby="builder-heading">
+          <div className="section-header builder-header">
+            <h3 id="builder-heading" tabIndex={-1}>Working plan</h3>
+            <div className="option-actions">
+              <label htmlFor="option-name">Option name</label>
+              <input id="option-name" value={optionName} maxLength={300}
+                onChange={event => setOptionName(event.target.value)} placeholder="Name this option" />
+              <button type="button" className="primary-button" disabled={optionActionPending || isTripCanceled || !Boolean(activeDraft.selections.airfare || activeDraft.selections.stay || activeDraft.selections.rental)}
+                onClick={() => void handleSaveNamedOption()}>Save as new option</button>
+              {!activeDraft.selections.airfare && !activeDraft.selections.stay && !activeDraft.selections.rental && <p className="hint">Choose a flight, stay, or rental car to save an option. You can keep editing this incomplete Working plan.</p>}
+              {editingOptionId && <p className="hint">Editing a copy of {savedOptions.find(item => item.id === editingOptionId)?.name || 'a Saved option'}. Save as new to keep both, or update the original below.</p>}
+              {editingOptionId && !savedOptions.find(item => item.id === editingOptionId)?.booked && activeBooking?.plannedItineraryId !== editingOptionId && trip.booking?.plannedItineraryId !== editingOptionId && <button type="button" className="secondary-action-button"
+                disabled={optionActionPending || isTripCanceled || !Boolean(activeDraft.selections.airfare || activeDraft.selections.stay || activeDraft.selections.rental)}
+                onClick={() => setUpdateConfirmationOpen(true)}>Update this option</button>}
+            </div>
+          </div>
+
+          {detailsDirty && <p className="hint plan-dirty-hint">Prices and searches use saved planning details. Save or discard your edits before changing selections.</p>}
+          <div className="component-slots-grid">
+            <TripComparisonPage
+              trip={{...trip, startDate: activeDraft.startDate ?? trip.startDate, endDate: activeDraft.endDate ?? trip.endDate}}
+              draftId={activeDraft.id}
+              name={trip.name ?? trip.label}
+              initialSearch={initialEntryMode === 'STAY' ? 'STAY' : initialEntryMode === 'AIRFARE' ? 'AIRFARE' : null}
+              accommodationType={stayAccommodationType}
+              savedAirfare={activeDraft.selections.airfare}
+              savedStay={activeDraft.selections.stay}
+              savedRental={activeDraft.selections.rental}
+              tally={activeDraft.tally}
+              purchasedTally={linkedPurchase?.tally}
+              purchasedTravelerCount={linkedPurchase?.purchasedTravelerCount}
+              purchasedStartDate={linkedPurchase?.purchasedStartDate}
+              purchasedEndDate={linkedPurchase?.purchasedEndDate}
+              purchaseCanceled={linkedPurchase?.status === 'CANCELED'}
+              lockedAirfare={lockedComponents.AIRFARE}
+              lockedStay={lockedComponents.STAY}
+              lockedRental={lockedComponents.RENTAL}
+              onSelectAirfare={handleSelectAirfare}
+              onSelectStay={handleSelectStay}
+              onRemoveAirfare={promptRemoveAirfare}
+              onRemoveStay={promptRemoveStay}
+              onSelectRental={handleSelectRental}
+              onRemoveRental={promptRemoveRental}
+              pending={mutationBlocked && !isTripCanceled}
+              readOnly={isTripCanceled}
+            />
+          </div>
+        </section>
+      )}
 
       {/* Saved options section */}
       <section className="workspace-section" aria-labelledby="alternatives-heading">
@@ -1781,6 +1776,7 @@ const LegacyTripWorkspace = forwardRef<TripWorkspaceHandle, TripWorkspaceProps>(
         <BookingHistorySection
           tripId={trip.id}
           refreshKey={historyRefreshKey}
+          onLoaded={setHistoryBookings}
         />
       )}
 
